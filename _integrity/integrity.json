@@ -2,7 +2,7 @@
   "format": "stv-ai-translator-integrity",
   "version": 1,
   "owner": "phwgna",
-  "releaseVersion": "0.2.0",
+  "releaseVersion": "0.2.1",
   "algorithm": "sha256",
   "files": [
     {
@@ -11,15 +11,19 @@
     },
     {
       "path": "HUONG-DAN-PHWGNA-STV.html",
-      "sha256": "3c4ac4bb0284e516706e456a6a8a5b9f8a127deea4affba14ed32673ae5d9a30"
+      "sha256": "8bced54951ce1a228e1a47162c4511fcdaaa04b8dbaa1c5940e11b74c156bd5d"
     },
     {
       "path": "LICENSE",
       "sha256": "14ac45ee63465506f1258c9f2ea5e29a8de5b09cbd0758f34501bc2849a6559b"
     },
     {
+      "path": "Lay-IP-ket-noi-Sunshine.bat",
+      "sha256": "951cc9d381846820411e97493f57b5902215de62a9fb2ed9a503de2a0110bdb6"
+    },
+    {
       "path": "README.md",
-      "sha256": "e8bc01da8da4e8148c1359bb41b737f4e2c7421498ea834b47e5b499096b838c"
+      "sha256": "940b66e08e3687937c93381166330b1c5f45232aeb52e22a57aa1faadb466328"
     },
     {
       "path": "SECURITY.md",
@@ -47,7 +51,7 @@
     },
     {
       "path": "manifest.json",
-      "sha256": "6622d8e0e1ba5391d0b957d33fd42c7a22bcc63ee1383b3d82bfea4deed45aee"
+      "sha256": "68560684f10059463fdbcdcfc9771b952d557ce93ce3b513df7b3e2a4412398a"
     },
     {
       "path": "onboarding/onboarding.css",
@@ -251,16 +255,20 @@
     },
     {
       "path": "windows/phwgna-setup-core.ps1",
-      "sha256": "2ef482162a1fb4907db584fdef34eef9cdf0acf536d4233054e5e21103fb8d08"
+      "sha256": "14cd45f050b7e9d424a7b768540a82c2160415a3d30ccecd475151cea5d309dd"
     },
     {
       "path": "windows/phwgna-setup-wizard.ps1",
-      "sha256": "a660ef294b06eb3eeb28831cdb0da6e675e4e6c0115e11ed8b603d38fd9af7ae"
+      "sha256": "d14772864703f78ed8236cd85c01a9201204e14453e256eb2d4bae2fbdce8710"
+    },
+    {
+      "path": "windows/phwgna-show-ip.ps1",
+      "sha256": "078a349b69b4843f1e5b7fb84ba2fba7d9768e49efd0989b230151d8646938f7"
     }
   ],
   "product": "phwgna STV AI Translator",
-  "sourceCommit": "ed9783b96f2681617986e80efd3e929185227b58",
+  "sourceCommit": "6eef0ef14f63b7263ebb9f75c13f032656f40bea",
   "officialRepository": "https://github.com/itzmonnz/phwgna-stv",
-  "officialReleaseUrl": "https://github.com/itzmonnz/phwgna-stv/releases/tag/v0.2.0",
+  "officialReleaseUrl": "https://github.com/itzmonnz/phwgna-stv/releases/tag/v0.2.1",
   "publicKeyFingerprint": "85ac74c199d0a6028bce843d6f68d7632317912b460aad1a7431193767ec9871"
 }

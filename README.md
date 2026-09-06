@@ -14,6 +14,8 @@ Tiện ích dịch và nghe truyện trên Sáng Tác Việt của **phwgna**. B
 
 Hướng dẫn đầy đủ, QR Artemis và cách xử lý lỗi nằm trong `HUONG-DAN-PHWGNA-STV.html`.
 
+Không biết IP để thêm PC vào Artemis: chạy **Lay-IP-ket-noi-Sunshine.bat**. IP cùng Wi-Fi sẽ được hiện và tự sao chép để bạn chỉ cần bấm Dán trên điện thoại.
+
 ### Cài extension thủ công
 
 1. Tải ZIP từ mục Releases của repository chính thức và giải nén.

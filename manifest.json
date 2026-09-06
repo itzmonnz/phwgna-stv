@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "phwgna STV AI Translator",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Dịch chương Sáng Tác Việt qua ChatGPT, Gemini hoặc API do người dùng chọn.",
   "icons": {
     "16": "assets/icons/phwgna-cat-16.png",

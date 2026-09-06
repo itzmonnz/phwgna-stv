@@ -14,6 +14,7 @@ $stateRoot = Join-Path $env:LOCALAPPDATA 'phwgna-stv-ai-translator'
 $installRoot = $stateRoot
 $installedExtension = Join-Path $installRoot 'extension'
 $guidePath = Join-Path $packageRoot 'HUONG-DAN-PHWGNA-STV.html'
+$ipHelperPath = Join-Path $packageRoot 'windows\phwgna-show-ip.ps1'
 $browsers = @(Find-PhwgnaBrowsers)
 $chromeExtensionsUrl = 'chrome://extensions/'
 $coccocExtensionsUrl = 'coccoc://extensions/'
@@ -95,7 +96,9 @@ $openFolder = New-SetupButton $ui[11] 490 420 238 $secondary
 $performance = New-SetupButton $ui[12] 32 476 340 ([Drawing.Color]::FromArgb(8,105,130))
 $guide = New-SetupButton $ui[13] 388 476 340 $secondary
 $artemisDownload = New-SetupButton 'Tải Artemis cho Android' 548 276 180 $secondary
+$showIp = New-SetupButton 'Lấy IP kết nối' 352 276 180 ([Drawing.Color]::FromArgb(8,105,130))
 $artemisDownload.Visible = $false
+$showIp.Visible = $false
 $install.Enabled = $browsers.Count -gt 0
 $performance.Enabled = $browsers.Count -gt 0
 $status = Add-Label $(if ($browsers.Count) { $ui[14] } else { $ui[15] }) 32 548 696 116
@@ -107,6 +110,7 @@ $phoneMode.Add_CheckedChanged({
     $tailscale.Enabled = $phoneMode.Checked
     $artemisQr.Visible = $phoneMode.Checked
     $artemisDownload.Visible = $phoneMode.Checked
+    $showIp.Visible = $phoneMode.Checked
     if (-not $phoneMode.Checked) { $tailscale.Checked = $false }
 })
 function Selected-Browser { if ($browserSelect.SelectedIndex -ge 0 -and $browserSelect.SelectedIndex -lt $browsers.Count) { $browsers[$browserSelect.SelectedIndex] } }
@@ -116,6 +120,11 @@ $openExtensions.Add_Click({ Open-ExtensionsPage })
 $openFolder.Add_Click({ if(Test-Path -LiteralPath $installedExtension){Start-Process explorer.exe -ArgumentList $installedExtension}else{$status.Text=$ui[21]} })
 $guide.Add_Click({ if(Test-Path -LiteralPath $guidePath){Start-Process $guidePath} })
 $artemisDownload.Add_Click({ if(-not $DryRun){Start-Process ([string]$lock.artemis.apkUrl)} })
+$showIp.Add_Click({
+    if (-not $DryRun -and (Test-Path -LiteralPath $ipHelperPath)) {
+        Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -NoExit -File `"$ipHelperPath`""
+    }
+})
 $performance.Add_Click({
     $browser=Selected-Browser; if(-not $browser){$status.Text=$ui[15];return}
     try { [void](New-PhwgnaPerformanceShortcut -Browser $browser -DryRun:$DryRun); $status.Text=[Regex]::Unescape('\u0110\u00e3 t\u1ea1o shortcut t\u0103ng t\u1ed1c tr\u00ean Desktop.') }
@@ -146,7 +155,15 @@ $install.Add_Click({
             }
             $tail = Install-PhwgnaTailscaleIfSelected -Selected $tailscale.Checked -Lock $lock -DryRun:$DryRun
             if (-not $tail.ok -and $tail.guideUrl -and -not $DryRun) { Start-Process ([string]$tail.guideUrl); $status.Text=$ui[20] }
-            else { $ip=Get-PhwgnaLanAddress; $status.Text="$($ui[18])`r`nLAN IP: $ip" }
+            else {
+                $ip=Get-PhwgnaLanAddress
+                if ($ip) {
+                    try { Set-Clipboard -Value $ip } catch { }
+                    $status.Text="$($ui[18])`r`nIP cùng Wi-Fi: $ip (đã sao chép)"
+                } else {
+                    $status.Text="$($ui[18])`r`nBấm Lấy IP kết nối sau khi PC đã vào Wi-Fi."
+                }
+            }
             if (-not $DryRun) { Start-Process 'https://localhost:47990' }
         }
         if (-not $DryRun) { Open-ExtensionsPage; Start-Process explorer.exe -ArgumentList $extension.path }

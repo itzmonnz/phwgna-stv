@@ -131,9 +131,43 @@ function Install-PhwgnaTailscaleIfSelected {
 }
 
 function Get-PhwgnaLanAddress {
+    [CmdletBinding()]
+    param([object[]]$Candidates)
+
+    if (-not $PSBoundParameters.ContainsKey('Candidates')) {
+        $Candidates = @(Get-NetIPConfiguration -ErrorAction SilentlyContinue | ForEach-Object {
+            $configuration = $_
+            @($configuration.IPv4Address) | ForEach-Object {
+                [pscustomobject]@{
+                    IPAddress = [string]$_.IPAddress
+                    InterfaceAlias = [string]$configuration.InterfaceAlias
+                    InterfaceDescription = [string]$configuration.InterfaceDescription
+                    InterfaceMetric = [int]$configuration.NetAdapter.InterfaceMetric
+                    HasDefaultGateway = [bool]$configuration.IPv4DefaultGateway
+                }
+            }
+        })
+    }
+
+    $candidate = @($Candidates) | Where-Object {
+        $address = [string]$_.IPAddress
+        $privateAddress = $address -match '^10\.' -or $address -match '^192\.168\.' -or (
+            $address -match '^172\.(\d+)\.' -and [int]$Matches[1] -ge 16 -and [int]$Matches[1] -le 31
+        )
+        $adapter = "$($_.InterfaceAlias) $($_.InterfaceDescription)"
+        $privateAddress -and $address -notlike '127.*' -and $address -notlike '169.254.*' `
+            -and $adapter -notmatch '(?i)tailscale|hyper-v|vethernet|virtualbox|vmware|loopback'
+    } | Sort-Object `
+        @{ Expression = { [bool]$_.HasDefaultGateway }; Descending = $true }, `
+        @{ Expression = { [int]$_.InterfaceMetric }; Ascending = $true } | Select-Object -First 1
+
+    if ($candidate) { return [string]$candidate.IPAddress }
+    ''
+}
+
+function Get-PhwgnaTailscaleAddress {
     $candidate = Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
-        Where-Object { $_.IPAddress -notlike '127.*' -and $_.IPAddress -notlike '169.254.*' -and $_.PrefixOrigin -ne 'WellKnown' } |
-        Sort-Object InterfaceMetric |
+        Where-Object { $_.InterfaceAlias -match '(?i)tailscale' -and $_.IPAddress -match '^100\.' } |
         Select-Object -First 1
     if ($candidate) { return [string]$candidate.IPAddress }
     ''

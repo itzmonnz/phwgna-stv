@@ -18,7 +18,7 @@
 <body>
 <main>
   <header>
-    <div class="brand"><img src="assets/icons/phwgna-cat-128.png" alt="Icon mèo phwgna"><div><div class="eyebrow">phwgna STV 0.2.0</div><h1>Đọc truyện trên PC hoặc điện thoại</h1></div></div>
+    <div class="brand"><img src="assets/icons/phwgna-cat-128.png" alt="Icon mèo phwgna"><div><div class="eyebrow">phwgna STV 0.2.1</div><h1>Đọc truyện trên PC hoặc điện thoại</h1></div></div>
     <p class="lead">Chạy <strong>Cai-dat-phwgna-STV.bat</strong>, chọn đúng thiết bị và làm theo các bước hiện trên màn hình. Điện thoại điều khiển PC từ xa; extension vẫn chạy trên PC.</p>
     <nav><a class="button primary" href="#cai-nhanh">Cài nhanh</a><a class="button" href="#dien-thoai">Thiết lập điện thoại</a><a class="button" href="#su-co">Xử lý sự cố</a></nav>
   </header>
@@ -37,23 +37,24 @@
     <tbody>
       <tr><td>Chrome hoặc Cốc Cốc</td><td>Chọn <b>Dùng trên PC</b>, bấm Cài / Cập nhật.</td><td>Wizard mở Extensions và thư mục extension.</td><td>Bật <b>Chế độ dành cho nhà phát triển</b>, chọn <b>Tải tiện ích đã giải nén</b>.</td></tr>
       <tr><td>PC Windows + Internet</td><td>Chọn <b>Dùng trên điện thoại</b>, chấp nhận một hộp UAC để cài Sunshine.</td><td>Trang <code>https://localhost:47990</code> mở.</td><td>Nếu bị chặn, mở lại wizard và thử; file sai hash/chữ ký sẽ không được chạy.</td></tr>
-      <tr><td>Điện thoại Android</td><td>Quét QR Artemis, cài APK non-root, thêm IP của PC.</td><td>Artemis hiện PC và đưa mã PIN ghép nối.</td><td>Đảm bảo hai máy cùng Wi‑Fi; không gửi PIN cho người khác.</td></tr>
+      <tr><td>Điện thoại Android</td><td>Quét QR Artemis. Trên PC, chạy <b>Lay-IP-ket-noi-Sunshine.bat</b> rồi dán IP vào Artemis.</td><td>Artemis hiện PC và đưa mã PIN ghép nối.</td><td>Đảm bảo hai máy cùng Wi‑Fi; không gửi PIN cho người khác.</td></tr>
       <tr><td>PIN Artemis</td><td>Nhập PIN trong Sunshine tại mục PIN.</td><td>Artemis mở được ứng dụng Desktop.</td><td>Ghép lại nếu IP thay đổi hoặc PC bị xóa khỏi Artemis.</td></tr>
     </tbody>
   </table></div></section>
 
   <section id="dien-thoai" aria-labelledby="phone"><h2 id="phone">Thiết lập điện thoại</h2>
     <div class="qr"><img src="windows/assets/artemis-qr.png" alt="QR tải Artemis non-root"><div><h3>1. Cài Artemis</h3><p>Quét QR bằng điện thoại. Đây là APK non-root đã khóa phiên bản cho bản phwgna STV này.</p><a class="button" href="https://github.com/ClassicOldSong/moonlight-android/releases/download/v20.2.6/artemis-nonRoot_game-release.apk">Tải Artemis 20.2.6</a></div></div>
-    <ol class="steps"><li>Tạo tài khoản Sunshine tại <code>https://localhost:47990</code>. Trình duyệt có thể cảnh báo chứng chỉ nội bộ ở lần đầu.</li><li>Trong Artemis, thêm IP trong nhà mà wizard hiển thị.</li><li>Chọn PC, lấy PIN rồi nhập PIN vào Sunshine.</li><li>Mở <b>Desktop</b>, mở STV và bật audio để nghe TTS trên điện thoại.</li></ol>
+    <ol class="steps"><li>Tạo tài khoản Sunshine tại <code>https://localhost:47990</code>. Trình duyệt có thể cảnh báo chứng chỉ nội bộ ở lần đầu.</li><li>Trên PC, bấm <b>Lấy IP kết nối</b> trong wizard hoặc chạy <b>Lay-IP-ket-noi-Sunshine.bat</b>. IP trong nhà sẽ hiện lớn và đã tự sao chép.</li><li>Đảm bảo PC và điện thoại cùng Wi‑Fi. Trong Artemis, chọn <b>thêm máy tính</b> rồi <b>dán</b> IP vừa sao chép.</li><li>Chọn PC, lấy PIN rồi nhập PIN vào Sunshine.</li><li>Mở <b>Desktop</b>, mở STV và bật audio để nghe TTS trên điện thoại.</li></ol>
+    <p class="muted"><strong>Chọn đúng loại IP:</strong> cùng Wi‑Fi dùng <b>IP trong nhà</b> (thường bắt đầu bằng <code>192.168</code> hoặc <code>10.</code>). Khi ở ngoài mạng nhà, bật Tailscale trên cả hai máy và dùng <b>IP Tailscale</b> mà file lấy IP hiển thị.</p>
   </section>
 
   <section aria-labelledby="chat-luong"><h2 id="chat-luong">Chất lượng gợi ý</h2><div class="settings">
     <div><strong>Wi‑Fi ổn định</strong><br>1080p · 60 FPS · 10–15 Mbps</div><div><strong>Mạng yếu</strong><br>720p · 60 FPS · 5–8 Mbps</div>
   </div><p class="muted">Bật audio trong Artemis để nghe được TTS. Nếu hình giật, giảm bitrate trước khi giảm FPS.</p></section>
 
-  <section aria-labelledby="tailscale"><h2 id="tailscale">Tailscale — tùy chọn ngoài nhà</h2><p>Chỉ đánh dấu tùy chọn này khi điện thoại không cùng Wi‑Fi với PC. Đăng nhập cùng một tài khoản Tailscale trên Windows và Android, rồi dùng IP Tailscale của PC trong Artemis.</p><p><a class="button" href="https://tailscale.com/docs/install/windows">Hướng dẫn Windows</a> <a class="button" href="https://tailscale.com/docs/install/android">Hướng dẫn Android</a></p></section>
+  <section aria-labelledby="tailscale"><h2 id="tailscale">Tailscale — tùy chọn ngoài nhà</h2><p>Chỉ đánh dấu tùy chọn này khi điện thoại không cùng Wi‑Fi với PC. Đăng nhập cùng một tài khoản Tailscale trên Windows và Android, chạy lại <b>Lay-IP-ket-noi-Sunshine.bat</b>, rồi dùng <b>IP Tailscale</b> của PC trong Artemis.</p><p><a class="button" href="https://tailscale.com/docs/install/windows">Hướng dẫn Windows</a> <a class="button" href="https://tailscale.com/docs/install/android">Hướng dẫn Android</a></p></section>
 
-  <section id="su-co" aria-labelledby="loi"><h2 id="loi">An toàn và xử lý sự cố</h2><div class="notice"><strong>PC phải luôn bật.</strong> Không chia sẻ mật khẩu Sunshine, PIN ghép nối, API key hoặc ảnh chụp có tài khoản. Wizard không mở port router và không bật UPnP.</div><ul><li>Không thấy PC: kiểm tra cùng Wi‑Fi và Sunshine đang chạy.</li><li>Không nghe TTS: bật audio của phiên Artemis và âm lượng Windows.</li><li>WinGet thiếu: wizard mở hướng dẫn Tailscale chính thức, không báo cài thành công giả.</li><li>Sunshine đã cài: wizard giữ nguyên phiên bản và cấu hình hiện tại.</li></ul></section>
+  <section id="su-co" aria-labelledby="loi"><h2 id="loi">An toàn và xử lý sự cố</h2><div class="notice"><strong>PC phải luôn bật.</strong> Không chia sẻ mật khẩu Sunshine, PIN ghép nối, API key hoặc ảnh chụp có tài khoản. Wizard không mở port router và không bật UPnP.</div><ul><li>Không biết IP: chạy <b>Lay-IP-ket-noi-Sunshine.bat</b>; IP cùng Wi‑Fi được tự sao chép.</li><li>Không thấy PC: kiểm tra cùng Wi‑Fi, Sunshine đang chạy và đã nhập đúng loại IP.</li><li>Không nghe TTS: bật audio của phiên Artemis và âm lượng Windows.</li><li>WinGet thiếu: wizard mở hướng dẫn Tailscale chính thức, không báo cài thành công giả.</li><li>Sunshine đã cài: wizard giữ nguyên phiên bản và cấu hình hiện tại.</li></ul></section>
 </main>
 </body>
 </html>
