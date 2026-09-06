@@ -251,6 +251,7 @@ function New-PhwgnaPerformanceShortcut {
         $existingShortcut = $shell.CreateShortcut($shortcutPath)
         $ownedDescriptions = @(
             $description,
+            'phwgna stv - Coc Coc toi uu tab Gemini nen',
             'phwgna stv - Coc Coc toi uu tab ChatGPT va Gemini nen',
             'Coc Coc toi uu tab Gemini nen cho phwgna STV AI Translator'
         )
