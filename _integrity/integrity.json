@@ -2,7 +2,7 @@
   "format": "stv-ai-translator-integrity",
   "version": 1,
   "owner": "phwgna",
-  "releaseVersion": "0.2.7",
+  "releaseVersion": "0.2.8",
   "algorithm": "sha256",
   "files": [
     {
@@ -11,7 +11,7 @@
     },
     {
       "path": "HUONG-DAN-PHWGNA-STV.html",
-      "sha256": "95afa7bc24e557255b1ac3577e6d8759302bbceb0a02a535c03e65262e54f50c"
+      "sha256": "e3a6185af9b38d48e1b7274da436387dc5496d1c56cbae455daaf2ee8dd081e0"
     },
     {
       "path": "LICENSE",
@@ -51,7 +51,7 @@
     },
     {
       "path": "manifest.json",
-      "sha256": "79bda5b11c1bed0b3e8845eef8961b352964db281345927a0d7ac42c641e0134"
+      "sha256": "153069b196900fa75f1184967dedb50c21af9cb4bb6211fedc21f268652880fc"
     },
     {
       "path": "onboarding/onboarding.css",
@@ -267,8 +267,8 @@
     }
   ],
   "product": "phwgna STV AI Translator",
-  "sourceCommit": "83af578652c14a64c75b9b093626ef1584547441",
+  "sourceCommit": "4f8d55e3fb3182aaafdb3d9f73c3d5837ca14f2e",
   "officialRepository": "https://github.com/itzmonnz/phwgna-stv",
-  "officialReleaseUrl": "https://github.com/itzmonnz/phwgna-stv/releases/tag/v0.2.7",
+  "officialReleaseUrl": "https://github.com/itzmonnz/phwgna-stv/releases/tag/v0.2.8",
   "publicKeyFingerprint": "85ac74c199d0a6028bce843d6f68d7632317912b460aad1a7431193767ec9871"
 }

@@ -2,7 +2,7 @@
 <html lang="vi">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Hướng dẫn cài phwgna STV</title>
   <style>
     :root{color-scheme:dark;--bg:#11131b;--panel:#1a1d28;--line:#34384b;--text:#f6f7fb;--muted:#bec2d4;--accent:#818cf8;--cyan:#22d3ee;--danger:#fda4af}
@@ -11,14 +11,14 @@
     nav{display:flex;flex-wrap:wrap;gap:10px;margin-top:24px}a.button{display:inline-flex;align-items:center;min-height:44px;padding:9px 16px;border:1px solid var(--line);border-radius:10px;background:#222637;color:var(--text);text-decoration:none;font-weight:700}a.primary{background:var(--accent);color:#11131b;border-color:transparent}a:hover{border-color:var(--accent)}a:focus-visible{outline:3px solid var(--cyan);outline-offset:3px}
     section{margin-top:22px;padding:24px;border:1px solid var(--line);border-radius:16px;background:rgba(26,29,40,.94);box-shadow:0 18px 45px rgba(0,0,0,.18)}.flow{display:grid;grid-template-columns:1fr auto 1fr;gap:18px;align-items:center}.flow strong{display:block}.arrow{color:var(--cyan);font-size:2rem}.choices{display:grid;grid-template-columns:1fr 1fr;gap:16px}.choice{padding:20px;border-left:4px solid var(--accent);background:#151822;border-radius:8px}.choice.phone{border-color:var(--cyan)}
     .table-wrap{overflow-x:auto}table{width:100%;border-collapse:collapse;min-width:760px}th,td{text-align:left;vertical-align:top;padding:13px;border-bottom:1px solid var(--line)}th{color:#c7d2fe}ol,ul{padding-left:1.35rem}.steps li{margin:.6rem 0}.notice{border-left:4px solid var(--danger);padding:12px 16px;background:#271b25}.qr{display:grid;grid-template-columns:150px 1fr;gap:20px;align-items:center}.qr img{width:150px;height:150px;background:white;padding:8px;border-radius:10px}.settings{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}.settings div{padding:14px;background:#151822;border-radius:8px}.small{font-size:.92rem}
-    @media (max-width:700px){main{width:min(100% - 22px,1080px);padding-top:26px}.choices,.flow,.settings,.qr{grid-template-columns:1fr}.arrow{transform:rotate(90deg);justify-self:center}section{padding:18px}.qr img{justify-self:center}}
+    @media (max-width:700px){main{width:min(100% - 22px,1080px);padding-top:26px}.brand{align-items:flex-start}.brand>div{min-width:0}.brand img{flex:0 0 48px;width:48px;height:48px}h1{font-size:2rem;overflow-wrap:anywhere}.choices,.flow,.settings,.qr{grid-template-columns:1fr}nav{display:grid;grid-template-columns:1fr 1fr}nav .button{justify-content:center;text-align:center;padding-inline:10px}nav .button:last-child{grid-column:1/-1}.arrow{transform:rotate(90deg);justify-self:center}section{min-width:0;padding:18px}.qr img{justify-self:center}}
     @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{animation:none!important;transition:none!important}}
   </style>
 </head>
 <body>
 <main>
   <header>
-    <div class="brand"><img src="assets/icons/phwgna-cat-128.png" alt="Icon mèo phwgna"><div><div class="eyebrow">phwgna STV 0.2.7</div><h1>Đọc truyện trên PC hoặc điện thoại</h1></div></div>
+    <div class="brand"><img src="assets/icons/phwgna-cat-128.png" alt="Icon mèo phwgna"><div><div class="eyebrow">phwgna STV 0.2.8</div><h1>Đọc truyện trên PC hoặc điện thoại</h1></div></div>
     <p class="lead">Chạy <strong>Cai-dat-phwgna-STV.bat</strong>, chọn đúng thiết bị và làm theo các bước hiện trên màn hình. Điện thoại điều khiển PC từ xa; extension vẫn chạy trên PC.</p>
     <nav><a class="button primary" href="#cai-nhanh">Cài nhanh</a><a class="button" href="#dien-thoai">Thiết lập điện thoại</a><a class="button" href="#su-co">Xử lý sự cố</a></nav>
   </header>
