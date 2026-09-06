@@ -212,6 +212,16 @@ function Find-PhwgnaBrowsers {
     }
 }
 
+function Get-PhwgnaExtensionsLaunchArguments {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [ValidatePattern('^(chrome|coccoc)://extensions/$')]
+        [string]$Url
+    )
+    return '--new-tab'
+}
+
 function Get-PhwgnaPerformanceArguments {
     '--disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows'
 }

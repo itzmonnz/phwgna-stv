@@ -121,7 +121,7 @@ $artemisDownload = New-SetupButton 'Mở trang tải Artemis' 416 437 312 $secon
 $artemisDownload.TabIndex = 6
 
 $supportHeading = Add-Label 'Công cụ hỗ trợ' 32 405 696 26 11 $true
-$openExtensions = New-SetupButton 'Mở trang Extensions' 32 437 220 $secondary
+$openExtensions = New-SetupButton 'Sao chép địa chỉ Extensions' 32 437 220 $secondary
 $openExtensions.TabIndex = 8
 $openFolder = New-SetupButton 'Mở thư mục tiện ích' 264 437 220 $secondary
 $openFolder.TabIndex = 9
@@ -152,7 +152,20 @@ function Update-WizardMode {
 $phoneMode.Add_CheckedChanged({ Update-WizardMode })
 $pcMode.Add_CheckedChanged({ Update-WizardMode })
 function Selected-Browser { if ($browserSelect.SelectedIndex -ge 0 -and $browserSelect.SelectedIndex -lt $browsers.Count) { $browsers[$browserSelect.SelectedIndex] } }
-function Open-ExtensionsPage { $browser=Selected-Browser; if ($browser -and -not $DryRun) { Start-Process -FilePath $browser.path -ArgumentList $browser.extensionsUrl } }
+function Open-ExtensionsPage {
+    $browser = Selected-Browser
+    if ($browser -and -not $DryRun) {
+        try { Set-Clipboard -Value $browser.extensionsUrl }
+        catch {
+            $status.Text = 'Không sao chép được địa chỉ Extensions. Hãy mở hướng dẫn để làm thủ công.'
+            return
+        }
+        $arguments = Get-PhwgnaExtensionsLaunchArguments -Url $browser.extensionsUrl
+        Start-Process -FilePath $browser.path -ArgumentList $arguments
+        $instruction = 'Đã sao chép địa chỉ Extensions. Trong tab mới, nhấn Ctrl+V rồi Enter.'
+        $status.Text = if ($phoneMode.Checked) { "$($status.Text)`r`n$instruction" } else { $instruction }
+    }
+}
 $download.Add_Click({ if(-not $DryRun){Start-Process 'https://www.google.com/chrome/'} })
 $openExtensions.Add_Click({ Open-ExtensionsPage })
 $openFolder.Add_Click({ if(Test-Path -LiteralPath $installedExtension){Start-Process explorer.exe -ArgumentList $installedExtension}else{$status.Text='Chưa có thư mục tiện ích. Hãy hoàn thành Bước 3 trước.'} })
