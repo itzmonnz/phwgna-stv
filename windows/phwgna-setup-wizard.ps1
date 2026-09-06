@@ -117,7 +117,7 @@ $tailscale.TabIndex = 7
 $form.Controls.Add($tailscale)
 $showIp = New-SetupButton 'Lấy IP kết nối (tự sao chép)' 124 437 280 $positive
 $showIp.TabIndex = 5
-$artemisDownload = New-SetupButton 'Mở trang tải Artemis' 416 437 312 $secondary
+$artemisDownload = New-SetupButton 'Sao chép link tải Artemis' 416 437 312 $secondary
 $artemisDownload.TabIndex = 6
 
 $supportHeading = Add-Label 'Công cụ hỗ trợ' 32 405 696 26 11 $true
@@ -170,7 +170,17 @@ $download.Add_Click({ if(-not $DryRun){Start-Process 'https://www.google.com/chr
 $openExtensions.Add_Click({ Open-ExtensionsPage })
 $openFolder.Add_Click({ if(Test-Path -LiteralPath $installedExtension){Start-Process explorer.exe -ArgumentList $installedExtension}else{$status.Text='Chưa có thư mục tiện ích. Hãy hoàn thành Bước 3 trước.'} })
 $guide.Add_Click({ if(Test-Path -LiteralPath $guidePath){Start-Process $guidePath} })
-$artemisDownload.Add_Click({ if(-not $DryRun){Start-Process ([string]$lock.artemis.apkUrl)} })
+$artemisDownload.Add_Click({
+    if (-not $DryRun) {
+        try {
+            Set-Clipboard -Value ([string]$lock.artemis.apkUrl)
+            $status.Text = 'Đã sao chép link tải Artemis. Hãy gửi link sang điện thoại hoặc quét QR.'
+        }
+        catch {
+            $status.Text = 'Không sao chép được link Artemis. Hãy quét QR hoặc mở hướng dẫn để tải.'
+        }
+    }
+})
 $showIp.Add_Click({
     if (-not $DryRun -and (Test-Path -LiteralPath $ipHelperPath)) {
         Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -NoExit -File `"$ipHelperPath`""
