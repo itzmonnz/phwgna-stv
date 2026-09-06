@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light dark">
+    <title>phwgna STV AI Translator</title>
+    <link rel="stylesheet" href="popup.css">
+  </head>
+  <body>
+    <main id="popupApp" data-state="loading" aria-busy="true">
+      <header class="brand">
+        <img class="brand__mark" src="../assets/icons/phwgna-cat-128.png" alt="" aria-hidden="true" draggable="false">
+        <div>
+          <strong>phwgna STV AI Translator</strong>
+          <span>Kiểm tra tab đang mở</span>
+        </div>
+      </header>
+
+      <section class="tool-power" aria-labelledby="toolToggleLabel">
+        <div>
+          <strong id="toolToggleLabel">Sử dụng công cụ</strong>
+          <span id="toolToggleStatus">Đang kiểm tra…</span>
+        </div>
+        <button id="toolToggle" class="switch" type="button" role="switch" aria-checked="false" aria-labelledby="toolToggleLabel toolToggleStatus" disabled>
+          <span class="switch__thumb" aria-hidden="true"></span>
+        </button>
+      </section>
+
+      <section class="status-panel" aria-labelledby="statusTitle">
+        <div class="status-line">
+          <span class="status-dot" aria-hidden="true"></span>
+          <span id="statusPill">Đang kiểm tra</span>
+        </div>
+        <h1 id="statusTitle">Đang kiểm tra tab hiện tại…</h1>
+        <p id="statusDetail">Vui lòng chờ trong giây lát.</p>
+      </section>
+
+      <dl class="metrics" aria-label="Kết quả nhận diện trang">
+        <div>
+          <dt id="metricLabelOne">Vùng chương</dt>
+          <dd id="chapterRootCount">—</dd>
+        </div>
+        <div>
+          <dt id="metricLabelTwo">Thẻ nguồn Trung</dt>
+          <dd id="sourceMarkerCount">—</dd>
+        </div>
+        <div>
+          <dt id="metricLabelThree">Thanh dịch</dt>
+          <dd id="toolbarCount">—</dd>
+        </div>
+      </dl>
+
+      <p class="privacy-note">Chẩn đoán chỉ chứa số đếm và trạng thái kỹ thuật; không chứa nội dung truyện, nội dung chat, cookie hoặc prompt.</p>
+
+      <div class="actions">
+        <button id="exportDiagnostic" class="button button--primary" type="button" disabled>Sao chép báo cáo lỗi</button>
+        <button id="openSettings" class="button button--secondary" type="button">Mở cài đặt</button>
+        <button id="clearErrorLog" class="button button--quiet" type="button">Xóa log</button>
+      </div>
+
+      <div class="update-row">
+        <button id="checkUpdate" class="update-check" type="button">Kiểm tra cập nhật</button>
+        <section id="updatePanel" class="update-panel" aria-live="polite" hidden>
+          <span id="updateText">Có bản cập nhật</span>
+          <button id="openUpdate" class="update-open" type="button">Mở bản mới</button>
+        </section>
+      </div>
+
+      <p id="liveStatus" role="status" aria-live="polite"></p>
+
+      <aside class="official-identity" data-phwgna-official-identity aria-label="Thông tin bản chính thức">
+        <a href="https://github.com/itzmonnz/phwgna-stv" target="_blank" rel="noreferrer">Bản chính thức · phwgna</a>
+        <span>v<span data-phwgna-version>—</span> · <code data-phwgna-fingerprint>—</code></span>
+      </aside>
+    </main>
+    <script src="../src/content/stv-diagnostics.js"></script>
+    <script src="../src/shared/official-build.js"></script>
+    <script src="popup.js"></script>
+  </body>
+</html>

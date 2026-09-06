@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bắt đầu với phwgna STV</title>
+  <link rel="stylesheet" href="onboarding.css">
+</head>
+<body>
+  <a class="skip-link" href="#mainContent">Bỏ qua đến nội dung</a>
+  <header class="topbar">
+    <div class="topbar__inner">
+      <img src="../assets/icons/phwgna-cat-48.png" alt="" width="44" height="44">
+      <div>
+        <strong>phwgna STV AI Translator</strong>
+        <span>Thiết lập lần đầu</span>
+      </div>
+    </div>
+  </header>
+
+  <main id="mainContent" class="page-shell">
+    <section class="intro" aria-labelledby="welcomeTitle">
+      <p class="time-note">Khoảng 1 phút</p>
+      <h1 id="welcomeTitle">Dịch chương đầu tiên</h1>
+      <p>Tool đã được cài. Hoàn tất ba bước ngắn dưới đây để bắt đầu đọc bản dịch AI ngay trên STV.</p>
+    </section>
+
+    <ol class="steps">
+      <li data-onboarding-step>
+        <div class="step-number" aria-hidden="true">1</div>
+        <div class="step-content">
+          <h2>Đăng nhập <span id="providerName">Gemini</span></h2>
+          <p>Tool dùng phiên đăng nhập trong chính trình duyệt này. Không cần cài ứng dụng AI.</p>
+          <div class="actions">
+            <button id="openProvider" class="primary" type="button">Mở Gemini</button>
+            <button id="retryProvider" class="secondary" type="button">Kiểm tra lại</button>
+          </div>
+          <p id="providerStatus" class="status" role="status" aria-live="polite">Đang kiểm tra…</p>
+        </div>
+      </li>
+      <li data-onboarding-step>
+        <div class="step-number" aria-hidden="true">2</div>
+        <div class="step-content">
+          <h2>Mở một chương trên STV</h2>
+          <p>Chọn truyện và chương bạn muốn đọc. Menu con mèo sẽ xuất hiện trên trang chương.</p>
+        </div>
+      </li>
+      <li data-onboarding-step>
+        <div class="step-number" aria-hidden="true">3</div>
+        <div class="step-content">
+          <h2>Bấm Dịch AI</h2>
+          <p>Lần đầu tiên, hãy đọc và xác nhận thông báo gửi nội dung chương tới dịch vụ AI.</p>
+          <button id="finishOnboarding" class="primary" type="button" disabled>Mở STV và bắt đầu</button>
+        </div>
+      </li>
+    </ol>
+
+    <footer class="page-footer">
+      <p>Không đọc cookie, mật khẩu hoặc nội dung trò chuyện cũ.</p>
+      <button id="skipOnboarding" class="text-button" type="button">Bỏ qua hướng dẫn</button>
+    </footer>
+
+    <aside class="official-identity" data-phwgna-official-identity aria-label="Thông tin bản chính thức">
+      <a href="https://github.com/itzmonnz/phwgna-stv" target="_blank" rel="noreferrer">Repository chính thức của phwgna</a>
+      <span>Phiên bản <span data-phwgna-version>—</span> · Fingerprint <code data-phwgna-fingerprint>—</code></span>
+    </aside>
+  </main>
+  <script src="../src/shared/official-build.js"></script>
+  <script src="onboarding.js"></script>
+</body>
+</html>

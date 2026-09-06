@@ -1,0 +1,168 @@
+{
+  "manifest_version": 3,
+  "name": "phwgna STV AI Translator",
+  "version": "0.1.0",
+  "description": "Dịch chương Sáng Tác Việt qua ChatGPT, Gemini hoặc API do người dùng chọn.",
+  "icons": {
+    "16": "assets/icons/phwgna-cat-16.png",
+    "32": "assets/icons/phwgna-cat-32.png",
+    "48": "assets/icons/phwgna-cat-48.png",
+    "128": "assets/icons/phwgna-cat-128.png"
+  },
+  "permissions": [
+    "storage",
+    "debugger"
+  ],
+  "host_permissions": [
+    "https://sangtacviet.app/*",
+    "https://sangtacviet.com/*",
+    "http://sangtacviet.com/*",
+    "http://14.225.254.182/*",
+    "https://chatgpt.com/*",
+    "https://gemini.google.com/*",
+    "https://translate.googleapis.com/*",
+    "https://api.mymemory.translated.net/*",
+    "https://openrouter.ai/*",
+    "https://generativelanguage.googleapis.com/*",
+    "https://api.openai.com/*",
+    "https://api.deepseek.com/*",
+    "https://raw.githubusercontent.com/itzmonnz/phwgna-stv-updates/*"
+  ],
+  "background": {
+    "service_worker": "src/background.js"
+  },
+  "action": {
+    "default_title": "phwgna STV AI Translator",
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "16": "assets/icons/phwgna-cat-16.png",
+      "32": "assets/icons/phwgna-cat-32.png",
+      "48": "assets/icons/phwgna-cat-48.png",
+      "128": "assets/icons/phwgna-cat-128.png"
+    }
+  },
+  "options_page": "options/options.html",
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'none'; base-uri 'none';"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "assets/icons/phwgna-cat-128.png"
+      ],
+      "matches": [
+        "https://sangtacviet.app/*",
+        "https://sangtacviet.com/*",
+        "http://sangtacviet.com/*",
+        "http://14.225.254.182/*"
+      ]
+    }
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://sangtacviet.app/*",
+        "https://sangtacviet.com/*",
+        "http://sangtacviet.com/*",
+        "http://14.225.254.182/*"
+      ],
+      "js": [
+        "src/shared/stv-sites.js",
+        "src/shared/native-history.js",
+        "src/content/stv-history.js",
+        "src/content/stv-diagnostics.js"
+      ],
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "https://sangtacviet.app/*",
+        "https://sangtacviet.com/*",
+        "http://sangtacviet.com/*",
+        "http://14.225.254.182/*"
+      ],
+      "js": [
+        "src/content/stv-ui.js",
+        "src/content/stv-site-navigation.js"
+      ],
+      "css": [
+        "src/content/stv.css"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://sangtacviet.app/truyen/*",
+        "https://sangtacviet.com/truyen/*",
+        "http://sangtacviet.com/truyen/*",
+        "http://14.225.254.182/truyen/*"
+      ],
+      "js": [
+        "src/shared/stv-sites.js",
+        "src/shared/core.js",
+        "src/shared/tts-pronunciation.js",
+        "src/shared/branding.js",
+        "src/shared/name-aliases.js",
+        "src/content/stv-extractor.js",
+        "src/content/stv-diagnostics.js",
+        "src/vendor/gsap.min.js",
+        "src/content/stv-motion.js",
+        "src/content/stv-ui.js",
+        "src/content/stv-name-editor.js",
+        "src/content/stv-name-manager.js",
+        "src/content/stv-tts-client.js",
+        "src/content/stv-prefetch.js",
+        "src/content/stv.js"
+      ],
+      "css": [
+        "src/content/stv.css"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://sangtacviet.app/truyen/*",
+        "https://sangtacviet.com/truyen/*",
+        "http://sangtacviet.com/truyen/*",
+        "http://14.225.254.182/truyen/*"
+      ],
+      "js": [
+        "src/shared/stv-sites.js",
+        "src/shared/tts-pronunciation.js",
+        "src/content/stv-tts-bridge.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "https://chatgpt.com/*"
+      ],
+      "js": [
+        "src/shared/core.js",
+        "src/content/provider-common.js",
+        "src/content/gemini-dom-resolver.js",
+        "src/content/chatgpt-dom-resolver.js",
+        "src/content/chatgpt.js",
+        "src/content/provider-diagnostics.js"
+      ],
+      "css": [
+        "src/content/chatgpt-performance.css"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://gemini.google.com/*"
+      ],
+      "js": [
+        "src/shared/core.js",
+        "src/content/provider-common.js",
+        "src/content/gemini-dom-resolver.js",
+        "src/content/gemini.js",
+        "src/content/provider-diagnostics.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
+}

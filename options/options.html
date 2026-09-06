@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light dark">
+    <title>Cài đặt · phwgna STV AI Translator</title>
+    <link rel="icon" href="../assets/icons/phwgna-cat-32.png" type="image/png">
+    <link rel="stylesheet" href="options.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#mainContent">Bỏ qua phần đầu</a>
+    <header class="topbar">
+      <div class="topbar__inner">
+        <img class="brand-mark" src="../assets/icons/phwgna-cat-128.png" alt="" aria-hidden="true" draggable="false">
+        <div>
+          <p class="eyebrow">phwgna STV AI Translator</p>
+          <h1>Cài đặt dịch</h1>
+        </div>
+      </div>
+    </header>
+
+    <main class="page-shell" id="mainContent">
+      <section class="intro" aria-labelledby="intro-title">
+        <div>
+          <p class="eyebrow">Thiết lập độc lập</p>
+          <h2 id="intro-title">Kiểm soát cách chương truyện được dịch</h2>
+          <p>Thiết lập chỉ được lưu cục bộ trong tiện ích. API key chỉ nhập trong ô riêng của nhà cung cấp; không nhập cookie hay mật khẩu tài khoản.</p>
+        </div>
+        <div class="privacy-note" role="note">
+          <span class="privacy-note__dot" aria-hidden="true"></span>
+          <span>Không có dữ liệu được gửi đi khi bạn chỉ thay đổi cài đặt.</span>
+        </div>
+      </section>
+
+      <form id="settingsForm" novalidate>
+        <section class="settings-card" aria-labelledby="provider-title">
+          <div class="section-heading">
+            <div>
+              <h2 id="provider-title">Nơi dịch</h2>
+            </div>
+          </div>
+
+          <div class="field-grid field-grid--provider">
+            <div class="field">
+              <label for="provider">Nhà cung cấp</label>
+              <select id="provider" name="provider">
+                <optgroup label="AI Web">
+                  <option value="chatgpt">ChatGPT Web</option>
+                  <option value="gemini">Gemini Web</option>
+                </optgroup>
+                <optgroup label="AI API">
+                  <option value="openrouter_api">OpenRouter</option>
+                  <option value="gemini_api">Gemini API</option>
+                  <option value="openai_api">GPT (OpenAI API)</option>
+                  <option value="deepseek_api">DeepSeek API</option>
+                </optgroup>
+              </select>
+            </div>
+
+            <div class="field" id="webAiTabCountRow">
+              <label for="webAiTabCount">Số tab AI</label>
+              <select id="webAiTabCount" name="webAiTabCount">
+                <option value="2">2 tab</option>
+                <option value="3">3 tab</option>
+                <option value="4">4 tab</option>
+                <option value="5">5 tab</option>
+              </select>
+              <p class="field-help">Từ 3 tab, một tab được dành riêng để dịch trước chương kế. Nhiều tab dùng thêm RAM và có thể chạm giới hạn tần suất của AI.</p>
+            </div>
+
+          </div>
+
+          <div class="api-panel" id="apiPanel" hidden>
+            <div class="field">
+              <label for="apiKey">API key</label>
+              <div class="input-action-row">
+                <input id="apiKey" type="password" autocomplete="off" spellcheck="false">
+                <button class="button button--secondary" id="toggleApiKey" type="button">Hiện</button>
+              </div>
+              <p class="field-help">Key lưu cục bộ dạng gốc trong vùng riêng của tiện ích; không nằm trong export, cache, log hoặc chẩn đoán.</p>
+            </div>
+            <div class="field">
+              <label for="apiModel">Model</label>
+              <input id="apiModel" type="text" autocomplete="off" spellcheck="false">
+            </div>
+            <div class="field">
+              <div class="label-row">
+                <label for="apiTemperature">Temperature</label>
+                <output id="apiTemperatureValue" class="field-badge" for="apiTemperature">0.3</output>
+              </div>
+              <input id="apiTemperature" class="range-control" type="range" min="0" max="2" step="0.1" value="0.3">
+              <p class="field-help">Mức thấp ổn định và bám nghĩa hơn. Nếu model không hỗ trợ, tool sẽ dùng mức mặc định của model.</p>
+            </div>
+            <div class="field toggle-field" id="geminiSafetyRow" hidden>
+              <div>
+                <label for="geminiSafetyOff">Off Safety</label>
+                <p class="field-help">Chỉ tắt bốn nhóm có thể điều chỉnh; bảo vệ lõi Gemini vẫn hoạt động.</p>
+              </div>
+              <label class="switch" for="geminiSafetyOff">
+                <input id="geminiSafetyOff" type="checkbox">
+                <span class="switch__track" aria-hidden="true"><span class="switch__thumb"></span></span>
+              </label>
+            </div>
+            <div class="data-actions">
+              <button class="button button--secondary" id="testApi" type="button">Test API</button>
+              <p id="apiTestStatus" class="field-help" role="status" aria-live="polite"></p>
+            </div>
+          </div>
+        </section>
+
+        <section class="settings-card settings-card--compact" aria-labelledby="ui-title">
+          <div class="section-heading">
+            <div><h2 id="ui-title">Giao diện tool</h2></div>
+          </div>
+          <div class="field">
+            <div class="label-row">
+              <label for="stvaiUiScale">Kích thước menu</label>
+              <output id="stvaiUiScaleValue" class="field-badge" for="stvaiUiScale">100%</output>
+            </div>
+            <input id="stvaiUiScale" class="range-control" type="range" min="0.5" max="1.5" step="0.25" value="1">
+            <p class="field-help">Áp dụng và lưu ngay trên mọi website STV. Không phóng nội dung truyện hoặc player Nghe sách của STV.</p>
+          </div>
+        </section>
+
+        <section class="settings-card" id="supportedSites" aria-labelledby="supported-sites-title">
+          <div class="section-heading">
+            <div><h2 id="supported-sites-title">Website STV được hỗ trợ</h2></div>
+            <p>Nếu một địa chỉ không truy cập được, hãy thử địa chỉ khác trong danh sách.</p>
+          </div>
+          <ul class="supported-sites" id="supportedSitesList" aria-label="Danh sách website Sáng Tác Việt"></ul>
+          <p class="field-help supported-sites__note">Địa chỉ HTTP không mã hóa kết nối. Chỉ dùng khi các địa chỉ HTTPS không hoạt động.</p>
+        </section>
+
+        <section class="settings-card" aria-labelledby="prompt-title">
+          <div class="section-heading">
+            <div>
+              <h2 id="prompt-title">Chỉ dẫn dịch</h2>
+            </div>
+          </div>
+
+          <div class="field">
+            <div class="label-row">
+              <label for="systemPrompt">System Prompt</label>
+              <span class="field-badge">Thiết lập vai trò</span>
+            </div>
+            <textarea id="systemPrompt" name="systemPrompt" rows="7" spellcheck="false"></textarea>
+            <p class="field-help">Hỗ trợ <code>{{sourcelanguage}}</code> và <code>{{targetlanguage}}</code>.</p>
+          </div>
+
+          <div class="field">
+            <div class="label-row">
+              <label for="userPrompt">User Prompt</label>
+              <span class="field-badge">Nội dung chương</span>
+            </div>
+            <textarea id="userPrompt" name="userPrompt" rows="9" spellcheck="false"></textarea>
+            <p class="field-help">Hỗ trợ <code>{{name}}</code> và <code>{{text}}</code>. Nếu thiếu <code>{{text}}</code>, tiện ích sẽ tự nối nội dung.</p>
+          </div>
+        </section>
+
+        <section class="settings-card" aria-labelledby="names-title">
+          <div class="section-heading">
+            <div>
+              <h2 id="names-title">Bộ name chung</h2>
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="nameGuide">Danh sách tên và thuật ngữ</label>
+            <textarea id="nameGuide" name="nameGuide" rows="11" spellcheck="false" placeholder="$王优=Vương Ưu&#10;$天河=Thiên Hà"></textarea>
+            <p class="field-help">Cú pháp: <code>$từ_gốc=bản_dịch</code>. Dòng không hợp lệ sẽ được bỏ qua; giá trị cuối cùng sẽ thắng nếu trùng.</p>
+          </div>
+        </section>
+
+        <section class="settings-card" aria-labelledby="pronunciation-title">
+          <div class="section-heading">
+            <div>
+              <h2 id="pronunciation-title">Phát âm Nghe sách</h2>
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="ttsPronunciationGuide">Từ và cách đọc</label>
+            <textarea id="ttsPronunciationGuide" name="ttsPronunciationGuide" rows="6" spellcheck="false" placeholder="vi=di&#10;streamer=sờ trim mơ"></textarea>
+            <p class="field-help">Mỗi dòng dùng cú pháp <code>từ=cách đọc</code>. Chỉ âm thanh thay đổi; chữ hiển thị và cache vẫn giữ nguyên. Có hiệu lực từ lần mở Nghe sách tiếp theo.</p>
+          </div>
+        </section>
+
+        <section class="settings-card settings-card--compact" aria-labelledby="data-title">
+          <div class="section-heading">
+            <div>
+              <h2 id="data-title">Sao lưu cài đặt</h2>
+            </div>
+            <p>JSON chỉ gồm các tùy chọn, prompt và bộ name của tiện ích.</p>
+          </div>
+          <div class="data-actions">
+            <button class="button button--secondary" id="importButton" type="button">Nhập JSON</button>
+            <button class="button button--secondary" id="exportButton" type="button">Xuất JSON</button>
+            <input id="importFile" class="visually-hidden" type="file" accept="application/json,.json" aria-label="Chọn tệp JSON cài đặt">
+          </div>
+        </section>
+
+        <section class="settings-card settings-card--compact" aria-labelledby="developer-title">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Tạm thời</p>
+              <h2 id="developer-title">Chế độ nhà phát triển</h2>
+            </div>
+          </div>
+          <div class="field toggle-field">
+            <div>
+              <label for="developerKeepAiTabs">Giữ các tab AI để kiểm tra</label>
+              <p class="field-help">Tab cũ được giữ riêng để kiểm tra và không chiếm giới hạn pool tab đang hoạt động. Số tab giữ lại và RAM sử dụng có thể tăng; hãy tắt chế độ này sau khi lấy chẩn đoán.</p>
+            </div>
+            <label class="switch" for="developerKeepAiTabs" aria-label="Giữ các tab AI để kiểm tra">
+              <input id="developerKeepAiTabs" type="checkbox">
+              <span class="switch__track" aria-hidden="true"><span class="switch__thumb"></span></span>
+            </label>
+          </div>
+        </section>
+
+        <div class="action-bar">
+          <p id="saveStatus" class="save-status" role="status" aria-live="polite">Sẵn sàng.</p>
+          <div class="action-bar__buttons">
+            <button class="button button--ghost" id="resetButton" type="button">Khôi phục mặc định</button>
+            <button class="button button--primary" id="saveButton" type="submit">Lưu cài đặt</button>
+          </div>
+        </div>
+      </form>
+
+      <aside class="official-identity" data-phwgna-official-identity aria-label="Thông tin bản chính thức">
+        <a href="https://github.com/itzmonnz/phwgna-stv" target="_blank" rel="noreferrer">Repository chính thức của phwgna</a>
+        <span>Phiên bản <span data-phwgna-version>—</span> · Fingerprint <code data-phwgna-fingerprint>—</code></span>
+      </aside>
+    </main>
+
+    <script src="../src/shared/core.js"></script>
+    <script src="../src/shared/tts-pronunciation.js"></script>
+    <script src="../src/shared/stv-sites.js"></script>
+    <script src="../src/shared/official-build.js"></script>
+    <script src="options.js"></script>
+  </body>
+</html>

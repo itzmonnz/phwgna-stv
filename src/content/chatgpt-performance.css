@@ -1,0 +1,9 @@
+html.stvai-chatgpt-performance-max [data-message-author-role="assistant"],
+html.stvai-chatgpt-performance-max [data-message-author-role="assistant"] *,
+html.stvai-chatgpt-performance-max article[data-testid^="conversation-turn-assistant"],
+html.stvai-chatgpt-performance-max article[data-testid^="conversation-turn-assistant"] * {
+  animation: none !important;
+  transition-property: none !important;
+  transition-duration: 0s !important;
+  scroll-behavior: auto !important;
+}

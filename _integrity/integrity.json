@@ -1,0 +1,242 @@
+{
+  "format": "stv-ai-translator-integrity",
+  "version": 1,
+  "owner": "phwgna",
+  "releaseVersion": "0.1.0",
+  "algorithm": "sha256",
+  "files": [
+    {
+      "path": "LICENSE",
+      "sha256": "14ac45ee63465506f1258c9f2ea5e29a8de5b09cbd0758f34501bc2849a6559b"
+    },
+    {
+      "path": "README.md",
+      "sha256": "c678bb9df73254a84b953ea037a5eea34f882b4a28ad4095d1779253ad6958a6"
+    },
+    {
+      "path": "SECURITY.md",
+      "sha256": "610f8a50b333e9ebc0d65f5225a16c67f7f24646778bc4b3fb7168fa3d7b6712"
+    },
+    {
+      "path": "TRADEMARK.md",
+      "sha256": "8e621de62ecd92e21fb0237381d427c0ef5b6a8fcdb3d94fb8f796a9dc87e6fb"
+    },
+    {
+      "path": "assets/icons/phwgna-cat-128.png",
+      "sha256": "c905787467c35c254e9609e89068ef87f4b5f09f6c57ef692a3d48c6f5113068"
+    },
+    {
+      "path": "assets/icons/phwgna-cat-16.png",
+      "sha256": "a5f85d21899a1d97f3dce35436107938f9f2661fa72c17c3c3f4e7c6eb804a06"
+    },
+    {
+      "path": "assets/icons/phwgna-cat-32.png",
+      "sha256": "6e5c4c0c968582ab3416645dc949bcab2584d6098be3a53d551d2a1797b8159f"
+    },
+    {
+      "path": "assets/icons/phwgna-cat-48.png",
+      "sha256": "fa32ac9003c4d6214b6c688acd358250642b81cf051d88f3afb914bb0ea3ce40"
+    },
+    {
+      "path": "manifest.json",
+      "sha256": "8abae38ec643951f6801f0ff57716592029d7a9d272ee2c37dd0aecb42ad78ed"
+    },
+    {
+      "path": "onboarding/onboarding.css",
+      "sha256": "ba138413c826eb18cf6061d7a8d38e1f4b6fccb2b9a12b93982792fead389b65"
+    },
+    {
+      "path": "onboarding/onboarding.html",
+      "sha256": "9560e5c5e7107d56dd49ca00014279246f5b0025ac154b36717e672c8629acd6"
+    },
+    {
+      "path": "onboarding/onboarding.js",
+      "sha256": "d4434c486f3fefec0f4faf61821667efe620473a6ddf4d241a8411b0e8b0d365"
+    },
+    {
+      "path": "options/options.css",
+      "sha256": "f071236b2a22a9b9ee45abc4c1c8349edcdde79f0d84c028fb29424430d7e40f"
+    },
+    {
+      "path": "options/options.html",
+      "sha256": "cf109e7a231c293d6d2e1af85f56319a1b2a693a3dddf351c495b93426bba8b1"
+    },
+    {
+      "path": "options/options.js",
+      "sha256": "ccc04b02a5363f5d27dcd6a73129bff0b419052077c6a13f9febb461769dff4c"
+    },
+    {
+      "path": "popup/popup.css",
+      "sha256": "408e55d9bf06c0f36144766d2a78674b7e8e25f33f123fc5a4fbb8f37a9cd2c5"
+    },
+    {
+      "path": "popup/popup.html",
+      "sha256": "71b90ef010cc92694f02a0aae391ee970769923397a60163717a8db07b237d1a"
+    },
+    {
+      "path": "popup/popup.js",
+      "sha256": "3dba06c2a311fd047e5fba500ec35a6dba85443a2abdc81a6488f26b6003a58f"
+    },
+    {
+      "path": "security/OWNER-FINGERPRINT.txt",
+      "sha256": "fa51419cf6112bb72d6b2aea592b872443a740126e4f531bc86b81b2fad44618"
+    },
+    {
+      "path": "security/owner-public-key.pub",
+      "sha256": "a447fb6c387fe8aba8f42e2ef38d937fa6f33fec612e0ad37745709a24b06d34"
+    },
+    {
+      "path": "src/background.js",
+      "sha256": "f111c1516991711a5ca1567d01a77dc76e6ce3834da89822f353fe625dbbece6"
+    },
+    {
+      "path": "src/content/chatgpt-dom-resolver.js",
+      "sha256": "ae4130f5f80091f8428d34774e30238401a38b877018ab4cfec269dd35531ed3"
+    },
+    {
+      "path": "src/content/chatgpt-performance.css",
+      "sha256": "faf5c297141b11d6288a210904c2592e628317f588c573b2f191778ac2ff147b"
+    },
+    {
+      "path": "src/content/chatgpt.js",
+      "sha256": "a2c42f79eb16bcfd820798dd41a10c9fb6d5503f8489066638755358bae801af"
+    },
+    {
+      "path": "src/content/gemini-dom-resolver.js",
+      "sha256": "3187b89be0a584bbacf24440475ed892eec03ba814e56357fa459dc4ba6faf93"
+    },
+    {
+      "path": "src/content/gemini.js",
+      "sha256": "34afe4b65c60fe41a39db37696321395855f96208d2ceaea063c99640065fdbb"
+    },
+    {
+      "path": "src/content/provider-common.js",
+      "sha256": "0c192f66482358e484fc47c69a8547d2d5fcfdf89cfb03701a5fcb94b6ef71ef"
+    },
+    {
+      "path": "src/content/provider-diagnostics.js",
+      "sha256": "e75cece8d2efab6bacb07a907be87d8255f533e2e9a830ae0ff4c5cf8a2da275"
+    },
+    {
+      "path": "src/content/stv-diagnostics.js",
+      "sha256": "a76c95676049aebed4c90848a5573a5b3aaff00a542a1b97c8e79428b371fdde"
+    },
+    {
+      "path": "src/content/stv-extractor.js",
+      "sha256": "c7c17a3652679f2fbc29b0c776f06b9a4a486aa9aa9d000ea43c64acda67950e"
+    },
+    {
+      "path": "src/content/stv-history.js",
+      "sha256": "92b95fe4ad714001c597bc694ea30c2368e136edb5bfde3c5203fb09eef6ecdd"
+    },
+    {
+      "path": "src/content/stv-motion.js",
+      "sha256": "f86dbec89c6992fe306de424a533f863082bdc201d387e269ac64e71ff9b976e"
+    },
+    {
+      "path": "src/content/stv-name-editor.js",
+      "sha256": "36966db967c66b19fb51a72f1c260be8f22002d4f834d666cca1a4ec9a9de49e"
+    },
+    {
+      "path": "src/content/stv-name-manager.js",
+      "sha256": "838c109782fac29e74bf7c18578f2f13f810ca0d8760dcdd2ec1b55d2a3cb924"
+    },
+    {
+      "path": "src/content/stv-prefetch.js",
+      "sha256": "b44054442a15700af6e2ce6a8a97569aafdaf54e4477ea706d3817379a3f70c1"
+    },
+    {
+      "path": "src/content/stv-site-navigation.js",
+      "sha256": "d9f753046acc7dff53b774d7af0e0f1d5837299639c874e7e6e89105f0bcf25f"
+    },
+    {
+      "path": "src/content/stv-tts-bridge.js",
+      "sha256": "ba6d8b59ecad7b4e43992e3d56e871884fd3b8088f0bb5b374b00aa0fe9f5038"
+    },
+    {
+      "path": "src/content/stv-tts-client.js",
+      "sha256": "9354ac7380c99288a954c751d2fcbea67327da1fda3e012454bcc637b006a6ad"
+    },
+    {
+      "path": "src/content/stv-ui.js",
+      "sha256": "781a20c0dd2b897b2d29994244158a5608f61b1515b2c01d111a8b53166ccdaf"
+    },
+    {
+      "path": "src/content/stv.css",
+      "sha256": "c4530977e90685e7989119da6a982ce869e049fa10b41488d82e7db1236da283"
+    },
+    {
+      "path": "src/content/stv.js",
+      "sha256": "1f75fc1da2fd93622418b44ef7e25b5f646311ee1e19b6a870ebfc2954f1b61e"
+    },
+    {
+      "path": "src/shared/api-providers.js",
+      "sha256": "da7d02483a151e152e394b4934d2efeacaeb3e512e86284a696acbe3a4acbfc6"
+    },
+    {
+      "path": "src/shared/branding.js",
+      "sha256": "4224fd2a490acd4a4dad82c2206fc85b14bd34d8ded81df3515c30b94a876ecc"
+    },
+    {
+      "path": "src/shared/cache.js",
+      "sha256": "0814a10d9c65a54b269bb911ba7597a146cd68145abebce46f5f88bcdf0a57b7"
+    },
+    {
+      "path": "src/shared/core.js",
+      "sha256": "4cdad1bfe5d6929b24549726075dd92c3f036d5b766c371fece2a12e229c6828"
+    },
+    {
+      "path": "src/shared/error-journal.js",
+      "sha256": "32577acb381c8b8590a742fe9310c28e5c9d70fd4a286e0b226aca901a8bd85a"
+    },
+    {
+      "path": "src/shared/history-sync.js",
+      "sha256": "627919e6e3f87c7370214608f23f35f3046cabde0d078c207870c8c2d64d040d"
+    },
+    {
+      "path": "src/shared/name-aliases.js",
+      "sha256": "4be0b23fe61f62609454c8f250ae59089080b9bdf0814d1abb19c5862259ff30"
+    },
+    {
+      "path": "src/shared/name-preview.js",
+      "sha256": "7ddba0532765c82b05eb36f4af5b7d009cc505140923bd3d280ee5e1aa41783b"
+    },
+    {
+      "path": "src/shared/native-history.js",
+      "sha256": "c41256fea763893f3421e493c15d275906ca30f5c41fa79dcf7c921d721d78e5"
+    },
+    {
+      "path": "src/shared/official-build.js",
+      "sha256": "cbf5c9c130dda04561890c137d01e8ec925bb5b942679deef1fdd5161a30a34a"
+    },
+    {
+      "path": "src/shared/onboarding.js",
+      "sha256": "1c9befe0f927f9179458760efae7708613399ffeed05bb30de95f3381414e12c"
+    },
+    {
+      "path": "src/shared/stv-sites.js",
+      "sha256": "19d79bf41d7ca04f511b91c3639dde732e9e502d10aa07f45d4431ec0941f798"
+    },
+    {
+      "path": "src/shared/tts-pronunciation.js",
+      "sha256": "cd7946805d28a79ed3cc1a31fe7542ee50e1370433c09637627015f882702499"
+    },
+    {
+      "path": "src/shared/update-check.js",
+      "sha256": "d35c343536b8e5fcb1862d8f8272e2dac492ac517c2628c54dae4b39c5dda85c"
+    },
+    {
+      "path": "src/vendor/GSAP-NOTICE.txt",
+      "sha256": "50d3f2a713897c2174d27825abc4d2f0b297c0d48faffd0d033e4c9d56dcbddc"
+    },
+    {
+      "path": "src/vendor/gsap.min.js",
+      "sha256": "92bb9a96476f983d212a2bc4f54c889039c1696dd4461d40a736860938570fbb"
+    }
+  ],
+  "product": "phwgna STV AI Translator",
+  "sourceCommit": "83545adbfbb9ef713b015e1ddbda641b25657dcb",
+  "officialRepository": "https://github.com/itzmonnz/phwgna-stv",
+  "officialReleaseUrl": "https://github.com/itzmonnz/phwgna-stv/releases/tag/v0.1.0",
+  "publicKeyFingerprint": "85ac74c199d0a6028bce843d6f68d7632317912b460aad1a7431193767ec9871"
+}
