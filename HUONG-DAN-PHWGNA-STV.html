@@ -18,7 +18,7 @@
 <body>
 <main>
   <header>
-    <div class="brand"><img src="assets/icons/phwgna-cat-128.png" alt="Icon mèo phwgna"><div><div class="eyebrow">phwgna STV 0.2.6</div><h1>Đọc truyện trên PC hoặc điện thoại</h1></div></div>
+    <div class="brand"><img src="assets/icons/phwgna-cat-128.png" alt="Icon mèo phwgna"><div><div class="eyebrow">phwgna STV 0.2.7</div><h1>Đọc truyện trên PC hoặc điện thoại</h1></div></div>
     <p class="lead">Chạy <strong>Cai-dat-phwgna-STV.bat</strong>, chọn đúng thiết bị và làm theo các bước hiện trên màn hình. Điện thoại điều khiển PC từ xa; extension vẫn chạy trên PC.</p>
     <nav><a class="button primary" href="#cai-nhanh">Cài nhanh</a><a class="button" href="#dien-thoai">Thiết lập điện thoại</a><a class="button" href="#su-co">Xử lý sự cố</a></nav>
   </header>
@@ -46,6 +46,15 @@
     <div class="qr"><img src="windows/assets/artemis-qr.png" alt="QR tải Artemis non-root"><div><h3>1. Cài Artemis</h3><p>Quét QR bằng điện thoại. Đây là APK non-root đã khóa phiên bản cho bản phwgna STV này.</p><a class="button" href="https://github.com/ClassicOldSong/moonlight-android/releases/download/v20.2.6/artemis-nonRoot_game-release.apk">Tải Artemis 20.2.6</a></div></div>
     <ol class="steps"><li>Tạo tài khoản Sunshine tại <code>https://localhost:47990</code>. Trình duyệt có thể cảnh báo chứng chỉ nội bộ ở lần đầu.</li><li>Trên PC, bấm <b>Lấy IP kết nối</b> trong wizard hoặc chạy <b>Lay-IP-ket-noi-Sunshine.bat</b>. IP trong nhà sẽ hiện lớn và đã tự sao chép.</li><li>Đảm bảo PC và điện thoại cùng Wi‑Fi. Trong Artemis, chọn <b>thêm máy tính</b> rồi <b>dán</b> IP vừa sao chép.</li><li>Chọn PC, lấy PIN rồi nhập PIN vào Sunshine.</li><li>Mở <b>Desktop</b>, mở STV và bật audio để nghe TTS trên điện thoại.</li></ol>
     <p class="muted"><strong>Chọn đúng loại IP:</strong> cùng Wi‑Fi dùng <b>IP trong nhà</b> (thường bắt đầu bằng <code>192.168</code> hoặc <code>10.</code>). Khi ở ngoài mạng nhà, bật Tailscale trên cả hai máy và dùng <b>IP Tailscale</b> mà file lấy IP hiển thị.</p>
+  </section>
+
+  <section aria-labelledby="cam-ung"><h2 id="cam-ung">Vuốt như khi đọc trên điện thoại</h2>
+    <p>Wizard chỉ cài Sunshine; phwgna <strong>không ghi đè cấu hình Sunshine</strong> đang có trên máy. Bản Sunshine được khóa cho phwgna mặc định đã bật <b>Enable Mouse Input</b>, <b>High Resolution Scrolling</b> và <b>Native Pen/Touch Support</b>; ứng dụng <b>Desktop</b> cũng có sẵn.</p>
+    <h3>Cách khuyên dùng: vuốt trực tiếp bằng một ngón</h3>
+    <ol class="steps"><li>Trong Artemis, mở <b>Cài đặt (Settings)</b> → <b>Cài đặt đầu vào (Input settings)</b>.</li><li>Mở <b>Chế độ màn hình cảm ứng (Touchscreen mode)</b> và chọn <b>Chạm đa điểm (Multi touch)</b>.</li><li>Kết nối lại <b>Desktop</b>. Vuốt một ngón lên hoặc xuống để cuộn trang như trên điện thoại; chạm một lần để chọn.</li></ol>
+    <h3>Nếu máy không nhận cảm ứng trực tiếp</h3>
+    <p>Nếu <b>Chạm đa điểm</b> không cuộn được trang, chuyển <b>Chế độ màn hình cảm ứng</b> sang <b>Bàn di chuột (Tự nhiên – Nhấn đúp để kéo)</b>. Khi đó: một ngón di chuyển con trỏ, chạm để nhấp chuột, vuốt hai ngón để cuộn, nhấn đúp rồi giữ để kéo.</p>
+    <p class="muted">Vẫn không điều khiển được: mở Sunshine → <b>Configuration</b> → <b>Input</b>, kiểm tra <b>Enable Mouse Input</b> và <b>Native Pen/Touch Support</b> đang bật. Chỉ lưu và khởi động lại Sunshine nếu bạn vừa thay đổi các mục này.</p>
   </section>
 
   <section aria-labelledby="chat-luong"><h2 id="chat-luong">Chất lượng gợi ý</h2><div class="settings">

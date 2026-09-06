@@ -16,6 +16,8 @@ Hướng dẫn đầy đủ, QR Artemis và cách xử lý lỗi nằm trong `HU
 
 Không biết IP để thêm PC vào Artemis: chạy **Lay-IP-ket-noi-Sunshine.bat**. IP cùng Wi-Fi sẽ được hiện và tự sao chép để bạn chỉ cần bấm Dán trên điện thoại.
 
+Wizard chỉ cài Sunshine và **không ghi đè cấu hình Sunshine** đang có. Để vuốt một ngón như trên điện thoại, chọn **Artemis → Cài đặt đầu vào → Chế độ màn hình cảm ứng → Chạm đa điểm**. Nếu máy không nhận tốt, chọn **Bàn di chuột (Tự nhiên – Nhấn đúp để kéo)** và vuốt hai ngón để cuộn. Xem các bước và cách xử lý lỗi trong [hướng dẫn cảm ứng](HUONG-DAN-PHWGNA-STV.html#cam-ung).
+
 ### Cài extension thủ công
 
 1. Tải ZIP từ mục Releases của repository chính thức và giải nén.
