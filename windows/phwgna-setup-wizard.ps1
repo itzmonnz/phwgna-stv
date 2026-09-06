@@ -1,4 +1,4 @@
-param([switch]$DryRun)
+﻿param([switch]$DryRun)
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'phwgna-setup-core.ps1')
 Add-Type -AssemblyName System.Windows.Forms
