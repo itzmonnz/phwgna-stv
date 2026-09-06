@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Hướng dẫn cài phwgna STV</title>
+  <style>
+    :root{color-scheme:dark;--bg:#11131b;--panel:#1a1d28;--line:#34384b;--text:#f6f7fb;--muted:#bec2d4;--accent:#818cf8;--cyan:#22d3ee;--danger:#fda4af}
+    *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:radial-gradient(circle at top,#242744 0,#11131b 34rem);color:var(--text);font:16px/1.65 system-ui,-apple-system,"Segoe UI",sans-serif}
+    main{width:min(1080px,calc(100% - 32px));margin:auto;padding:48px 0 80px}header{max-width:760px;margin-bottom:34px}.brand{display:flex;align-items:center;gap:14px}.brand img{width:54px;height:54px}.eyebrow{color:var(--cyan);font-weight:750;letter-spacing:.08em;text-transform:uppercase}h1{font-size:clamp(2rem,5vw,3.7rem);line-height:1.08;margin:.25rem 0 1rem}h2{margin:0 0 14px;font-size:1.5rem}h3{margin:.2rem 0 .5rem}.lead,.muted{color:var(--muted)}
+    nav{display:flex;flex-wrap:wrap;gap:10px;margin-top:24px}a.button{display:inline-flex;align-items:center;min-height:44px;padding:9px 16px;border:1px solid var(--line);border-radius:10px;background:#222637;color:var(--text);text-decoration:none;font-weight:700}a.primary{background:var(--accent);color:#11131b;border-color:transparent}a:hover{border-color:var(--accent)}a:focus-visible{outline:3px solid var(--cyan);outline-offset:3px}
+    section{margin-top:22px;padding:24px;border:1px solid var(--line);border-radius:16px;background:rgba(26,29,40,.94);box-shadow:0 18px 45px rgba(0,0,0,.18)}.flow{display:grid;grid-template-columns:1fr auto 1fr;gap:18px;align-items:center}.flow strong{display:block}.arrow{color:var(--cyan);font-size:2rem}.choices{display:grid;grid-template-columns:1fr 1fr;gap:16px}.choice{padding:20px;border-left:4px solid var(--accent);background:#151822;border-radius:8px}.choice.phone{border-color:var(--cyan)}
+    .table-wrap{overflow-x:auto}table{width:100%;border-collapse:collapse;min-width:760px}th,td{text-align:left;vertical-align:top;padding:13px;border-bottom:1px solid var(--line)}th{color:#c7d2fe}ol,ul{padding-left:1.35rem}.steps li{margin:.6rem 0}.notice{border-left:4px solid var(--danger);padding:12px 16px;background:#271b25}.qr{display:grid;grid-template-columns:150px 1fr;gap:20px;align-items:center}.qr img{width:150px;height:150px;background:white;padding:8px;border-radius:10px}.settings{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}.settings div{padding:14px;background:#151822;border-radius:8px}.small{font-size:.92rem}
+    @media (max-width:700px){main{width:min(100% - 22px,1080px);padding-top:26px}.choices,.flow,.settings,.qr{grid-template-columns:1fr}.arrow{transform:rotate(90deg);justify-self:center}section{padding:18px}.qr img{justify-self:center}}
+    @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{animation:none!important;transition:none!important}}
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="brand"><img src="assets/icons/phwgna-cat-128.png" alt="Icon mèo phwgna"><div><div class="eyebrow">phwgna STV 0.2.0</div><h1>Đọc truyện trên PC hoặc điện thoại</h1></div></div>
+    <p class="lead">Chạy <strong>Cai-dat-phwgna-STV.bat</strong>, chọn đúng thiết bị và làm theo các bước hiện trên màn hình. Điện thoại điều khiển PC từ xa; extension vẫn chạy trên PC.</p>
+    <nav><a class="button primary" href="#cai-nhanh">Cài nhanh</a><a class="button" href="#dien-thoai">Thiết lập điện thoại</a><a class="button" href="#su-co">Xử lý sự cố</a></nav>
+  </header>
+
+  <section aria-labelledby="chon"><h2 id="chon">Chọn cách dùng</h2><div class="choices">
+    <div class="choice"><h3>Dùng trên PC</h3><p>Cài extension vào Chrome hoặc Cốc Cốc. Không yêu cầu quyền Admin.</p></div>
+    <div class="choice phone"><h3>Dùng trên điện thoại</h3><p>PC chạy trình duyệt, phwgna STV và Sunshine. Điện thoại Android dùng Artemis để xem và điều khiển.</p></div>
+  </div></section>
+
+  <section aria-labelledby="ket-noi"><h2 id="ket-noi">Sơ đồ kết nối</h2><div class="flow">
+    <div><strong>PC đang bật</strong><span class="muted">Chrome/Cốc Cốc + phwgna STV + Sunshine</span></div><div class="arrow" aria-hidden="true">→</div><div><strong>Điện thoại Android</strong><span class="muted">Artemis + cảm ứng + bàn phím mềm + âm thanh TTS</span></div>
+  </div><p class="small muted">Cùng Wi‑Fi là mặc định. Tailscale là tùy chọn khi đọc ngoài mạng nhà.</p></section>
+
+  <section id="cai-nhanh" aria-labelledby="bang"><h2 id="bang">Bảng cài nhanh</h2><div class="table-wrap"><table>
+    <thead><tr><th>Cần chuẩn bị</th><th>Thao tác</th><th>Kết quả cần thấy</th><th>Cách xử lý</th></tr></thead>
+    <tbody>
+      <tr><td>Chrome hoặc Cốc Cốc</td><td>Chọn <b>Dùng trên PC</b>, bấm Cài / Cập nhật.</td><td>Wizard mở Extensions và thư mục extension.</td><td>Bật <b>Chế độ dành cho nhà phát triển</b>, chọn <b>Tải tiện ích đã giải nén</b>.</td></tr>
+      <tr><td>PC Windows + Internet</td><td>Chọn <b>Dùng trên điện thoại</b>, chấp nhận một hộp UAC để cài Sunshine.</td><td>Trang <code>https://localhost:47990</code> mở.</td><td>Nếu bị chặn, mở lại wizard và thử; file sai hash/chữ ký sẽ không được chạy.</td></tr>
+      <tr><td>Điện thoại Android</td><td>Quét QR Artemis, cài APK non-root, thêm IP của PC.</td><td>Artemis hiện PC và đưa mã PIN ghép nối.</td><td>Đảm bảo hai máy cùng Wi‑Fi; không gửi PIN cho người khác.</td></tr>
+      <tr><td>PIN Artemis</td><td>Nhập PIN trong Sunshine tại mục PIN.</td><td>Artemis mở được ứng dụng Desktop.</td><td>Ghép lại nếu IP thay đổi hoặc PC bị xóa khỏi Artemis.</td></tr>
+    </tbody>
+  </table></div></section>
+
+  <section id="dien-thoai" aria-labelledby="phone"><h2 id="phone">Thiết lập điện thoại</h2>
+    <div class="qr"><img src="windows/assets/artemis-qr.png" alt="QR tải Artemis non-root"><div><h3>1. Cài Artemis</h3><p>Quét QR bằng điện thoại. Đây là APK non-root đã khóa phiên bản cho bản phwgna STV này.</p><a class="button" href="https://github.com/ClassicOldSong/moonlight-android/releases/download/v20.2.6/artemis-nonRoot_game-release.apk">Tải Artemis 20.2.6</a></div></div>
+    <ol class="steps"><li>Tạo tài khoản Sunshine tại <code>https://localhost:47990</code>. Trình duyệt có thể cảnh báo chứng chỉ nội bộ ở lần đầu.</li><li>Trong Artemis, thêm IP trong nhà mà wizard hiển thị.</li><li>Chọn PC, lấy PIN rồi nhập PIN vào Sunshine.</li><li>Mở <b>Desktop</b>, mở STV và bật audio để nghe TTS trên điện thoại.</li></ol>
+  </section>
+
+  <section aria-labelledby="chat-luong"><h2 id="chat-luong">Chất lượng gợi ý</h2><div class="settings">
+    <div><strong>Wi‑Fi ổn định</strong><br>1080p · 60 FPS · 10–15 Mbps</div><div><strong>Mạng yếu</strong><br>720p · 60 FPS · 5–8 Mbps</div>
+  </div><p class="muted">Bật audio trong Artemis để nghe được TTS. Nếu hình giật, giảm bitrate trước khi giảm FPS.</p></section>
+
+  <section aria-labelledby="tailscale"><h2 id="tailscale">Tailscale — tùy chọn ngoài nhà</h2><p>Chỉ đánh dấu tùy chọn này khi điện thoại không cùng Wi‑Fi với PC. Đăng nhập cùng một tài khoản Tailscale trên Windows và Android, rồi dùng IP Tailscale của PC trong Artemis.</p><p><a class="button" href="https://tailscale.com/docs/install/windows">Hướng dẫn Windows</a> <a class="button" href="https://tailscale.com/docs/install/android">Hướng dẫn Android</a></p></section>
+
+  <section id="su-co" aria-labelledby="loi"><h2 id="loi">An toàn và xử lý sự cố</h2><div class="notice"><strong>PC phải luôn bật.</strong> Không chia sẻ mật khẩu Sunshine, PIN ghép nối, API key hoặc ảnh chụp có tài khoản. Wizard không mở port router và không bật UPnP.</div><ul><li>Không thấy PC: kiểm tra cùng Wi‑Fi và Sunshine đang chạy.</li><li>Không nghe TTS: bật audio của phiên Artemis và âm lượng Windows.</li><li>WinGet thiếu: wizard mở hướng dẫn Tailscale chính thức, không báo cài thành công giả.</li><li>Sunshine đã cài: wizard giữ nguyên phiên bản và cấu hình hiện tại.</li></ul></section>
+</main>
+</body>
+</html>

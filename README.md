@@ -4,7 +4,17 @@ Tiện ích dịch và nghe truyện trên Sáng Tác Việt của **phwgna**. B
 
 Đây là phần mềm **source-available**: mã được công khai để người dùng kiểm tra, nhưng không được sao chép, sửa đổi, đổi thương hiệu hoặc phân phối lại nếu chưa có sự cho phép của phwgna. Xem `LICENSE` và `TRADEMARK.md`.
 
-## Cài đặt
+## Cài nhanh
+
+| Nhu cầu | Cách cài |
+|---|---|
+| PC | Chạy `Cai-dat-phwgna-STV.bat`, chọn **Dùng trên PC** |
+| Điện thoại cùng Wi-Fi | Chọn **Dùng trên điện thoại**; wizard chuẩn bị Sunshine, điện thoại cài Artemis |
+| Điện thoại ngoài nhà | Bật thêm Tailscale (tùy chọn) và đăng nhập cùng tài khoản trên hai máy |
+
+Hướng dẫn đầy đủ, QR Artemis và cách xử lý lỗi nằm trong `HUONG-DAN-PHWGNA-STV.html`.
+
+### Cài extension thủ công
 
 1. Tải ZIP từ mục Releases của repository chính thức và giải nén.
 2. Mở trang quản lý tiện ích của trình duyệt, bật Chế độ dành cho nhà phát triển.

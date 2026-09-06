@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "sunshine": {
+    "version": "2026.516.143833",
+    "releaseUrl": "https://github.com/LizardByte/Sunshine/releases/tag/v2026.516.143833",
+    "packages": {
+      "AMD64": {
+        "url": "https://github.com/LizardByte/Sunshine/releases/download/v2026.516.143833/Sunshine-Windows-AMD64-installer.msi",
+        "sha256": "e7208b11a4ab9dd89871133a054bbb8dc55dfbba408227b0eccab22c60b273a2"
+      },
+      "ARM64": {
+        "url": "https://github.com/LizardByte/Sunshine/releases/download/v2026.516.143833/Sunshine-Windows-ARM64-installer.msi",
+        "sha256": "d00c60140fa75445106f613874b28885bc80b174bae4aa29f8a6aed30764fdb5"
+      }
+    }
+  },
+  "artemis": {
+    "version": "20.2.6",
+    "releaseUrl": "https://github.com/ClassicOldSong/moonlight-android/releases/tag/v20.2.6",
+    "apkUrl": "https://github.com/ClassicOldSong/moonlight-android/releases/download/v20.2.6/artemis-nonRoot_game-release.apk",
+    "sha256": "6735b5fdd790410ea726754235f49757fa594ef01da1e5acadf72690c9423f6c"
+  },
+  "tailscale": {
+    "packageId": "Tailscale.Tailscale",
+    "windowsGuideUrl": "https://tailscale.com/docs/install/windows",
+    "androidGuideUrl": "https://tailscale.com/docs/install/android"
+  }
+}
