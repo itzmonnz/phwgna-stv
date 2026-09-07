@@ -40,6 +40,24 @@
     return scale;
   }
 
+  function circularPoint(center, radius, angle) {
+    const radians = (angle - 90) * Math.PI / 180;
+    const round = number => Number(number.toFixed(4));
+    return { x: round(center + radius * Math.cos(radians)), y: round(center + radius * Math.sin(radians)) };
+  }
+
+  function circularProgressArc(index, total, center = 24, radius = 22) {
+    const stepAngle = 360 / total;
+    const gapAngle = Math.min(14, stepAngle * 0.2);
+    const arcAngle = stepAngle - gapAngle;
+    const start = circularPoint(center, radius, index * stepAngle + gapAngle / 2);
+    const end = circularPoint(center, radius, (index + 1) * stepAngle - gapAngle / 2);
+    return {
+      arcAngle,
+      path: `M ${start.x} ${start.y} A ${radius} ${radius} 0 ${arcAngle > 180 ? 1 : 0} 1 ${end.x} ${end.y}`
+    };
+  }
+
   function element(document, tag, className, text) {
     const node = document.createElement(tag);
     if (className) node.className = className;
@@ -1549,9 +1567,13 @@
     miniProgress.setAttribute("viewBox", "0 0 48 48");
     miniProgress.setAttribute("aria-hidden", "true");
     miniProgress.setAttribute("focusable", "false");
+    const miniCompleteRing = element(document, "span", "stvai-mini-complete-ring");
+    miniCompleteRing.dataset.active = "false";
+    miniCompleteRing.setAttribute("aria-hidden", "true");
     miniToggle.append(
       brandIcon(document, "stvai-brand-icon stvai-menu-toggle-icon stvai-mini-toggle-icon"),
-      miniProgress
+      miniProgress,
+      miniCompleteRing
     );
     const header = element(document, "div", "stvai-menu-header");
     header.append(identity, menuToggle, miniToggle);
@@ -1824,6 +1846,7 @@
       menuToggle,
       miniToggle,
       miniProgress,
+      miniCompleteRing,
       announcement,
       dragHandle: header,
       dragHandles: [header, miniToggle],
@@ -1925,22 +1948,20 @@
       miniProgress.dataset.visible = String(visible);
       if (miniProgress.children.length !== total) {
         const radius = 22;
-        const circumference = 2 * Math.PI * radius;
-        const step = circumference / total;
-        const segmentAngle = 360 / total;
-        const gapAngle = total === 1 ? 0 : Math.min(16, segmentAngle * 0.22);
-        const gap = circumference * gapAngle / 360;
-        const dash = step - gap;
         const segments = Array.from({ length: total }, (_, index) => {
-          const segment = miniProgress.ownerDocument.createElementNS("http://www.w3.org/2000/svg", "circle");
+          const segment = miniProgress.ownerDocument.createElementNS("http://www.w3.org/2000/svg", total === 1 ? "circle" : "path");
           segment.classList.add("stvai-mini-progress-segment");
           segment.dataset.batchIndex = String(index);
-          segment.setAttribute("cx", "24");
-          segment.setAttribute("cy", "24");
-          segment.setAttribute("r", String(radius));
-          segment.setAttribute("transform", "rotate(-90 24 24)");
-          segment.setAttribute("stroke-dasharray", `${dash} ${circumference - dash}`);
-          segment.setAttribute("stroke-dashoffset", String(-(index * step + gap / 2)));
+          if (total === 1) {
+            segment.dataset.arcAngle = "360";
+            segment.setAttribute("cx", "24");
+            segment.setAttribute("cy", "24");
+            segment.setAttribute("r", String(radius));
+          } else {
+            const arc = circularProgressArc(index, total, 24, radius);
+            segment.dataset.arcAngle = String(arc.arcAngle);
+            segment.setAttribute("d", arc.path);
+          }
           return segment;
         });
         miniProgress.replaceChildren(...segments);
@@ -1948,6 +1969,9 @@
       for (const segment of miniProgress.children) {
         segment.classList.toggle("is-complete", completedIndexes.has(Number(segment.dataset.batchIndex)));
       }
+      const chapterComplete = value.state === "completed" && completed === total;
+      miniProgress.dataset.complete = String(chapterComplete);
+      toolbar.miniCompleteRing.dataset.active = String(chapterComplete);
       const action = toolbar.root.dataset.collapsed === "true" ? "Mở" : "Thu gọn";
       const summary = visible ? ` — đã dịch ${completed}/${total} batch` : "";
       toolbar.miniToggle.dataset.progressSummary = summary;
