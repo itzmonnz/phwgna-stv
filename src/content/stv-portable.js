@@ -1,8 +1,7 @@
 (function attachPortableContent(root, factory) {
   const codec = root.STVAINativePortable || (typeof require === 'function' ? require('../shared/native-portable.js') : null);
   const sites = root.STVAISites || (typeof require === 'function' ? require('../shared/stv-sites.js') : null);
-  const history = root.STVAINativeHistory || (typeof require === 'function' ? require('../shared/native-history.js') : null);
-  const api = factory(codec, sites, history);
+  const api = factory(codec, sites);
   if (typeof module === 'object' && module.exports) module.exports = api;
   root.STVAIPortableContent = api;
   const current = sites?.siteUrl?.(root.location?.href || '');
@@ -11,7 +10,7 @@
     root.STVAIPortableObserver = api.createObserver({ window: root });
     root.STVAIPortableObserver.start();
   }
-})(typeof globalThis !== 'undefined' ? globalThis : this, function createPortableContent(codec, sites, history) {
+})(typeof globalThis !== 'undefined' ? globalThis : this, function createPortableContent(codec, sites) {
   'use strict';
 
   function readSharedName(window) {
@@ -56,38 +55,6 @@
     const read = key => {
       try { return window.localStorage.getItem(key); } catch (_) { return null; }
     };
-    function normalizeStoryTitle(value) {
-      return String(value || '').replace(/<[^>]*>/g, '')
-        .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"')
-        .replace(/&#39;/g, "'").replace(/&amp;/g, '&')
-        .replace(/[\u0000-\u001F\u007F]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 160);
-    }
-    function storyTitleFromDocument(chapter) {
-      const fullTitle = normalizeStoryTitle(window.document?.title);
-      if (!fullTitle) return '';
-      const withoutSite = fullTitle.replace(/\s+-\s+Sáng Tác Việt(?:\s+-\s+sangtacviet\.(?:app|com|vip))?\s*$/i, '').trim();
-      if (!withoutSite || withoutSite === fullTitle) return '';
-      const chapterRoot = sites?.chapterRoot?.(window.document, window.location.href);
-      const chapterTitle = normalizeStoryTitle(chapterRoot?.getAttribute?.('chapname'))
-        || normalizeStoryTitle(chapterRoot?.querySelector?.('.text-center')?.textContent);
-      if (chapterTitle) {
-        const prefix = `${chapterTitle} - `;
-        if (withoutSite.startsWith(prefix)) return normalizeStoryTitle(withoutSite.slice(prefix.length));
-      }
-      const separator = withoutSite.indexOf(' - ');
-      return separator >= 0 ? normalizeStoryTitle(withoutSite.slice(separator + 3)) : '';
-    }
-    function storyTitle(chapter) {
-      const visible = window.document?.getElementById?.('book_name2')?.textContent
-        || window.document?.getElementById?.('book_name')?.textContent;
-      const metadata = window.document?.querySelector?.('meta[property="og:novel:book_name"]')?.getAttribute?.('content');
-      const pageTitle = normalizeStoryTitle(visible) || normalizeStoryTitle(metadata) || storyTitleFromDocument(chapter);
-      if (pageTitle) return pageTitle;
-      const parsed = history?.parse?.(read('tusach'));
-      const record = parsed?.ok && parsed.records.find(item => String(item.host) === chapter?.source
-        && String(item.id) === chapter?.bookId);
-      return normalizeStoryTitle(record?.name);
-    }
     function safeSnapshot() {
       const values = new Map();
       try {
@@ -116,28 +83,17 @@
       learning = null;
       return { ok: true, candidates, descriptors };
     }
-    function currentName() {
-      const chapter = sites?.parseChapter?.(window.location.href, { chapterId: '_' });
-      const parts = window.document?.getElementById('hiddenid')?.textContent?.split(';');
-      if (!chapter || !parts || parts.length < 3
-        || parts[0] !== chapter.bookId || parts[2] !== chapter.source) return null;
-      const key = `${chapter.source}${chapter.bookId}`;
-      return { key, raw: read(key), storyTitle: storyTitle(chapter) };
-    }
     async function tick() {
       if (running || stopped || !secure() || window.document?.visibilityState === 'hidden') return;
       running = true;
       try {
-        const nativeName = currentName();
         const sharedName = readSharedName(window);
-        for (const candidate of [nativeName, sharedName.ok ? sharedName : null]) {
-          const signature = JSON.stringify([candidate?.raw, candidate?.storyTitle || '']);
-          if (candidate?.raw == null || discovered.get(candidate.key) === signature) continue;
+        if (sharedName.ok && discovered.get(sharedName.key) !== sharedName.raw) {
           const response = await send({ type: 'STVAI_PORTABLE_SYNC', action: 'discover',
-            key: candidate.key, raw: candidate.raw, ...(candidate.storyTitle ? { storyTitle: candidate.storyTitle } : {}) });
-          if (response?.ok) discovered.set(candidate.key, signature);
+            key: sharedName.key, raw: sharedName.raw });
+          if (response?.ok) discovered.set(sharedName.key, sharedName.raw);
         }
-        const config = await send({ type: 'STVAI_PORTABLE_SYNC', action: 'config', activeKey: nativeName?.key || '' });
+        const config = await send({ type: 'STVAI_PORTABLE_SYNC', action: 'config' });
         if (!config?.ok || !Array.isArray(config.mappings) || !config.mappings.length) return;
         const values = {};
         for (const mapping of config.mappings) values[mapping.itemId] = { key: mapping.key, raw: read(mapping.key) };

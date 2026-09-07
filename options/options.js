@@ -474,11 +474,6 @@
         title: "Bộ Name dùng chung",
         description: "Áp dụng cho mọi truyện"
       };
-      if (scope === "story") return {
-        title: item.storyTitle ? `Bộ Name riêng — ${item.storyTitle}` : "Bộ Name riêng theo truyện",
-        description: item.storyTitle ? "Áp dụng cho truyện này"
-          : inferredKey ? `Chưa nhận được tên · Mã kho STV: ${inferredKey}` : "Chỉ áp dụng cho truyện tương ứng"
-      };
       if (item.category === "nativeNames") return {
         title: "Bộ Name STV đã chọn",
         description: inferredKey ? `Khóa STV: ${inferredKey}` : "Dữ liệu Name đã xác nhận"
@@ -493,13 +488,13 @@
       portableStatus.dataset.tone = tone;
     }
     function renderPortableItems(items) {
-      portableItems = Array.isArray(items) ? items : [];
+      portableItems = Array.isArray(items) ? items.filter(item => item?.scope !== "story") : [];
       portableItemsNode.replaceChildren();
-      const scopeOrder = { shared: 0, story: 1, custom: 2, setting: 3 };
+      const scopeOrder = { shared: 0, custom: 1, setting: 2 };
       portableItems.sort((left, right) => {
         const leftIdentity = portableItemIdentity(left), rightIdentity = portableItemIdentity(right);
-        const leftScope = left.scope || (leftIdentity.title.includes("dùng chung") ? "shared" : left.category === "nativeNames" ? "story" : "setting");
-        const rightScope = right.scope || (rightIdentity.title.includes("dùng chung") ? "shared" : right.category === "nativeNames" ? "story" : "setting");
+        const leftScope = left.scope || (leftIdentity.title.includes("dùng chung") ? "shared" : left.category === "nativeNames" ? "custom" : "setting");
+        const rightScope = right.scope || (rightIdentity.title.includes("dùng chung") ? "shared" : right.category === "nativeNames" ? "custom" : "setting");
         return (scopeOrder[leftScope] ?? 9) - (scopeOrder[rightScope] ?? 9)
           || leftIdentity.title.localeCompare(rightIdentity.title, "vi");
       });

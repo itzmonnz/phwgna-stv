@@ -108,9 +108,32 @@
   }
 
   function cloneState(state) {
-    return state && state.schema === 1
+    return state && state.schema === 1 && state.items && typeof state.items === 'object'
+      && state.mappings && typeof state.mappings === 'object'
+      && state.origins && typeof state.origins === 'object'
       ? structuredClone(state)
       : emptyState();
+  }
+
+  function withoutStoryNames(inputState) {
+    const state = cloneState(inputState);
+    const removed = [];
+    for (const [itemId, item] of Object.entries(state.items)) {
+      const keys = Object.values(item?.keysByOrigin || {});
+      if (item?.category !== 'nativeNames' || item?.kind !== 'stv-name'
+        || keys.includes(SHARED_NAME_KEY)) continue;
+      removed.push(itemId);
+      delete state.items[itemId];
+      for (const origin of Object.keys(state.mappings)) {
+        delete state.mappings[origin]?.[itemId];
+        delete state.origins[origin]?.last?.[itemId];
+        delete state.origins[origin]?.backups?.[itemId];
+        delete state.origins[origin]?.pending?.[itemId];
+        delete state.origins[origin]?.candidates?.[itemId];
+      }
+    }
+    if (removed.length) state.revision++;
+    return { state, changed: removed.length > 0, removed };
   }
 
   function descriptor(itemId, item) {
@@ -164,9 +187,12 @@
 
   function publicDescriptors(state) {
     if (!state || state.schema !== 1) return [];
-    return Object.entries(state.items || {}).map(([itemId, item]) => descriptor(itemId, item));
+    return Object.entries(state.items || {})
+      .filter(([, item]) => item?.category !== 'nativeNames' || item?.kind !== 'stv-name'
+        || Object.values(item.keysByOrigin || {}).includes(SHARED_NAME_KEY))
+      .map(([itemId, item]) => descriptor(itemId, item));
   }
 
   return Object.freeze({ STATE_KEY, SHARED_NAME_KEY, MAX_KEY_CHARS, MAX_VALUE_CHARS, MAX_KEYS, MAX_NATIVE_NAME_KEYS, MAX_TOTAL_CHARS,
-    inspectCandidate, emptyState, approveCandidate, publicDescriptors, validSecureOrigin });
+    inspectCandidate, emptyState, approveCandidate, publicDescriptors, validSecureOrigin, withoutStoryNames });
 });

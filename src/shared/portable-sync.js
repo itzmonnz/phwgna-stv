@@ -8,8 +8,6 @@
   'use strict';
   const LEARNING_KEY = 'stvai-native-portable-learning-v1';
   const fail = code => ({ ok: false, code });
-  const safeStoryTitle = value => typeof value === 'string' && value.length <= 160
-    && !/[\u0000-\u001F\u007F]/.test(value) ? value.trim() : '';
 
   function createPortableSync({ storage, tabs, now = Date.now, createId = () => crypto.randomUUID() }) {
     let serial = Promise.resolve();
@@ -21,7 +19,9 @@
 
     async function readState() {
       const stored = (await storage.local.get(codec.STATE_KEY))[codec.STATE_KEY];
-      return stored?.schema === 1 ? structuredClone(stored) : codec.emptyState();
+      const cleaned = codec.withoutStoryNames(stored?.schema === 1 ? stored : codec.emptyState());
+      if (cleaned.changed) await storage.local.set({ [codec.STATE_KEY]: cleaned.state });
+      return cleaned.state;
     }
 
     async function clearLearning() {
@@ -52,7 +52,7 @@
       const candidates = [];
       for (const candidate of response.candidates.slice(0, codec.MAX_KEYS)) {
         const inspected = codec.inspectCandidate(candidate?.key, candidate?.raw);
-        if (!inspected.ok) continue;
+        if (!inspected.ok || (inspected.kind === 'stv-name' && candidate.key !== codec.SHARED_NAME_KEY)) continue;
         candidates.push({ key: candidate.key, raw: candidate.raw, descriptor: inspected });
       }
       await storage.session.set({ [LEARNING_KEY]: { ...session, candidates } });
@@ -113,27 +113,16 @@
       return url;
     }
 
-    function validState(value) {
-      return value?.schema === 1 && value.items && value.mappings && value.origins;
-    }
-
     async function exchange(message, sender) {
       const url = await authorized(sender);
       if (!url) return fail(sites?.siteUrl?.(sender?.url)?.protocol === 'http:'
         ? 'portable_insecure_origin' : 'portable_unauthorized');
       if (!['config', 'discover', 'observe', 'applied', 'aborted'].includes(message?.action)) return fail('portable_invalid_message');
-      const stored = (await storage.local.get(codec.STATE_KEY))[codec.STATE_KEY];
-      const state = validState(stored) ? structuredClone(stored) : codec.emptyState();
+      const state = await readState();
       if (message.action === 'discover') {
-        const chapter = sites.parseChapter(url.href, { chapterId: '_' });
-        const key = `${chapter?.source || ''}${chapter?.bookId || ''}`;
-        const discoveredKey = message.key === codec.SHARED_NAME_KEY ? codec.SHARED_NAME_KEY : key;
-        if ((!chapter && discoveredKey !== codec.SHARED_NAME_KEY) || message.key !== discoveredKey
-          || typeof message.raw !== 'string') return fail('portable_unknown_mapping');
-        const storyTitle = safeStoryTitle(message.storyTitle);
-        if (message.storyTitle !== undefined && (!storyTitle || discoveredKey === codec.SHARED_NAME_KEY)) {
-          return fail('portable_invalid_message');
-        }
+        const discoveredKey = codec.SHARED_NAME_KEY;
+        if (message.key !== discoveredKey || typeof message.raw !== 'string'
+          || message.storyTitle !== undefined) return fail('portable_unknown_mapping');
         const inspected = codec.inspectCandidate(discoveredKey, message.raw, 'nativeNames');
         if (!inspected.ok || inspected.kind !== 'stv-name') return fail(inspected.code || 'portable_invalid_name');
         const itemId = `nativeNames:${discoveredKey}`;
@@ -151,7 +140,6 @@
           state.items[itemId].keysByOrigin[url.origin] = discoveredKey;
           state.origins[url.origin] ||= { initialized: false, last: {}, backups: {}, pending: {}, candidates: {} };
         }
-        if (storyTitle) state.items[itemId].storyTitle = storyTitle;
         for (const origin of sites.ORIGINS.filter(value => value.startsWith('https://'))) {
           state.mappings[origin] ||= {};
           state.mappings[origin][itemId] = discoveredKey;
@@ -166,17 +154,7 @@
         return { ok: true, itemId };
       }
       const mapping = state.mappings[url.origin] || {};
-      if (message.action === 'config' && message.activeKey !== undefined && typeof message.activeKey !== 'string') {
-        return fail('portable_invalid_message');
-      }
-      const chapter = sites.parseChapter(url.href, { chapterId: '_' });
-      const expectedActiveKey = chapter ? `${chapter.source}${chapter.bookId}` : '';
-      if (message.action === 'config' && message.activeKey && message.activeKey !== expectedActiveKey) {
-        return fail('portable_unknown_mapping');
-      }
       const mappings = Object.entries(mapping)
-        .filter(([itemId, key]) => state.items[itemId]?.kind !== 'stv-name'
-          || key === codec.SHARED_NAME_KEY || key === (message.activeKey || ''))
         .map(([itemId, key]) => ({ itemId, key }));
       if (message.action === 'config') return { ok: true, revision: state.revision, mappings };
       const origin = state.origins[url.origin] || { initialized: false, last: {}, backups: {}, pending: {}, candidates: {} };
