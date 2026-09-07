@@ -8,7 +8,7 @@
   const CJK_RE = /[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]/g;
   const MAX_TEXT_BLOCK_CHARS = 3000;
   const COLLAPSED_TEXT_BLOCK_CHARS = 1000;
-  const STV_FILENAME_EXTENSION_RE = /^\.(?:jpe?g|png|gif|webp|bmp|avif)$/iu;
+  const STV_FILENAME_TOKEN_RE = /^(\.(?:jpe?g|png|gif|webp|bmp|avif))[\s)\]}】》）］｝〉」』”’]*$/iu;
   const STV_FILENAME_TRAILING_CLOSERS_RE = /^[\s)\]}】》）］｝〉」』”’]*$/u;
   const STV_FILENAME_TRAILING_CLOSERS_END_RE = /[\s)\]}】》）］｝〉」』”’]+$/u;
   const STV_FILENAME_ARTIFACT_MAX_CHARS = 240;
@@ -270,7 +270,9 @@
     if (!STV_FILENAME_TRAILING_CLOSERS_RE.test(trailingText)) return false;
 
     const last = items[lastIndex];
-    if (last?.kind !== "token" || !STV_FILENAME_EXTENSION_RE.test(last.source)) return false;
+    const filenameTokenMatch = last?.kind === "token" ? last.source.match(STV_FILENAME_TOKEN_RE) : null;
+    if (!filenameTokenMatch) return false;
+    const extension = filenameTokenMatch[1];
     const token = last.node;
     if (token?.nodeType !== 1 || token.tagName !== "I") return false;
     if (normalizeLine(token.getAttribute("h") || "").toLowerCase() !== last.source.toLowerCase()) return false;
@@ -278,8 +280,8 @@
     const source = normalizeSourceParagraph(referenceSource(items).replace(/\r/g, ""));
     if (!source || source.length > STV_FILENAME_ARTIFACT_MAX_CHARS) return false;
     const sourceWithoutTrailingClosers = source.replace(STV_FILENAME_TRAILING_CLOSERS_END_RE, "");
-    if (!sourceWithoutTrailingClosers.toLowerCase().endsWith(last.source.toLowerCase())) return false;
-    const basename = sourceWithoutTrailingClosers.slice(0, -last.source.length).trim();
+    if (!sourceWithoutTrailingClosers.toLowerCase().endsWith(extension.toLowerCase())) return false;
+    const basename = sourceWithoutTrailingClosers.slice(0, -extension.length).trim();
     return Boolean(basename) && !/[。！？；!?;]/u.test(basename);
   }
 
