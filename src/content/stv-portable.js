@@ -1,7 +1,8 @@
 (function attachPortableContent(root, factory) {
   const codec = root.STVAINativePortable || (typeof require === 'function' ? require('../shared/native-portable.js') : null);
   const sites = root.STVAISites || (typeof require === 'function' ? require('../shared/stv-sites.js') : null);
-  const api = factory(codec, sites);
+  const history = root.STVAINativeHistory || (typeof require === 'function' ? require('../shared/native-history.js') : null);
+  const api = factory(codec, sites, history);
   if (typeof module === 'object' && module.exports) module.exports = api;
   root.STVAIPortableContent = api;
   const current = sites?.siteUrl?.(root.location?.href || '');
@@ -10,7 +11,7 @@
     root.STVAIPortableObserver = api.createObserver({ window: root });
     root.STVAIPortableObserver.start();
   }
-})(typeof globalThis !== 'undefined' ? globalThis : this, function createPortableContent(codec, sites) {
+})(typeof globalThis !== 'undefined' ? globalThis : this, function createPortableContent(codec, sites, history) {
   'use strict';
 
   function readSharedName(window) {
@@ -55,6 +56,15 @@
     const read = key => {
       try { return window.localStorage.getItem(key); } catch (_) { return null; }
     };
+    function storyTitle(chapter) {
+      const parsed = history?.parse?.(read('tusach'));
+      const record = parsed?.ok && parsed.records.find(item => String(item.host) === chapter?.source
+        && String(item.id) === chapter?.bookId);
+      return String(record?.name || '').replace(/<[^>]*>/g, '')
+        .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'").replace(/&amp;/g, '&')
+        .replace(/[\u0000-\u001F\u007F]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 160);
+    }
     function safeSnapshot() {
       const values = new Map();
       try {
@@ -89,7 +99,7 @@
       if (!chapter || !parts || parts.length < 3
         || parts[0] !== chapter.bookId || parts[2] !== chapter.source) return null;
       const key = `${chapter.source}${chapter.bookId}`;
-      return { key, raw: read(key) };
+      return { key, raw: read(key), storyTitle: storyTitle(chapter) };
     }
     async function tick() {
       if (running || stopped || !secure() || window.document?.visibilityState === 'hidden') return;
@@ -98,10 +108,11 @@
         const nativeName = currentName();
         const sharedName = readSharedName(window);
         for (const candidate of [nativeName, sharedName.ok ? sharedName : null]) {
-          if (candidate?.raw == null || discovered.get(candidate.key) === candidate.raw) continue;
+          const signature = JSON.stringify([candidate?.raw, candidate?.storyTitle || '']);
+          if (candidate?.raw == null || discovered.get(candidate.key) === signature) continue;
           const response = await send({ type: 'STVAI_PORTABLE_SYNC', action: 'discover',
-            key: candidate.key, raw: candidate.raw });
-          if (response?.ok) discovered.set(candidate.key, candidate.raw);
+            key: candidate.key, raw: candidate.raw, ...(candidate.storyTitle ? { storyTitle: candidate.storyTitle } : {}) });
+          if (response?.ok) discovered.set(candidate.key, signature);
         }
         const config = await send({ type: 'STVAI_PORTABLE_SYNC', action: 'config', activeKey: nativeName?.key || '' });
         if (!config?.ok || !Array.isArray(config.mappings) || !config.mappings.length) return;

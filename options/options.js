@@ -475,8 +475,9 @@
         description: "Áp dụng cho mọi truyện"
       };
       if (scope === "story") return {
-        title: "Bộ Name riêng theo truyện",
-        description: inferredKey ? `Mã kho STV: ${inferredKey}` : "Chỉ áp dụng cho truyện tương ứng"
+        title: item.storyTitle ? `Bộ Name riêng — ${item.storyTitle}` : "Bộ Name riêng theo truyện",
+        description: item.storyTitle ? "Áp dụng cho truyện này"
+          : inferredKey ? `Chưa nhận được tên · Mã kho STV: ${inferredKey}` : "Chỉ áp dụng cho truyện tương ứng"
       };
       if (item.category === "nativeNames") return {
         title: "Bộ Name STV đã chọn",

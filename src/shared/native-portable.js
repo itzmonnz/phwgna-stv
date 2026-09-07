@@ -121,7 +121,8 @@
         : item.kind === 'stv-name' ? 'story' : 'custom';
     return { itemId, category: item.category, revision: item.revision, keyCount: Object.keys(item.keysByOrigin).length,
       kind: item.kind, fields: [...item.fields], chars: item.raw == null ? 0 : item.raw.length,
-      scope, storageKey: sharedName ? SHARED_NAME_KEY : (storageKeys[0] || '') };
+      scope, storageKey: sharedName ? SHARED_NAME_KEY : (storageKeys[0] || ''),
+      storyTitle: scope === 'story' && typeof item.storyTitle === 'string' ? item.storyTitle : '' };
   }
 
   function approveCandidate(inputState, candidate) {

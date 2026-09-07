@@ -8,6 +8,8 @@
   'use strict';
   const LEARNING_KEY = 'stvai-native-portable-learning-v1';
   const fail = code => ({ ok: false, code });
+  const safeStoryTitle = value => typeof value === 'string' && value.length <= 160
+    && !/[\u0000-\u001F\u007F]/.test(value) ? value.trim() : '';
 
   function createPortableSync({ storage, tabs, now = Date.now, createId = () => crypto.randomUUID() }) {
     let serial = Promise.resolve();
@@ -128,6 +130,10 @@
         const discoveredKey = message.key === codec.SHARED_NAME_KEY ? codec.SHARED_NAME_KEY : key;
         if ((!chapter && discoveredKey !== codec.SHARED_NAME_KEY) || message.key !== discoveredKey
           || typeof message.raw !== 'string') return fail('portable_unknown_mapping');
+        const storyTitle = safeStoryTitle(message.storyTitle);
+        if (message.storyTitle !== undefined && (!storyTitle || discoveredKey === codec.SHARED_NAME_KEY)) {
+          return fail('portable_invalid_message');
+        }
         const inspected = codec.inspectCandidate(discoveredKey, message.raw, 'nativeNames');
         if (!inspected.ok || inspected.kind !== 'stv-name') return fail(inspected.code || 'portable_invalid_name');
         const itemId = `nativeNames:${discoveredKey}`;
@@ -145,6 +151,7 @@
           state.items[itemId].keysByOrigin[url.origin] = discoveredKey;
           state.origins[url.origin] ||= { initialized: false, last: {}, backups: {}, pending: {}, candidates: {} };
         }
+        if (storyTitle) state.items[itemId].storyTitle = storyTitle;
         for (const origin of sites.ORIGINS.filter(value => value.startsWith('https://'))) {
           state.mappings[origin] ||= {};
           state.mappings[origin][itemId] = discoveredKey;
