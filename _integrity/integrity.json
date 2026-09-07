@@ -75,7 +75,7 @@
     },
     {
       "path": "options/options.js",
-      "sha256": "d96a1f13a8114618f71ceab41f1528574768aef26db23618a14854568c4fc8a8"
+      "sha256": "0ddc5b3ef6251f96a7d0d5b6814f31aa595c98955609217b49d1c2144b94bd33"
     },
     {
       "path": "popup/popup.css",
@@ -99,7 +99,7 @@
     },
     {
       "path": "src/background.js",
-      "sha256": "87928048974e7393bb602ff476cb96e8146fe06e8846c4895ca39a966fc4383e"
+      "sha256": "50f05e79e0c8ecab882599aa2dff43a96b303a334bfb2076de2ec3ffd53d93b1"
     },
     {
       "path": "src/content/chatgpt-dom-resolver.js",
@@ -183,7 +183,7 @@
     },
     {
       "path": "src/content/stv.js",
-      "sha256": "dea999236ddd10d177a3341e276c8a4f08ab9f27a316ac08a953171703a15864"
+      "sha256": "d82ea43ed5fe99236e42d40f7fbe8ccd1c397ca2c87a6ce35f9fdc9b54c7c88e"
     },
     {
       "path": "src/shared/api-providers.js",
@@ -199,7 +199,7 @@
     },
     {
       "path": "src/shared/core.js",
-      "sha256": "f65d0d120437a94cf24d14cd10853922ae669ceaa91b18fbc3abf64b85f95e7f"
+      "sha256": "200c617baf38ddf07d6cb4928bb4c398e7e8a55f6b9cfcf824785aebe3690f41"
     },
     {
       "path": "src/shared/data-backup.js",
@@ -287,7 +287,7 @@
     }
   ],
   "product": "Phwgna Stv",
-  "sourceCommit": "de8ab3363f0988cfabda6a2eec39273f389e698d",
+  "sourceCommit": "bac363835cfefb254b9a81d6abda077bf56a9469",
   "officialRepository": "https://github.com/itzmonnz/phwgna-stv",
   "officialReleaseUrl": "https://github.com/itzmonnz/phwgna-stv/releases/tag/v0.2.8",
   "publicKeyFingerprint": "85ac74c199d0a6028bce843d6f68d7632317912b460aad1a7431193767ec9871"

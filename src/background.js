@@ -1214,7 +1214,7 @@ if (typeof importScripts === "function") {
           stored = {};
         }
       }
-      const storedSettings = stored?.settings && typeof stored.settings === "object" ? stored.settings : {};
+      const storedSettings = await migratePersistedSettings(stored?.settings);
       const settings = core.normalizeSettings({
         ...core.DEFAULT_SETTINGS,
         ...storedSettings,
@@ -1330,7 +1330,7 @@ if (typeof importScripts === "function") {
       if (storage && storage.local && typeof storage.local.get === "function") {
         try {
           const result = await storage.local.get("settings");
-          stored = result && result.settings && typeof result.settings === "object" ? result.settings : {};
+          stored = await migratePersistedSettings(result?.settings);
         } catch (_error) {
           stored = {};
         }
@@ -4357,8 +4357,38 @@ if (typeof importScripts === "function") {
         userPrompt: settings.userPrompt,
         ttsPronunciationGuide: settings.ttsPronunciationGuide,
         ttsPronunciationDefaultsVersion: settings.ttsPronunciationDefaultsVersion,
+        settingsDefaultsVersion: settings.settingsDefaultsVersion,
         nameGuide: settings.nameGuide
       };
+    }
+
+    async function migratePersistedSettings(value) {
+      if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+      let settings = { ...value };
+      let changed = false;
+      if (core?.migrateSettingsDefaults) {
+        const migration = core.migrateSettingsDefaults(settings);
+        settings = migration.settings;
+        changed = migration.changed;
+      }
+      if (pronunciation?.migrateGuide) {
+        const migration = pronunciation.migrateGuide(
+          typeof settings.ttsPronunciationGuide === "string"
+            ? settings.ttsPronunciationGuide
+            : pronunciation.DEFAULT_GUIDE,
+          settings.ttsPronunciationDefaultsVersion
+        );
+        settings = {
+          ...settings,
+          ttsPronunciationGuide: migration.guide,
+          ttsPronunciationDefaultsVersion: migration.version
+        };
+        changed = changed || migration.changed;
+      }
+      if (changed && storage?.local?.set) {
+        await storageCall(storage.local, "set", { settings });
+      }
+      return settings;
     }
 
     function clientTtsOverlayPosition(value) {
@@ -4385,23 +4415,7 @@ if (typeof importScripts === "function") {
       const values = {};
       for (const key of keys) {
         if (key === "settings") {
-          let storedSettings = stored?.settings;
-          if (storedSettings && typeof storedSettings === "object" && pronunciation?.migrateGuide) {
-            const migration = pronunciation.migrateGuide(
-              typeof storedSettings.ttsPronunciationGuide === "string"
-                ? storedSettings.ttsPronunciationGuide
-                : pronunciation.DEFAULT_GUIDE,
-              storedSettings.ttsPronunciationDefaultsVersion
-            );
-            if (migration.changed) {
-              storedSettings = {
-                ...storedSettings,
-                ttsPronunciationGuide: migration.guide,
-                ttsPronunciationDefaultsVersion: migration.version
-              };
-              await storageCall(storage.local, "set", { settings: storedSettings });
-            }
-          }
+          const storedSettings = await migratePersistedSettings(stored?.settings);
           values.settings = clientSafeSettings(storedSettings);
         }
         else if (["stvaiTtsOverlayPositionV1", "stvaiToolbarPositionV2", "stvaiNameEditorPositionV2", "stvaiNameManagerPositionV2"].includes(key)) {

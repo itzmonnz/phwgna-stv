@@ -259,6 +259,7 @@
       nameGuide: normalized.nameGuide,
       ttsPronunciationGuide: normalized.ttsPronunciationGuide,
       ttsPronunciationDefaultsVersion: normalized.ttsPronunciationDefaultsVersion,
+      settingsDefaultsVersion: normalized.settingsDefaultsVersion,
       openrouterModel: normalized.openrouterModel,
       geminiApiModel: normalized.geminiApiModel,
       openaiApiModel: normalized.openaiApiModel,
