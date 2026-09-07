@@ -31,6 +31,6 @@ Chrome Web Store tự cập nhật extension. Gói Công cụ Sunshine/Artemis �
 - Repository: https://github.com/itzmonnz/phwgna-stv
 - Chủ sở hữu: `phwgna`
 - Fingerprint Ed25519: `85ac74c199d0a6028bce843d6f68d7632317912b460aad1a7431193767ec9871`
-- Metadata chữ ký và hash từng file nằm trong thư mục `_integrity`.
+- Metadata chữ ký và hash từng file nằm trong thư mục `integrity`.
 
 Bản sửa đổi, đổi icon hoặc đổi tên không phải bản chính thức. Nếu gặp bản giả mạo hoặc thu phí, hãy báo bằng GitHub Issue tại repository chính thức.

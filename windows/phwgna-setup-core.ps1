@@ -347,7 +347,7 @@ function Install-PhwgnaExtension {
     $staging = Assert-PhwgnaInstallChild -Root $root -Path (Join-Path $root "extension.staging-$nonce")
     $backup = Assert-PhwgnaInstallChild -Root $root -Path (Join-Path $root "extension.backup-$nonce")
     New-Item -ItemType Directory -Path $staging | Out-Null
-    $productionItems = @('manifest.json','LICENSE','SECURITY.md','security','assets','src','options','popup','onboarding','_integrity')
+    $productionItems = @('manifest.json','LICENSE','SECURITY.md','security','assets','src','options','popup','onboarding','integrity')
     try {
         foreach ($item in $productionItems) {
             $candidate = Join-Path $source $item
