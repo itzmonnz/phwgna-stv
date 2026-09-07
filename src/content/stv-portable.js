@@ -117,7 +117,7 @@
       return { ok: true, candidates, descriptors };
     }
     function currentName() {
-      const chapter = sites?.parseChapter?.(window.location.href);
+      const chapter = sites?.parseChapter?.(window.location.href, { chapterId: '_' });
       const parts = window.document?.getElementById('hiddenid')?.textContent?.split(';');
       if (!chapter || !parts || parts.length < 3
         || parts[0] !== chapter.bookId || parts[2] !== chapter.source) return null;

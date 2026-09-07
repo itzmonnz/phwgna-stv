@@ -125,7 +125,7 @@
       const stored = (await storage.local.get(codec.STATE_KEY))[codec.STATE_KEY];
       const state = validState(stored) ? structuredClone(stored) : codec.emptyState();
       if (message.action === 'discover') {
-        const chapter = sites.parseChapter(url.href);
+        const chapter = sites.parseChapter(url.href, { chapterId: '_' });
         const key = `${chapter?.source || ''}${chapter?.bookId || ''}`;
         const discoveredKey = message.key === codec.SHARED_NAME_KEY ? codec.SHARED_NAME_KEY : key;
         if ((!chapter && discoveredKey !== codec.SHARED_NAME_KEY) || message.key !== discoveredKey
@@ -169,7 +169,7 @@
       if (message.action === 'config' && message.activeKey !== undefined && typeof message.activeKey !== 'string') {
         return fail('portable_invalid_message');
       }
-      const chapter = sites.parseChapter(url.href);
+      const chapter = sites.parseChapter(url.href, { chapterId: '_' });
       const expectedActiveKey = chapter ? `${chapter.source}${chapter.bookId}` : '';
       if (message.action === 'config' && message.activeKey && message.activeKey !== expectedActiveKey) {
         return fail('portable_unknown_mapping');
