@@ -62,11 +62,26 @@
         .replace(/&#39;/g, "'").replace(/&amp;/g, '&')
         .replace(/[\u0000-\u001F\u007F]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 160);
     }
+    function storyTitleFromDocument(chapter) {
+      const fullTitle = normalizeStoryTitle(window.document?.title);
+      if (!fullTitle) return '';
+      const withoutSite = fullTitle.replace(/\s+-\s+Sáng Tác Việt(?:\s+-\s+sangtacviet\.(?:app|com|vip))?\s*$/i, '').trim();
+      if (!withoutSite || withoutSite === fullTitle) return '';
+      const chapterRoot = sites?.chapterRoot?.(window.document, window.location.href);
+      const chapterTitle = normalizeStoryTitle(chapterRoot?.getAttribute?.('chapname'))
+        || normalizeStoryTitle(chapterRoot?.querySelector?.('.text-center')?.textContent);
+      if (chapterTitle) {
+        const prefix = `${chapterTitle} - `;
+        if (withoutSite.startsWith(prefix)) return normalizeStoryTitle(withoutSite.slice(prefix.length));
+      }
+      const separator = withoutSite.indexOf(' - ');
+      return separator >= 0 ? normalizeStoryTitle(withoutSite.slice(separator + 3)) : '';
+    }
     function storyTitle(chapter) {
       const visible = window.document?.getElementById?.('book_name2')?.textContent
         || window.document?.getElementById?.('book_name')?.textContent;
       const metadata = window.document?.querySelector?.('meta[property="og:novel:book_name"]')?.getAttribute?.('content');
-      const pageTitle = normalizeStoryTitle(visible) || normalizeStoryTitle(metadata);
+      const pageTitle = normalizeStoryTitle(visible) || normalizeStoryTitle(metadata) || storyTitleFromDocument(chapter);
       if (pageTitle) return pageTitle;
       const parsed = history?.parse?.(read('tusach'));
       const record = parsed?.ok && parsed.records.find(item => String(item.host) === chapter?.source
