@@ -333,6 +333,7 @@
         }
         const figure = element(document, "figure", "stvai-reader-figure");
         const image = element(document, "img", "stvai-reader-image");
+        image.addEventListener("error", () => figure.remove(), { once: true });
         image.src = src;
         image.alt = String(block.alt || "Minh họa trong chương");
         image.loading = "lazy";
@@ -397,6 +398,7 @@
     let suppress = false;
     const cid = container.getAttribute("cid");
     const nativeActionRelays = new Map();
+    const nativeImageObservers = new Map();
 
     const candidateSelector = [
       "a", "img", "picture", "video", "audio", "svg", "canvas", "iframe", "button",
@@ -440,6 +442,31 @@
         node.removeEventListener("click", relay, true);
         delete node.dataset.stvaiNativeActionRelay;
       });
+    }
+
+    function nativeImagesWithin(node) {
+      if (node?.nodeType !== 1) return [];
+      if (node.matches("img")) return [node];
+      return Array.from(node.querySelectorAll?.("img") || []);
+    }
+
+    function observeNativeImages(node) {
+      for (const image of nativeImagesWithin(node)) {
+        if (nativeImageObservers.has(image)) continue;
+        const markBroken = () => image.classList.add("stvai-native-image--broken");
+        const markLoaded = () => image.classList.remove("stvai-native-image--broken");
+        image.addEventListener("error", markBroken);
+        image.addEventListener("load", markLoaded);
+        nativeImageObservers.set(image, () => {
+          image.removeEventListener("error", markBroken);
+          image.removeEventListener("load", markLoaded);
+          image.classList.remove("stvai-native-image--broken");
+        });
+        if (image.complete === true && typeof image.naturalWidth === "number") {
+          if (image.naturalWidth > 0) markLoaded();
+          else markBroken();
+        }
+      }
     }
 
     function sourceBoundary(node) {
@@ -508,7 +535,10 @@
         lateRecords.push(record);
       }
       const resolved = placeInReader(node, boundary, record);
-      if (resolved !== "none") armNativeActionRelay(node);
+      if (resolved !== "none") {
+        armNativeActionRelay(node);
+        observeNativeImages(node);
+      }
       if (record.resolved === resolved && resolved === "none") return;
       record.resolved = resolved;
       onTrace({
@@ -563,6 +593,7 @@
       for (const block of blocks) {
         if (block.kind === "native" && reader.contains(block.node)) {
           armNativeActionRelay(block.node);
+          observeNativeImages(block.node);
           onTrace({ type: "native_moved_to_reader", candidateType: candidateType(block.node), boundary: "both" });
         }
       }
@@ -613,6 +644,8 @@
       destroy() {
         showOriginal();
         for (const node of Array.from(nativeActionRelays.keys())) disarmNativeActionRelay(node);
+        for (const cleanup of nativeImageObservers.values()) cleanup();
+        nativeImageObservers.clear();
         observer?.disconnect();
         observer = null;
       }

@@ -1993,6 +1993,10 @@
   border-radius: 10px;
 }
 
+.stvai-reader .stvai-native-image--broken {
+  display: none !important;
+}
+
 .stvai-consent-backdrop {
   position: fixed;
   inset: 0;

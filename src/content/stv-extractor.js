@@ -8,6 +8,8 @@
   const CJK_RE = /[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]/g;
   const MAX_TEXT_BLOCK_CHARS = 3000;
   const COLLAPSED_TEXT_BLOCK_CHARS = 1000;
+  const STV_FILENAME_EXTENSION_RE = /^\.(?:jpe?g|png|gif|webp|bmp|avif)$/iu;
+  const STV_FILENAME_ARTIFACT_MAX_CHARS = 240;
 
   class ExtractionError extends Error {
     constructor(code, message) {
@@ -256,6 +258,21 @@
     }).join("").replace(/\r/g, ""));
   }
 
+  function isStvFilenameArtifact(items) {
+    const meaningful = items.filter((item) => item.kind !== "context" || item.text.trim());
+    const last = meaningful.at(-1);
+    if (last?.kind !== "token" || !STV_FILENAME_EXTENSION_RE.test(last.source)) return false;
+    const token = last.node;
+    if (token?.nodeType !== 1 || token.tagName !== "I") return false;
+    if (normalizeLine(token.getAttribute("h") || "").toLowerCase() !== last.source.toLowerCase()) return false;
+    if (!/^\s*pr\s*\(\s*this\s*\)\s*;?\s*$/iu.test(token.getAttribute("onclick") || "")) return false;
+    const source = normalizeSourceParagraph(referenceSource(items).replace(/\r/g, ""));
+    if (!source || source.length > STV_FILENAME_ARTIFACT_MAX_CHARS) return false;
+    if (!source.toLowerCase().endsWith(last.source.toLowerCase())) return false;
+    const basename = source.slice(0, -last.source.length).trim();
+    return Boolean(basename) && !/[。！？；!?;]/u.test(basename);
+  }
+
   function compactReference(items) {
     const compacted = [];
     for (const item of items) {
@@ -361,6 +378,7 @@
         : null;
       const paragraphs = splitReferenceParagraphs(attribution?.storyItems || pendingReferenceItems);
       for (const referenceItems of paragraphs) {
+        if (isStvFilenameArtifact(referenceItems)) continue;
         const text = normalizeSourceParagraph(referenceSource(referenceItems).replace(/\r/g, ""));
         if (!text) continue;
         paragraphGroupIndex += 1;
