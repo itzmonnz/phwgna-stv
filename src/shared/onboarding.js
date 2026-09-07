@@ -141,7 +141,7 @@
     async function handleMessage(message, sender = {}) {
       const trustedPrefix = runtime.getURL("onboarding/");
       const senderUrl = typeof sender?.url === "string" ? sender.url : "";
-      if (sender?.tab || !senderUrl.startsWith(trustedPrefix)) {
+      if (!senderUrl.startsWith(trustedPrefix)) {
         return { ok: false, reason: "trusted-context-required" };
       }
       if (message?.type === "STVAI_ONBOARDING_STATUS") return status();
