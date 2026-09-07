@@ -9,6 +9,8 @@
   const MAX_TEXT_BLOCK_CHARS = 3000;
   const COLLAPSED_TEXT_BLOCK_CHARS = 1000;
   const STV_FILENAME_EXTENSION_RE = /^\.(?:jpe?g|png|gif|webp|bmp|avif)$/iu;
+  const STV_FILENAME_TRAILING_CLOSERS_RE = /^[\s)\]}】》）］｝〉」』”’]*$/u;
+  const STV_FILENAME_TRAILING_CLOSERS_END_RE = /[\s)\]}】》）］｝〉」』”’]+$/u;
   const STV_FILENAME_ARTIFACT_MAX_CHARS = 240;
 
   class ExtractionError extends Error {
@@ -259,8 +261,15 @@
   }
 
   function isStvFilenameArtifact(items) {
-    const meaningful = items.filter((item) => item.kind !== "context" || item.text.trim());
-    const last = meaningful.at(-1);
+    let lastIndex = items.length - 1;
+    let trailingText = "";
+    while (lastIndex >= 0 && items[lastIndex].kind === "context") {
+      trailingText = items[lastIndex].text + trailingText;
+      lastIndex -= 1;
+    }
+    if (!STV_FILENAME_TRAILING_CLOSERS_RE.test(trailingText)) return false;
+
+    const last = items[lastIndex];
     if (last?.kind !== "token" || !STV_FILENAME_EXTENSION_RE.test(last.source)) return false;
     const token = last.node;
     if (token?.nodeType !== 1 || token.tagName !== "I") return false;
@@ -268,8 +277,9 @@
     if (!/^\s*pr\s*\(\s*this\s*\)\s*;?\s*$/iu.test(token.getAttribute("onclick") || "")) return false;
     const source = normalizeSourceParagraph(referenceSource(items).replace(/\r/g, ""));
     if (!source || source.length > STV_FILENAME_ARTIFACT_MAX_CHARS) return false;
-    if (!source.toLowerCase().endsWith(last.source.toLowerCase())) return false;
-    const basename = source.slice(0, -last.source.length).trim();
+    const sourceWithoutTrailingClosers = source.replace(STV_FILENAME_TRAILING_CLOSERS_END_RE, "");
+    if (!sourceWithoutTrailingClosers.toLowerCase().endsWith(last.source.toLowerCase())) return false;
+    const basename = sourceWithoutTrailingClosers.slice(0, -last.source.length).trim();
     return Boolean(basename) && !/[。！？；!?;]/u.test(basename);
   }
 
