@@ -2015,7 +2015,7 @@
     toolbar.root.dataset.state = value.state || "idle";
     toolbar.clearCache.disabled = busy || toolbar.cacheClearing;
     if (busy) toolbar.closeCacheConfirmation();
-    toolbar.translate.hidden = busy && !captchaRetry;
+    toolbar.translate.hidden = busy && !captchaRetry && value.showingOriginal !== true;
     toolbar.translate.textContent = captchaRetry ? "Dịch lại" : "Dịch AI";
     toolbar.provider.disabled = busy;
     toolbar.providerTrigger.disabled = busy;

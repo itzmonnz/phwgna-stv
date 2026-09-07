@@ -175,7 +175,7 @@
     },
     {
       "path": "src/content/stv-ui.js",
-      "sha256": "054c58311f6e1b36d2f6d8f1eaae65b9edbf379acf961161dbbaeaae23053a5c"
+      "sha256": "49d67ff2c42034ad36bd07e4b6359a2001cf18797f6c06a42ae5e107645add18"
     },
     {
       "path": "src/content/stv.css",
@@ -183,7 +183,7 @@
     },
     {
       "path": "src/content/stv.js",
-      "sha256": "d82ea43ed5fe99236e42d40f7fbe8ccd1c397ca2c87a6ce35f9fdc9b54c7c88e"
+      "sha256": "aaafabfa7704755815c9a436487c1a120b877ece6987f1ad48d930fc02167786"
     },
     {
       "path": "src/shared/api-providers.js",
@@ -287,7 +287,7 @@
     }
   ],
   "product": "Phwgna Stv",
-  "sourceCommit": "bd06d0790b38523b2f7ae5a46d606f72a8cca3fd",
+  "sourceCommit": "0e670f4a593e6df1a5c726b6c4d60b12cc493de3",
   "officialRepository": "https://github.com/itzmonnz/phwgna-stv",
   "officialReleaseUrl": "https://github.com/itzmonnz/phwgna-stv/releases/tag/v0.2.8",
   "publicKeyFingerprint": "85ac74c199d0a6028bce843d6f68d7632317912b460aad1a7431193767ec9871"

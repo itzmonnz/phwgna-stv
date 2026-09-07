@@ -399,6 +399,7 @@
     let toolbarStatus = "Sẵn sàng";
     let captchaRetry = false;
     let poolCaptchaCode = "";
+    let originalViewPinned = false;
     const captchaToastMessage = "Dính captcha, xác thực xong ấn dịch lại";
 
     function setCaptchaRetry(reason) {
@@ -828,6 +829,7 @@
       if (!active || signal?.aborted) return;
       if (["running", "waiting-provider", "paused"].includes(state.status)) return;
       captchaRetry = false;
+      originalViewPinned = false;
       void stopPrefetch();
       prefetchStarted = false;
       if (!core.hasTranslationPrompt(settings)) {
@@ -1000,23 +1002,16 @@
     }
 
     async function showOriginalChapter() {
-      void stopPrefetch();
-      const jobId = state.activeJobId;
-      const jobIsActive = Boolean(jobId)
+      const jobIsActive = Boolean(state.activeJobId)
         && ["running", "waiting-provider", "paused"].includes(state.status);
-      if (jobIsActive) state.status = "cancelled";
 
       const stopping = stopListening();
+      originalViewPinned = true;
       renderView("stv");
       updateToolbar(jobIsActive
-        ? "Đã hủy dịch và hiện bản gốc. Cache đã hoàn tất vẫn được giữ."
+        ? "Đang xem bản gốc. Dịch AI vẫn tiếp tục ở nền."
         : "Đang xem bản gốc. Cache bản dịch vẫn được giữ.");
-
-      const work = [stopping];
-      if (jobIsActive) {
-        work.push(sendRuntime(runtime, { type: "STV_CANCEL_JOB", jobId }).catch(() => undefined));
-      }
-      await Promise.all(work);
+      await stopping;
     }
 
     async function resumeJob() {
@@ -1103,7 +1098,7 @@
           state.fallbackCount,
           Number(message.fallbackCount) || Object.values(state.translationOrigins).filter((value) => value === "convert").length
         );
-        if (merged && state.view !== "translation") renderView("translation");
+        if (merged && state.view !== "translation" && !originalViewPinned) renderView("translation");
         state.totalBatches = Math.max(1, Number(message.totalBatches) || state.totalBatches);
         const completedIndex = Number(message.batchIndex);
         if (batchRendered && Number.isInteger(completedIndex) && completedIndex >= 0 && completedIndex < state.totalBatches) {
@@ -1185,7 +1180,7 @@
         state.firstBatchReady = chapterRendered && chapter.translatableBlocks.every(
           (block) => state.translationOrigins[block.id] === "ai"
         );
-        renderView("translation");
+        if (state.view === "translation" || !originalViewPinned) renderView("translation");
         updateToolbar(state.fallbackCount
           ? `Có ${state.fallbackCount} câu dùng Convert — chương này không được lưu cache`
           : message.cached ? "Đã tải bản dịch từ bộ nhớ đệm." : "Đã dịch xong chương.");
@@ -1444,7 +1439,15 @@
       }
 
       setDiagnosticState(diagnosticState, "registering_listener");
-      toolbar.translate.addEventListener("click", () => runNow(captchaRetry ? resumeJob : requestTranslation));
+      toolbar.translate.addEventListener("click", () => runNow(async () => {
+        if (state.view === "stv" && ["running", "waiting-provider", "paused", "completed"].includes(state.status)) {
+          originalViewPinned = false;
+          renderView("translation");
+          updateToolbar();
+          if (!captchaRetry) return;
+        }
+        await (captchaRetry ? resumeJob() : requestTranslation());
+      }));
       toolbar.original.addEventListener("click", () => runNow(showOriginalChapter));
       toolbar.cancel.addEventListener("click", () => runNow(cancelJob));
       toolbar.resume.addEventListener("click", () => enqueue(resumeJob));
