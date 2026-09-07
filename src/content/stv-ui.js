@@ -48,7 +48,7 @@
 
   function circularProgressArc(index, total, center = 24, radius = 22) {
     const stepAngle = 360 / total;
-    const gapAngle = Math.min(14, stepAngle * 0.2);
+    const gapAngle = Math.min(24, stepAngle * 0.36);
     const arcAngle = stepAngle - gapAngle;
     const start = circularPoint(center, radius, index * stepAngle + gapAngle / 2);
     const end = circularPoint(center, radius, (index + 1) * stepAngle - gapAngle / 2);
@@ -1970,6 +1970,7 @@
         segment.classList.toggle("is-complete", completedIndexes.has(Number(segment.dataset.batchIndex)));
       }
       const chapterComplete = value.state === "completed" && completed === total;
+      miniProgress.dataset.running = String(value.running === true && !chapterComplete);
       miniProgress.dataset.complete = String(chapterComplete);
       toolbar.miniCompleteRing.dataset.active = String(chapterComplete);
       const action = toolbar.root.dataset.collapsed === "true" ? "Mở" : "Thu gọn";

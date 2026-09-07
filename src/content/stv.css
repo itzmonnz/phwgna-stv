@@ -1045,18 +1045,29 @@
 
 .stvai-mini-progress-segment {
   fill: none;
-  stroke: color-mix(in srgb, var(--stvai-primary) 50%, #4b5563);
-  stroke-width: 2.2;
+  stroke: #6b7280;
+  stroke-width: 3.3;
   stroke-linecap: round;
   stroke-linejoin: round;
   vector-effect: non-scaling-stroke;
-  filter: drop-shadow(0 0 3px color-mix(in srgb, var(--stvai-primary) 58%, transparent));
+  filter: none;
   transition: stroke 180ms cubic-bezier(0.22, 1, 0.36, 1),
     filter 180ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .stvai-mini-progress-segment.is-complete {
-  stroke: var(--stvai-primary);
+  stroke: #f472b6;
+  filter: drop-shadow(0 0 2.5px rgba(244, 114, 182, 0.55));
+}
+
+.stvai-mini-progress[data-running="true"] {
+  animation: stvai-mini-progress-spin 8s linear infinite;
+  will-change: transform;
+}
+
+@keyframes stvai-mini-progress-spin {
+  from { transform: translate(-50%, -50%) rotate(0turn); }
+  to { transform: translate(-50%, -50%) rotate(1turn); }
 }
 
 .stvai-toolbar[data-collapsed="true"] .stvai-mini-progress[data-complete="true"] {
@@ -1087,12 +1098,22 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .stvai-mini-progress[data-running="true"],
   .stvai-mini-complete-ring[data-active="true"] {
     animation: none;
   }
 }
 
 @media (forced-colors: active) {
+  .stvai-mini-progress-segment {
+    stroke: GrayText;
+    filter: none;
+  }
+
+  .stvai-mini-progress-segment.is-complete {
+    stroke: Highlight;
+  }
+
   .stvai-mini-complete-ring {
     background: CanvasText;
     filter: none;
