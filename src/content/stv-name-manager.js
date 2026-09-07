@@ -193,6 +193,7 @@
           options.onPositionChange?.(position);
           suppressClickHandle = currentHandle;
           suppressClickUntil = Date.now() + 400;
+          if (currentHandle.ownerDocument.activeElement === currentHandle) currentHandle.blur?.();
         }
         drag = null;
       };
