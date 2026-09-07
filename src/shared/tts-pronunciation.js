@@ -5,15 +5,28 @@
 })(typeof globalThis !== "undefined" ? globalThis : this, function createTtsPronunciationApi() {
   "use strict";
 
-  const DEFAULT_GUIDE = [
+  const LEGACY_DEFAULT_GUIDE = [
     "vi=di", "streamer=sờ trim mơ",
     "AI=ây ai", "CEO=xi i ô", "IT=ai ti", "IP=ai pi",
     "API=ây pi ai", "URL=iu a eo", "USB=iu ét bi", "PC=pi xi",
     "kg=ki lô gam", "km=ki lô mét", "cm=xen ti mét",
     "GB=ghi ga bai", "MB=mê ga bai", "GHz=ghi ga héc", "°C=độ xê"
   ].join("\n");
-  const MIGRATION_GUIDE = DEFAULT_GUIDE.split("\n").slice(2).join("\n");
-  const DEFAULTS_VERSION = 1;
+  const DEFAULT_GUIDE = [
+    "-=[bỏ qua]", "*=[bỏ qua]", "/=[bỏ qua]", "&=[bỏ qua]", "#=[bỏ qua]",
+    "°C=độ xê", "<=[bỏ qua]", ">=[bỏ qua]", "~=[bỏ qua]",
+    "AI=ây ai", "API=ây pi ai", "CEO=sy yy o", "GB=ghi ga bai",
+    "IP=ai pi", "IT=ai ti", "MB=mê ga bai", "PC=pi sy",
+    "URL=u rờ lờ", "USB=you ét bi", "card=cạc", "cm=xen ti mét",
+    "cos=cót", "coser=cót sơ", "cosplay=cót lay", "cosplayer=cót lay ơ",
+    "discord=đít cọt", "douyin=đâu din", "fan=phan", "fanpage=phan pây",
+    "gameplay=game lay", "GHz=ghi ga hét", "i=y", "idol=ai đồ",
+    "kg=ki lô gam", "km=ki lô mét", "live=lai", "livestream=lai sờ trym",
+    "scan=sờ can", "steam=sờ tim", "stream=sờ trym", "streamer=sờ trym mơ",
+    "streamimg=sờ trym ming", "style=sờ tai", "test=tét", "tiktok=tít tót",
+    "vi=vy", "x=ích", "xi=xy"
+  ].join("\n");
+  const DEFAULTS_VERSION = 2;
   const SILENT_VALUE = "[bỏ qua]";
   const MAX_GUIDE_LENGTH = 20_000;
   const MAX_RULES = 200;
@@ -215,11 +228,31 @@
     if (Number(version) >= DEFAULTS_VERSION) {
       return { guide, version: DEFAULTS_VERSION, changed: false };
     }
-    const existing = new Set(parseGuide(guide).map(rule => ruleKey(rule.source)));
-    const additions = parseGuide(MIGRATION_GUIDE)
+    const previousVersion = Math.max(0, Math.trunc(Number(version) || 0));
+    const legacyRules = parseGuide(LEGACY_DEFAULT_GUIDE);
+    const legacyByKey = new Map(legacyRules.map(rule => [ruleKey(rule.source), rule]));
+    const defaults = parseGuide(DEFAULT_GUIDE);
+    const defaultByKey = new Map(defaults.map(rule => [ruleKey(rule.source), rule]));
+    const migratedLines = guide.split(/\r?\n/u).map(line => {
+      const parsed = parseGuide(line);
+      if (parsed.length !== 1) return line;
+      const current = parsed[0];
+      const key = ruleKey(current.source);
+      const legacy = legacyByKey.get(key);
+      const replacement = defaultByKey.get(key);
+      if (!legacy || !replacement || current.spoken !== legacy.spoken) return line;
+      return `${current.source}=${replacement.spoken}`;
+    });
+    const migratedGuide = migratedLines.join("\n");
+    const existing = new Set(parseGuide(migratedGuide).map(rule => ruleKey(rule.source)));
+    const migrationSource = previousVersion < 1
+      ? [LEGACY_DEFAULT_GUIDE.split("\n").slice(2).join("\n"), DEFAULT_GUIDE].join("\n")
+      : defaults.filter(rule => !legacyByKey.has(ruleKey(rule.source)))
+        .map(rule => `${rule.source}=${rule.spoken}`).join("\n");
+    const additions = parseGuide(migrationSource)
       .filter(rule => !existing.has(ruleKey(rule.source)))
       .map(rule => `${rule.source}=${rule.spoken}`);
-    const available = MAX_GUIDE_LENGTH - guide.length - (guide ? 1 : 0);
+    const available = MAX_GUIDE_LENGTH - migratedGuide.length - (migratedGuide ? 1 : 0);
     const accepted = [];
     let used = 0;
     for (const addition of additions) {
@@ -228,7 +261,7 @@
       accepted.push(addition);
       used += extra;
     }
-    const migrated = [...accepted, guide].filter(Boolean).join("\n");
+    const migrated = [...accepted, migratedGuide].filter(Boolean).join("\n");
     return { guide: migrated, version: DEFAULTS_VERSION, changed: true };
   }
 

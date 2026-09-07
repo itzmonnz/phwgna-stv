@@ -103,11 +103,18 @@ Chỉ trả kết quả dịch. Cấm giải thích, chú thích, giải nghĩa 
     "$你=ngươi", "$刷=xoát", "$我=ta", "$正=chính", "$靠=mẹ nó", "$不过=nhưng mà", "$劳娜=Laura", "$卧槽=cmn", "$叶橙=diệp chanh", "$哼哒=Hum", "$四阶=tứ giai", "$夏言=hạ ngôn", "$安乐=an nhạc", "$戚荷=thích hà", "$救赎=cứu rỗi", "$易秋=dịch thu", "$朵拉=Dora", "$林悦=lâm duyệt", "$江宁=Giang Ninh", "$泰莎=Tessa", "$烧烤=đồ nướng", "$瑟琳=Celine", "$瑶瑶=dao dao", "$生辰=sinh nhật", "$米妮=Minnie", "$红裙=váy đỏ", "$维恩=duy ân", "$艾拉=Ella", "$艾斯=Ace", "$苏柠=tô nịnh", "$莉亚=Leah", "$莉娜=Lena", "$莉西=Lissie", "$薇拉=Vera", "$赫娜=Hena", "$陈真=Trần Chân", "$黯影=Shadow", "$伏烬羽=phục tẫn vũ", "$俞婉儿=du uyển nhi", "$修拉莎=Shurasa", "$凤汐芷=phượng tịch chỉ", "$唐玥瑶=Đường nguyệt dao", "$多萝西=Dorothy", "$大境界=đại cảnh giới", "$威尔福=Wilford", "$小哑巴=tiểu câm", "$张早晚=trương tảo vãn", "$方溪雨=phương khê vũ", "$梅菲尔=mayfair", "$海瑟薇=Hathaway", "$琳妮特=Lynette", "$茉莉喵=mạt lỵ miêu", "$莉莉安=Lilian", "$蒂露露=Tilulu", "$香蕉哥=chuối tiêu ca", "$鬼打墙=quỷ đả tường", "$麦当劳=McDonalds", "$奥德里安=Audrian", "$诡异遗物=quỷ dị di vật", "$卡莎安尔里=kasa anari"
   ].join("\n");
   const DEFAULT_TTS_PRONUNCIATION_GUIDE = [
-    "vi=di", "streamer=sờ trim mơ",
-    "AI=ây ai", "CEO=xi i ô", "IT=ai ti", "IP=ai pi",
-    "API=ây pi ai", "URL=iu a eo", "USB=iu ét bi", "PC=pi xi",
-    "kg=ki lô gam", "km=ki lô mét", "cm=xen ti mét",
-    "GB=ghi ga bai", "MB=mê ga bai", "GHz=ghi ga héc", "°C=độ xê"
+    "-=[bỏ qua]", "*=[bỏ qua]", "/=[bỏ qua]", "&=[bỏ qua]", "#=[bỏ qua]",
+    "°C=độ xê", "<=[bỏ qua]", ">=[bỏ qua]", "~=[bỏ qua]",
+    "AI=ây ai", "API=ây pi ai", "CEO=sy yy o", "GB=ghi ga bai",
+    "IP=ai pi", "IT=ai ti", "MB=mê ga bai", "PC=pi sy",
+    "URL=u rờ lờ", "USB=you ét bi", "card=cạc", "cm=xen ti mét",
+    "cos=cót", "coser=cót sơ", "cosplay=cót lay", "cosplayer=cót lay ơ",
+    "discord=đít cọt", "douyin=đâu din", "fan=phan", "fanpage=phan pây",
+    "gameplay=game lay", "GHz=ghi ga hét", "i=y", "idol=ai đồ",
+    "kg=ki lô gam", "km=ki lô mét", "live=lai", "livestream=lai sờ trym",
+    "scan=sờ can", "steam=sờ tim", "stream=sờ trym", "streamer=sờ trym mơ",
+    "streamimg=sờ trym ming", "style=sờ tai", "test=tét", "tiktok=tít tót",
+    "vi=vy", "x=ích", "xi=xy"
   ].join("\n");
   const SETTINGS_DEFAULTS_VERSION = 1;
   const LEGACY_SHORT_SYSTEM_PROMPT = [
@@ -141,7 +148,7 @@ Chỉ trả kết quả dịch. Cấm giải thích, chú thích, giải nghĩa 
     userPrompt: DEFAULT_USER_PROMPT,
     nameGuide: DEFAULT_NAME_GUIDE,
     ttsPronunciationGuide: DEFAULT_TTS_PRONUNCIATION_GUIDE,
-    ttsPronunciationDefaultsVersion: 1,
+    ttsPronunciationDefaultsVersion: 2,
     settingsDefaultsVersion: SETTINGS_DEFAULTS_VERSION,
     sourceLanguage: "Tiếng Trung",
     targetLanguage: "Tiếng Việt"
