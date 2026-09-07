@@ -67,7 +67,10 @@
       const stored = await readState();
       const current = stored?.[STORAGE_KEY];
       if (reason === "install") {
-        const patch = { [STORAGE_KEY]: { version, completed: false } };
+        const patch = {
+          toolEnabled: true,
+          [STORAGE_KEY]: { version, completed: false }
+        };
         if (!stored?.settings || typeof stored.settings !== "object") {
           patch.settings = core.normalizeSettings({ ...core.DEFAULT_SETTINGS, provider: "gemini" });
         }
