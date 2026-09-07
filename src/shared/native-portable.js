@@ -114,8 +114,14 @@
   }
 
   function descriptor(itemId, item) {
+    const storageKeys = [...new Set(Object.values(item.keysByOrigin || {}).filter(key => typeof key === 'string'))];
+    const sharedName = item.category === 'nativeNames' && storageKeys.includes(SHARED_NAME_KEY);
+    const scope = item.category !== 'nativeNames' ? 'setting'
+      : sharedName ? 'shared'
+        : item.kind === 'stv-name' ? 'story' : 'custom';
     return { itemId, category: item.category, revision: item.revision, keyCount: Object.keys(item.keysByOrigin).length,
-      kind: item.kind, fields: [...item.fields], chars: item.raw == null ? 0 : item.raw.length };
+      kind: item.kind, fields: [...item.fields], chars: item.raw == null ? 0 : item.raw.length,
+      scope, storageKey: sharedName ? SHARED_NAME_KEY : (storageKeys[0] || '') };
   }
 
   function approveCandidate(inputState, candidate) {

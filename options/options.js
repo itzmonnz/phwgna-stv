@@ -466,6 +466,27 @@
     const portableApprove = document.getElementById("portableApprove");
     let portableSessionId = "", portableItems = [];
     const portableLabel = category => category === "nativeNames" ? "Bộ Name STV" : "Cài đặt STV";
+    function portableItemIdentity(item) {
+      const inferredKey = String(item.storageKey || String(item.itemId || "").replace(/^[^:]+:/, ""));
+      const scope = item.scope || (inferredKey === "qtOnline0" ? "shared"
+        : item.category === "nativeNames" ? "story" : "setting");
+      if (scope === "shared") return {
+        title: "Bộ Name dùng chung",
+        description: "Áp dụng cho mọi truyện"
+      };
+      if (scope === "story") return {
+        title: "Bộ Name riêng theo truyện",
+        description: inferredKey ? `Mã kho STV: ${inferredKey}` : "Chỉ áp dụng cho truyện tương ứng"
+      };
+      if (item.category === "nativeNames") return {
+        title: "Bộ Name STV đã chọn",
+        description: inferredKey ? `Khóa STV: ${inferredKey}` : "Dữ liệu Name đã xác nhận"
+      };
+      return {
+        title: "Cài đặt STV",
+        description: inferredKey ? `Khóa STV: ${inferredKey}` : "Cài đặt đã xác nhận"
+      };
+    }
     function setPortableStatus(message, tone = "neutral") {
       portableStatus.textContent = message;
       portableStatus.dataset.tone = tone;
@@ -473,16 +494,26 @@
     function renderPortableItems(items) {
       portableItems = Array.isArray(items) ? items : [];
       portableItemsNode.replaceChildren();
+      const scopeOrder = { shared: 0, story: 1, custom: 2, setting: 3 };
+      portableItems.sort((left, right) => {
+        const leftIdentity = portableItemIdentity(left), rightIdentity = portableItemIdentity(right);
+        const leftScope = left.scope || (leftIdentity.title.includes("dùng chung") ? "shared" : left.category === "nativeNames" ? "story" : "setting");
+        const rightScope = right.scope || (rightIdentity.title.includes("dùng chung") ? "shared" : right.category === "nativeNames" ? "story" : "setting");
+        return (scopeOrder[leftScope] ?? 9) - (scopeOrder[rightScope] ?? 9)
+          || leftIdentity.title.localeCompare(rightIdentity.title, "vi");
+      });
       for (const item of portableItems) {
+        const identity = portableItemIdentity(item);
         const row = document.createElement("div"); row.className = "portable-row";
         const meta = document.createElement("div"); meta.className = "portable-row__meta";
-        const title = document.createElement("strong"); title.textContent = portableLabel(item.category);
+        const title = document.createElement("strong"); title.textContent = identity.title;
         const detail = document.createElement("div"); detail.className = "field-help";
-        detail.textContent = `${Number(item.keyCount) || 0} website · ${Number(item.chars) || 0} ký tự`;
+        detail.textContent = `${identity.description} · ${Number(item.keyCount) || 0} tên miền · ${Number(item.chars) || 0} ký tự · Đang bật`;
         meta.append(title, detail);
         const spacer = document.createElement("span");
         const disable = document.createElement("button"); disable.type = "button";
-        disable.className = "button button--secondary"; disable.textContent = "Tắt đồng bộ";
+        disable.className = "button button--secondary"; disable.textContent = "Tắt";
+        disable.setAttribute("aria-label", `Tắt đồng bộ ${identity.title}`);
         disable.addEventListener("click", async () => {
           disable.disabled = true;
           try {
