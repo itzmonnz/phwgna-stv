@@ -56,14 +56,22 @@
     const read = key => {
       try { return window.localStorage.getItem(key); } catch (_) { return null; }
     };
-    function storyTitle(chapter) {
-      const parsed = history?.parse?.(read('tusach'));
-      const record = parsed?.ok && parsed.records.find(item => String(item.host) === chapter?.source
-        && String(item.id) === chapter?.bookId);
-      return String(record?.name || '').replace(/<[^>]*>/g, '')
+    function normalizeStoryTitle(value) {
+      return String(value || '').replace(/<[^>]*>/g, '')
         .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"')
         .replace(/&#39;/g, "'").replace(/&amp;/g, '&')
         .replace(/[\u0000-\u001F\u007F]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 160);
+    }
+    function storyTitle(chapter) {
+      const visible = window.document?.getElementById?.('book_name2')?.textContent
+        || window.document?.getElementById?.('book_name')?.textContent;
+      const metadata = window.document?.querySelector?.('meta[property="og:novel:book_name"]')?.getAttribute?.('content');
+      const pageTitle = normalizeStoryTitle(visible) || normalizeStoryTitle(metadata);
+      if (pageTitle) return pageTitle;
+      const parsed = history?.parse?.(read('tusach'));
+      const record = parsed?.ok && parsed.records.find(item => String(item.host) === chapter?.source
+        && String(item.id) === chapter?.bookId);
+      return normalizeStoryTitle(record?.name);
     }
     function safeSnapshot() {
       const values = new Map();
