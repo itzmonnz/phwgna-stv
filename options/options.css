@@ -132,6 +132,44 @@ h2 {
   text-transform: uppercase;
 }
 
+.eyebrow.phwgna-product-name {
+  letter-spacing: 0.04em;
+  text-transform: none;
+}
+
+@supports ((background-clip: text) or (-webkit-background-clip: text)) {
+  .phwgna-product-name {
+    color: var(--primary);
+    background-image: linear-gradient(120deg, #8b5cf6 0%, #2563eb 32%, #06b6d4 50%, #ec4899 68%, #8b5cf6 100%);
+    background-size: 300% 100%;
+    background-position: 0% 50%;
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: phwgna-brand-flow 4s linear infinite;
+  }
+}
+
+@keyframes phwgna-brand-flow {
+  to { background-position: 100% 50%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .phwgna-product-name {
+    animation: none;
+    background-position: 50% 50%;
+  }
+}
+
+@media (forced-colors: active) {
+  .phwgna-product-name {
+    color: CanvasText;
+    background: none;
+    -webkit-text-fill-color: currentColor;
+    animation: none;
+  }
+}
+
 .page-shell {
   padding: 48px 0 68px;
 }
@@ -455,6 +493,47 @@ code {
   flex-wrap: wrap;
 }
 
+.import-preview {
+  margin-top: 14px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--primary-soft), var(--surface) 72%);
+}
+
+.import-preview h3,
+.import-preview p { margin: 0 0 10px; }
+
+.portable-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.portable-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.portable-row {
+  display: grid;
+  grid-template-columns: minmax(130px, 1fr) minmax(150px, 0.75fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--primary-soft), var(--surface) 68%);
+}
+
+.portable-row__meta {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+#portableApprove:not([hidden]) { margin-top: 12px; }
+
 .button {
   display: inline-flex;
   align-items: center;
@@ -649,6 +728,8 @@ code {
   .supported-sites {
     grid-template-columns: 1fr;
   }
+
+  .portable-row { grid-template-columns: 1fr; }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -11,11 +11,11 @@
     },
     {
       "path": "HUONG-DAN-PHWGNA-STV.html",
-      "sha256": "e3a6185af9b38d48e1b7274da436387dc5496d1c56cbae455daaf2ee8dd081e0"
+      "sha256": "19e1dc6fdf2ef1239e2dbfb62af96ceacf2fa2442eeec27ea442be8748d83c9d"
     },
     {
       "path": "LICENSE",
-      "sha256": "14ac45ee63465506f1258c9f2ea5e29a8de5b09cbd0758f34501bc2849a6559b"
+      "sha256": "da3d15206a4fce3ef142dcc42c8bd819b89ba5ee89bd003031ac9fb6d6b1628e"
     },
     {
       "path": "Lay-IP-ket-noi-Sunshine.bat",
@@ -23,15 +23,15 @@
     },
     {
       "path": "README.md",
-      "sha256": "0729bdc87588cdb7aad8e56eba6e2173d1161a7123744c638d029006ebe1e689"
+      "sha256": "77bbf2a0707102273421bd4ca0ed024b54dc986b33b044862db383d3c7a51cca"
     },
     {
       "path": "SECURITY.md",
-      "sha256": "610f8a50b333e9ebc0d65f5225a16c67f7f24646778bc4b3fb7168fa3d7b6712"
+      "sha256": "f26010750ecc7493ca49eb1f5b9761587b236156cea153c05181d6571827a58a"
     },
     {
       "path": "TRADEMARK.md",
-      "sha256": "8e621de62ecd92e21fb0237381d427c0ef5b6a8fcdb3d94fb8f796a9dc87e6fb"
+      "sha256": "8b6912dab811754633acb6e349fecc38264e22845a585e6d2ef0ec38c2431b8d"
     },
     {
       "path": "assets/icons/phwgna-cat-128.png",
@@ -51,15 +51,15 @@
     },
     {
       "path": "manifest.json",
-      "sha256": "153069b196900fa75f1184967dedb50c21af9cb4bb6211fedc21f268652880fc"
+      "sha256": "84fd9e31165bd69e0a36712059ab8c14fd0f58f9cc6cc569297f0d0fc054177e"
     },
     {
       "path": "onboarding/onboarding.css",
-      "sha256": "ba138413c826eb18cf6061d7a8d38e1f4b6fccb2b9a12b93982792fead389b65"
+      "sha256": "5bba4f729611c65d530b24562597dae5371271b996e7d09ce38b7caf3ce62f75"
     },
     {
       "path": "onboarding/onboarding.html",
-      "sha256": "9560e5c5e7107d56dd49ca00014279246f5b0025ac154b36717e672c8629acd6"
+      "sha256": "2c8a71ccdf2a38cec82d206cf8df7406ae4b4127248bb21c6842998e084cd442"
     },
     {
       "path": "onboarding/onboarding.js",
@@ -67,23 +67,23 @@
     },
     {
       "path": "options/options.css",
-      "sha256": "f071236b2a22a9b9ee45abc4c1c8349edcdde79f0d84c028fb29424430d7e40f"
+      "sha256": "cc97ce7e05d05ae5eb409e2cdd18c7b47b949e0a700a8389cdd370f8ffbdfdb3"
     },
     {
       "path": "options/options.html",
-      "sha256": "cf109e7a231c293d6d2e1af85f56319a1b2a693a3dddf351c495b93426bba8b1"
+      "sha256": "35e901e61ea0e1906f926186971a8c50f8d00a7ef4f1690a8cf3a623384c241b"
     },
     {
       "path": "options/options.js",
-      "sha256": "ccc04b02a5363f5d27dcd6a73129bff0b419052077c6a13f9febb461769dff4c"
+      "sha256": "d96a1f13a8114618f71ceab41f1528574768aef26db23618a14854568c4fc8a8"
     },
     {
       "path": "popup/popup.css",
-      "sha256": "408e55d9bf06c0f36144766d2a78674b7e8e25f33f123fc5a4fbb8f37a9cd2c5"
+      "sha256": "96314ddee585ff89246fb8c040fb0f1c2fb00bcd7934bd79053ed8f10ffb24a3"
     },
     {
       "path": "popup/popup.html",
-      "sha256": "71b90ef010cc92694f02a0aae391ee970769923397a60163717a8db07b237d1a"
+      "sha256": "b133491354d7923a1c4a189d8fb06eaba512b6e1f0ab57cf9beb236da1231f7c"
     },
     {
       "path": "popup/popup.js",
@@ -91,7 +91,7 @@
     },
     {
       "path": "security/OWNER-FINGERPRINT.txt",
-      "sha256": "fa51419cf6112bb72d6b2aea592b872443a740126e4f531bc86b81b2fad44618"
+      "sha256": "28366a34b27cadf8a907b2218f821578da97dc1a4cb6458d2993088e964aef95"
     },
     {
       "path": "security/owner-public-key.pub",
@@ -99,7 +99,7 @@
     },
     {
       "path": "src/background.js",
-      "sha256": "f111c1516991711a5ca1567d01a77dc76e6ce3834da89822f353fe625dbbece6"
+      "sha256": "e5262b23b76a5eb617f74d832defc9b5d4101e1329fcf183c40be7108c20526a"
     },
     {
       "path": "src/content/chatgpt-dom-resolver.js",
@@ -111,7 +111,7 @@
     },
     {
       "path": "src/content/chatgpt.js",
-      "sha256": "a2c42f79eb16bcfd820798dd41a10c9fb6d5503f8489066638755358bae801af"
+      "sha256": "c4828f595df2e3ff80705719a70c58d84ae40179c87057496788a99704d09720"
     },
     {
       "path": "src/content/gemini-dom-resolver.js",
@@ -119,7 +119,7 @@
     },
     {
       "path": "src/content/gemini.js",
-      "sha256": "34afe4b65c60fe41a39db37696321395855f96208d2ceaea063c99640065fdbb"
+      "sha256": "58548334a71ce80fd128ef97c2915ceee1fefc6711d7d3414a94d5812fe2d54d"
     },
     {
       "path": "src/content/provider-common.js",
@@ -139,7 +139,7 @@
     },
     {
       "path": "src/content/stv-history.js",
-      "sha256": "92b95fe4ad714001c597bc694ea30c2368e136edb5bfde3c5203fb09eef6ecdd"
+      "sha256": "aa81d8935461e7935003886340d2e9cdc59a762370eb2e7792ed0e230953d5c4"
     },
     {
       "path": "src/content/stv-motion.js",
@@ -147,11 +147,15 @@
     },
     {
       "path": "src/content/stv-name-editor.js",
-      "sha256": "36966db967c66b19fb51a72f1c260be8f22002d4f834d666cca1a4ec9a9de49e"
+      "sha256": "2dfc140b0ae5e469452db7a2890e915b33fd994f3a0c720fbc9fc7e3f89f887d"
     },
     {
       "path": "src/content/stv-name-manager.js",
-      "sha256": "838c109782fac29e74bf7c18578f2f13f810ca0d8760dcdd2ec1b55d2a3cb924"
+      "sha256": "8a4460b672cfa17e6a342c078cb81005c94beb911c024d03f76ff058fa03d16c"
+    },
+    {
+      "path": "src/content/stv-portable.js",
+      "sha256": "1e05f0f807a9380de5a7aa47b9458afcbd731a10e8440cc114365ecce3635733"
     },
     {
       "path": "src/content/stv-prefetch.js",
@@ -171,15 +175,15 @@
     },
     {
       "path": "src/content/stv-ui.js",
-      "sha256": "781a20c0dd2b897b2d29994244158a5608f61b1515b2c01d111a8b53166ccdaf"
+      "sha256": "a13a1482959c52284c2b153970c0d729d03296fd420352c67c7abb7192a1943e"
     },
     {
       "path": "src/content/stv.css",
-      "sha256": "c4530977e90685e7989119da6a982ce869e049fa10b41488d82e7db1236da283"
+      "sha256": "dcd3e97edbc62dd43270bcb672b526833971d31033777011696420db2c073a03"
     },
     {
       "path": "src/content/stv.js",
-      "sha256": "1f75fc1da2fd93622418b44ef7e25b5f646311ee1e19b6a870ebfc2954f1b61e"
+      "sha256": "dea999236ddd10d177a3341e276c8a4f08ab9f27a316ac08a953171703a15864"
     },
     {
       "path": "src/shared/api-providers.js",
@@ -195,7 +199,11 @@
     },
     {
       "path": "src/shared/core.js",
-      "sha256": "4cdad1bfe5d6929b24549726075dd92c3f036d5b766c371fece2a12e229c6828"
+      "sha256": "f65d0d120437a94cf24d14cd10853922ae669ceaa91b18fbc3abf64b85f95e7f"
+    },
+    {
+      "path": "src/shared/data-backup.js",
+      "sha256": "1c2fc4e771040d38fe4a70bff30152d586f85ce65a46bfc14c41c23a1a085349"
     },
     {
       "path": "src/shared/error-journal.js",
@@ -203,11 +211,11 @@
     },
     {
       "path": "src/shared/history-sync.js",
-      "sha256": "627919e6e3f87c7370214608f23f35f3046cabde0d078c207870c8c2d64d040d"
+      "sha256": "f0bbbeaf9ac69e3dc4149d103d0464c3b5904fdff9abed6bbd263a6abc7d2704"
     },
     {
       "path": "src/shared/name-aliases.js",
-      "sha256": "4be0b23fe61f62609454c8f250ae59089080b9bdf0814d1abb19c5862259ff30"
+      "sha256": "c4963cc5750b0b8b066d87585f4ce0ebf13d43dd7265654d6a13681606bbe6cf"
     },
     {
       "path": "src/shared/name-preview.js",
@@ -215,7 +223,11 @@
     },
     {
       "path": "src/shared/native-history.js",
-      "sha256": "c41256fea763893f3421e493c15d275906ca30f5c41fa79dcf7c921d721d78e5"
+      "sha256": "abdaf51ed1c01babeae5357744e06b2adeacfc449ae1fe2d5a5df3be0bf6cc45"
+    },
+    {
+      "path": "src/shared/native-portable.js",
+      "sha256": "bbae9089899ced06a03816c8630ed0b317371030223de9d0b929f31395fd9fb3"
     },
     {
       "path": "src/shared/official-build.js",
@@ -226,8 +238,12 @@
       "sha256": "1c9befe0f927f9179458760efae7708613399ffeed05bb30de95f3381414e12c"
     },
     {
+      "path": "src/shared/portable-sync.js",
+      "sha256": "02cc9df6d011130bf277f3e11449ce928d7969b394908ad5d610d9d34c9635e0"
+    },
+    {
       "path": "src/shared/stv-sites.js",
-      "sha256": "19d79bf41d7ca04f511b91c3639dde732e9e502d10aa07f45d4431ec0941f798"
+      "sha256": "74cdf15ae01a5d804b6047ef5d4b0b87d7aa6ef3c9af9d95a43a7e173ad9ca2c"
     },
     {
       "path": "src/shared/tts-pronunciation.js",
@@ -255,19 +271,19 @@
     },
     {
       "path": "windows/phwgna-setup-core.ps1",
-      "sha256": "241fb31274281934009ff115c3407bacec1cb7852b4cc6abf33ec916e2246bc7"
+      "sha256": "1554a7874f9c820deb87d968b28b8355ecf8e8a2e761b3e7e50b2b49798d1e77"
     },
     {
       "path": "windows/phwgna-setup-wizard.ps1",
-      "sha256": "71fb1153130d49ffa09017815b77c60f59616513224eea4815fb6899ba400e19"
+      "sha256": "cf089663c0f4f63ccbc7dd349b7486e680efc1e3e20a3ff8bc564889d56793f9"
     },
     {
       "path": "windows/phwgna-show-ip.ps1",
       "sha256": "078a349b69b4843f1e5b7fb84ba2fba7d9768e49efd0989b230151d8646938f7"
     }
   ],
-  "product": "phwgna STV AI Translator",
-  "sourceCommit": "4f8d55e3fb3182aaafdb3d9f73c3d5837ca14f2e",
+  "product": "Phwgna Stv",
+  "sourceCommit": "4aff641a95f6c675da9f9d007ebd89289d009b2b",
   "officialRepository": "https://github.com/itzmonnz/phwgna-stv",
   "officialReleaseUrl": "https://github.com/itzmonnz/phwgna-stv/releases/tag/v0.2.8",
   "publicKeyFingerprint": "85ac74c199d0a6028bce843d6f68d7632317912b460aad1a7431193767ec9871"

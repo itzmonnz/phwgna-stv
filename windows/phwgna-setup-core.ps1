@@ -241,7 +241,7 @@ function New-PhwgnaPerformanceShortcut {
 
     $performanceArguments = Get-PhwgnaPerformanceArguments
     $shortcutPath = Join-Path $desktop 'phwgna stv.lnk'
-    $description = 'phwgna STV - tang toc tab ChatGPT va Gemini chay nen'
+    $description = 'Phwgna Stv - tang toc tab ChatGPT va Gemini chay nen'
     if ($DryRun) {
         return [pscustomobject]@{ ok=$true; code='shortcut_ready'; browser=[string]$Browser.id; path=$shortcutPath; dryRun=$true }
     }
@@ -253,7 +253,7 @@ function New-PhwgnaPerformanceShortcut {
             $description,
             'phwgna stv - Coc Coc toi uu tab Gemini nen',
             'phwgna stv - Coc Coc toi uu tab ChatGPT va Gemini nen',
-            'Coc Coc toi uu tab Gemini nen cho phwgna STV AI Translator'
+            'Coc Coc toi uu tab Gemini nen cho Phwgna Stv'
         )
         $owned = $existingShortcut.Description -in $ownedDescriptions `
             -and $existingShortcut.Arguments -eq $performanceArguments

@@ -6,7 +6,7 @@
   'use strict';
 
   const ORIGINS = Object.freeze([
-    'https://sangtacviet.app', 'https://sangtacviet.com',
+    'https://sangtacviet.app', 'https://sangtacviet.com', 'https://sangtacviet.vip',
     'http://sangtacviet.com', 'http://14.225.254.182'
   ]);
 

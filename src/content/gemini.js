@@ -166,6 +166,7 @@
 
     function waitForResponseChange(waitOptions = {}) {
       const timeoutMs = Math.max(0, Number(waitOptions.timeoutMs ?? options.mutationFallbackMs ?? 500) || 0);
+      const coalesceMs = Math.max(0, Number(options.responseCoalesceMs ?? 125) || 0);
       const signal = waitOptions.signal;
       const MutationObserverClass = document.defaultView?.MutationObserver;
       if (!MutationObserverClass || !document.documentElement) {
@@ -188,6 +189,7 @@
       }
       return new Promise((resolve, reject) => {
         let settled = false;
+        let mutationTimer = null;
         const responseSelectors = "model-response, .response-footer, .response-container-header-processing-state, button, [contenteditable='true']";
         const isRelevantNode = (node) => {
           const element = node?.nodeType === 1 ? node : node?.parentElement;
@@ -200,16 +202,23 @@
           settled = true;
           observer.disconnect();
           clearTimeout(timer);
+          clearTimeout(mutationTimer);
           signal?.removeEventListener("abort", onAbort);
           if (error) reject(error);
           else resolve(value);
         };
         const onAbort = () => finish(null, new common.ProviderError("cancelled", "Tác vụ đã bị hủy."));
         const observer = new MutationObserverClass((mutations) => {
+          if (mutationTimer !== null) return;
           const relevant = mutations.some((mutation) => isRelevantNode(mutation.target)
             || Array.from(mutation.addedNodes || []).some(isRelevantNode)
             || Array.from(mutation.removedNodes || []).some(isRelevantNode));
-          if (relevant) finish({ kind: "mutation", at: Date.now() });
+          if (relevant) {
+            mutationTimer = setTimeout(
+              () => finish({ kind: "mutation", at: Date.now() }),
+              Math.min(coalesceMs, timeoutMs)
+            );
+          }
         });
         const timer = setTimeout(() => finish({ kind: "timer", at: Date.now() }), timeoutMs);
         observer.observe(document.documentElement, {
@@ -641,8 +650,8 @@
     }
 
     function readResponseState() {
-      const text = readLatestResponse();
       const latestResponse = findLatestResponse();
+      const text = latestResponse ? common.textOf(responseContent(latestResponse)) : "";
       const responseComplete = Boolean(domResolver.resolve("completion", { response: latestResponse }).element);
       const sendVisible = Array.from(document.querySelectorAll('button')).some(button => {
         const action = common.classifyAction(button);

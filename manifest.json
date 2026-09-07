@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "phwgna STV AI Translator",
+  "name": "Phwgna Stv",
   "version": "0.2.8",
   "description": "Dịch chương Sáng Tác Việt qua ChatGPT, Gemini hoặc API do người dùng chọn.",
   "icons": {
@@ -16,6 +16,7 @@
   "host_permissions": [
     "https://sangtacviet.app/*",
     "https://sangtacviet.com/*",
+    "https://sangtacviet.vip/*",
     "http://sangtacviet.com/*",
     "http://14.225.254.182/*",
     "https://chatgpt.com/*",
@@ -32,7 +33,7 @@
     "service_worker": "src/background.js"
   },
   "action": {
-    "default_title": "phwgna STV AI Translator",
+    "default_title": "Phwgna Stv",
     "default_popup": "popup/popup.html",
     "default_icon": {
       "16": "assets/icons/phwgna-cat-16.png",
@@ -53,6 +54,7 @@
       "matches": [
         "https://sangtacviet.app/*",
         "https://sangtacviet.com/*",
+        "https://sangtacviet.vip/*",
         "http://sangtacviet.com/*",
         "http://14.225.254.182/*"
       ]
@@ -63,13 +65,16 @@
       "matches": [
         "https://sangtacviet.app/*",
         "https://sangtacviet.com/*",
+        "https://sangtacviet.vip/*",
         "http://sangtacviet.com/*",
         "http://14.225.254.182/*"
       ],
       "js": [
         "src/shared/stv-sites.js",
         "src/shared/native-history.js",
+        "src/shared/native-portable.js",
         "src/content/stv-history.js",
+        "src/content/stv-portable.js",
         "src/content/stv-diagnostics.js"
       ],
       "run_at": "document_start"
@@ -78,6 +83,7 @@
       "matches": [
         "https://sangtacviet.app/*",
         "https://sangtacviet.com/*",
+        "https://sangtacviet.vip/*",
         "http://sangtacviet.com/*",
         "http://14.225.254.182/*"
       ],
@@ -94,6 +100,7 @@
       "matches": [
         "https://sangtacviet.app/truyen/*",
         "https://sangtacviet.com/truyen/*",
+        "https://sangtacviet.vip/truyen/*",
         "http://sangtacviet.com/truyen/*",
         "http://14.225.254.182/truyen/*"
       ],
@@ -123,6 +130,7 @@
       "matches": [
         "https://sangtacviet.app/truyen/*",
         "https://sangtacviet.com/truyen/*",
+        "https://sangtacviet.vip/truyen/*",
         "http://sangtacviet.com/truyen/*",
         "http://14.225.254.182/truyen/*"
       ],

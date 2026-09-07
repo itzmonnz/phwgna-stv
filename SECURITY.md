@@ -1,6 +1,6 @@
 # Bảo mật và xác minh bản phát hành
 
-Chỉ tải **phwgna STV AI Translator** từ repository chính thức: https://github.com/itzmonnz/phwgna-stv
+Chỉ tải **Phwgna Stv** từ repository chính thức: https://github.com/itzmonnz/phwgna-stv
 
 Fingerprint khóa phát hành của phwgna:
 

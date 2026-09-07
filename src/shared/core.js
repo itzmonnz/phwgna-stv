@@ -7,7 +7,7 @@
 })(typeof globalThis !== "undefined" ? globalThis : this, function createCore() {
   "use strict";
 
-  const TRANSLATION_PROTOCOL_VERSION = "phwgna-line-v1";
+  const TRANSLATION_PROTOCOL_VERSION = "phwgna-line-v2";
   const API_VALIDATION_VERSION = "source-language-v1";
   const READY_MARKERS = Object.freeze({
     introduction: "phwgna_stv_ready_1",
@@ -183,8 +183,8 @@ Chỉ trả kết quả dịch. Cấm giải thích, chú thích, giải nghĩa 
     return Boolean(config.systemPrompt.trim() || config.userPrompt.trim());
   }
 
-  function normalizeNameGuide(input) {
-    const mappings = new Map();
+  function nameGuideRows(input) {
+    const rows = [];
     for (const rawLine of String(input || "").split(/\r?\n/)) {
       let line = rawLine.trim();
       if (line.startsWith("$")) line = line.slice(1).trim();
@@ -193,9 +193,74 @@ Chỉ trả kết quả dịch. Cấm giải thích, chú thích, giải nghĩa 
       const source = line.slice(0, separator).trim();
       const target = line.slice(separator + 1).trim();
       if (!source || !target || /[\r\n]/.test(source + target)) continue;
-      mappings.set(source, target);
+      const alternatives = target.split("/").map(value => value.trim()).filter(Boolean);
+      if (alternatives.length) rows.push({ source, alternatives });
     }
-    return Array.from(mappings, ([source, target]) => `$${source}=${target}`).join("\n");
+    return rows;
+  }
+
+  function mergeNameGuides(primary, incoming = "") {
+    const mappings = new Map();
+    const append = ({ source, alternatives }) => {
+      if (!mappings.has(source)) mappings.set(source, []);
+      const targets = mappings.get(source);
+      for (const target of alternatives) if (!targets.includes(target)) targets.push(target);
+    };
+    for (const row of nameGuideRows(primary)) append(row);
+
+    const originalSources = new Set(mappings.keys());
+    const mergedSources = new Set();
+    const stats = { added: 0, merged: 0, duplicate: 0 };
+    for (const row of nameGuideRows(incoming)) {
+      const isNewSource = !mappings.has(row.source);
+      if (isNewSource) {
+        mappings.set(row.source, []);
+        stats.added += 1;
+      }
+      const targets = mappings.get(row.source);
+      let addedMeaning = false;
+      for (const target of row.alternatives) {
+        if (targets.includes(target)) stats.duplicate += 1;
+        else { targets.push(target); addedMeaning = true; }
+      }
+      if (addedMeaning && originalSources.has(row.source) && !mergedSources.has(row.source)) {
+        mergedSources.add(row.source);
+        stats.merged += 1;
+      }
+    }
+    const value = Array.from(mappings, ([source, targets]) => `$${source}=${targets.join("/")}`).join("\n");
+    return { value, stats };
+  }
+
+  function normalizeNameGuide(input) {
+    return mergeNameGuides(input).value;
+  }
+
+  function importStvSharedName(primary, raw) {
+    const accepted = [];
+    let ignored = 0;
+    for (const rawLine of String(raw || "").split(/~\/\/~|\r?\n/)) {
+      const line = rawLine.trim();
+      if (!line) continue;
+      const match = line.match(/^\$([^=\r\n]{1,200})=([^\r\n]{1,300})$/u);
+      if (!match || !match[1].trim() || !match[2].trim()) { ignored += 1; continue; }
+      accepted.push(`$${match[1].trim()}=${match[2].trim()}`);
+    }
+    const merged = mergeNameGuides(primary, accepted.join("\n"));
+    return { value: merged.value, stats: { ...merged.stats, ignored } };
+  }
+
+  function selectRelevantNameGuide(input, blocks) {
+    const mappings = normalizeNameGuide(input).split("\n").filter(Boolean).map((line, order) => {
+      const separator = line.indexOf("=");
+      return { line, source: line.slice(1, separator), order };
+    });
+    const sourceTexts = (blocks || []).map((block) => String(block?.text || ""));
+    return mappings
+      .filter(({ source }) => sourceTexts.some((text) => text.includes(source)))
+      .sort((left, right) => right.source.length - left.source.length || left.order - right.order)
+      .map(({ line }) => line)
+      .join("\n");
   }
 
   function renderTemplate(template, values) {
@@ -227,7 +292,6 @@ Chỉ trả kết quả dịch. Cấm giải thích, chú thích, giải nghĩa 
       sourcelanguage: config.sourceLanguage,
       targetlanguage: config.targetLanguage
     });
-    const nameGuide = normalizeNameGuide(config.nameGuide);
     return [
       [
         INTRODUCTION_PROMPT,
@@ -240,9 +304,7 @@ Chỉ trả kết quả dịch. Cấm giải thích, chú thích, giải nghĩa 
         READY_MARKERS.system
       ].join("\n\n"),
       [
-      "BỘ NAME ƯU TIÊN:",
-      nameGuide || "(Không có bộ Name)",
-        "Sử dụng bộ name ưu tiên với ngữ cảnh phù hợp.",
+        "Sử dụng bộ name sẽ được gửi kèm batch, xác định ngữ cảnh phù hợp để quyết định.",
         READY_INSTRUCTION,
         READY_MARKERS.names
       ].join("\n\n")
@@ -286,22 +348,24 @@ Chỉ trả kết quả dịch. Cấm giải thích, chú thích, giải nghĩa 
     return `batch_${ordinal}_${token}`;
   }
 
-  function createBatchPrompt({ responseId, requestId, blocks }) {
+  function createBatchPrompt({ responseId, requestId, blocks, settings }) {
     const batchMarker = String(responseId || requestId || "");
     const lines = [
       batchMarker,
       "",
-      `Bắt buộc giữ nguyên ${batchMarker} làm dòng đầu tiên của phản hồi; không dịch, sửa hoặc bỏ mã này.`,
-      LABELED_BATCH_INSTRUCTION
+      `Bắt buộc giữ nguyên ${batchMarker} làm dòng đầu tiên của phản hồi; không dịch, sửa hoặc bỏ mã này.`
     ];
+    const relevantNameGuide = selectRelevantNameGuide(settings?.nameGuide, blocks);
+    if (relevantNameGuide) lines.push("", "Bộ name:", relevantNameGuide, "");
+    lines.push(LABELED_BATCH_INSTRUCTION);
     for (const [index, block] of (blocks || []).entries()) {
       lines.push("", `câu ${index + 1}:`, String(block.text || ""));
     }
     return lines.join("\n").trim();
   }
 
-  function createRepairPrompt({ responseId, requestId, blocks }) {
-    return createBatchPrompt({ responseId, requestId, blocks });
+  function createRepairPrompt({ responseId, requestId, blocks, settings }) {
+    return createBatchPrompt({ responseId, requestId, blocks, settings });
   }
 
   function createApiMessages({ blocks, settings, retryReason }) {
@@ -311,11 +375,12 @@ Chỉ trả kết quả dịch. Cấm giải thích, chú thích, giải nghĩa 
       targetlanguage: config.targetLanguage
     });
     const text = (blocks || []).map((block) => String(block.text || "").replace(/\s*\r?\n+\s*/g, " ").trim()).join("\n");
+    const relevantNameGuide = selectRelevantNameGuide(config.nameGuide, blocks);
     let user = renderTemplate(ensureTextPlaceholder(config.userPrompt), {
       sourcelanguage: config.sourceLanguage,
       targetlanguage: config.targetLanguage,
-      name: normalizeNameGuide(config.nameGuide) || "(Không có bộ Name)",
-      namne: normalizeNameGuide(config.nameGuide) || "(Không có bộ Name)",
+      name: relevantNameGuide || "(Không có bộ Name liên quan)",
+      namne: relevantNameGuide || "(Không có bộ Name liên quan)",
       text
     });
     if (retryReason === "source_language_unchanged") {
@@ -640,6 +705,9 @@ Chỉ trả kết quả dịch. Cấm giải thích, chú thích, giải nghĩa 
     normalizeSettings,
     hasTranslationPrompt,
     normalizeNameGuide,
+    mergeNameGuides,
+    importStvSharedName,
+    selectRelevantNameGuide,
     renderTemplate,
     createSetupMessages,
     createBatchResponseId,

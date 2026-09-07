@@ -1,5 +1,5 @@
 if (typeof importScripts === "function") {
-  importScripts("shared/stv-sites.js", "shared/native-history.js", "shared/history-sync.js", "shared/core.js", "shared/tts-pronunciation.js", "shared/cache.js", "shared/name-preview.js", "shared/api-providers.js", "shared/update-check.js", "shared/onboarding.js", "shared/error-journal.js");
+  importScripts("shared/stv-sites.js", "shared/native-history.js", "shared/history-sync.js", "shared/native-portable.js", "shared/portable-sync.js", "shared/core.js", "shared/tts-pronunciation.js", "shared/cache.js", "shared/name-preview.js", "shared/api-providers.js", "shared/update-check.js", "shared/onboarding.js", "shared/error-journal.js");
 }
 
 (function attachBackground(root, factory) {
@@ -10,15 +10,16 @@ if (typeof importScripts === "function") {
   const apiProviders = root.STVAIApiProviders || (typeof require === "function" ? require("./shared/api-providers.js") : null);
   const sites = root.STVAISites || (typeof require === 'function' ? require('./shared/stv-sites.js') : null);
   const historyApi = root.STVAIHistorySync || (typeof require === 'function' ? require('./shared/history-sync.js') : null);
+  const portableSyncApi = root.STVAIPortableSync || (typeof require === 'function' ? require('./shared/portable-sync.js') : null);
   const updateApi = root.STVAIUpdateCheck || (typeof require === "function" ? require("./shared/update-check.js") : null);
   const onboardingApi = root.STVAIOnboarding || (typeof require === "function" ? require("./shared/onboarding.js") : null);
   const errorJournalApi = root.STVAIErrorJournal || (typeof require === "function" ? require("./shared/error-journal.js") : null);
-  const api = factory(core, pronunciation, cacheApi, previewApi, apiProviders, sites, historyApi, updateApi, onboardingApi, errorJournalApi);
+  const api = factory(core, pronunciation, cacheApi, previewApi, apiProviders, sites, historyApi, portableSyncApi, updateApi, onboardingApi, errorJournalApi);
   if (typeof module === "object" && module.exports) {
     module.exports = api;
   }
   root.STVAIBackground = api;
-})(typeof globalThis !== "undefined" ? globalThis : this, function createBackgroundApi(defaultCore, pronunciation, cacheApi, previewApi, defaultApiProviders, sites, historyApi, defaultUpdateApi, defaultOnboardingApi, defaultErrorJournalApi) {
+})(typeof globalThis !== "undefined" ? globalThis : this, function createBackgroundApi(defaultCore, pronunciation, cacheApi, previewApi, defaultApiProviders, sites, historyApi, portableSyncApi, defaultUpdateApi, defaultOnboardingApi, defaultErrorJournalApi) {
   "use strict";
 
   const SETUP_PARTS = ["introduction", "system", "names"];
@@ -131,6 +132,7 @@ if (typeof importScripts === "function") {
     const updateChecker = options.updateChecker;
     const extensionVersion = String(options.extensionVersion || "0.0.0");
     const historySync = historyApi.createHistorySync({ storage, tabs });
+    const portableSync = options.portableSync || portableSyncApi.createPortableSync({ storage, tabs });
     const apiClient = options.apiClient || defaultApiProviders?.createApiClient?.();
     const namePreview = options.namePreview
       || previewApi?.createNamePreviewService?.({ storage: storage?.local });
@@ -2720,7 +2722,10 @@ if (typeof importScripts === "function") {
           }
           const { index: nextIndex, job, slot } = selected;
           warmPool.waiters.splice(nextIndex, 1);
-          if (job.provider !== slot.provider || (await hashSettings(job.settings)) !== slot.settingsHash) {
+          const jobSettingsChanged = core.stableSettingsPayload(job.settings)
+            !== core.stableSettingsPayload(warmPool.settings);
+          if (job.provider !== slot.provider || (await hashSettings(job.settings)) !== slot.settingsHash
+            || jobSettingsChanged) {
             job.status = "paused";
             job.pauseReason = "pool_settings_changed";
             job.pending = false;
@@ -4635,6 +4640,23 @@ if (typeof importScripts === "function") {
           return restorePageZoom(message, sender);
         case 'STVAI_HISTORY_SYNC':
           return historySync.handle(message, sender);
+        case 'STVAI_PORTABLE_SYNC':
+          return portableSync.handle(message, sender);
+        case 'STVAI_PORTABLE_STATUS':
+        case 'STVAI_PORTABLE_LEARN_START':
+        case 'STVAI_PORTABLE_LEARN_FINISH':
+        case 'STVAI_PORTABLE_APPROVE':
+        case 'STVAI_PORTABLE_DISABLE': {
+          const senderUrl = String(sender?.url || '');
+          if (!senderUrl.startsWith('chrome-extension://') || !senderUrl.includes('/options/options.html')) {
+            return { ok: false, reason: 'unauthorized-sender' };
+          }
+          if (message.type === 'STVAI_PORTABLE_STATUS') return portableSync.status();
+          if (message.type === 'STVAI_PORTABLE_LEARN_START') return portableSync.startLearning();
+          if (message.type === 'STVAI_PORTABLE_LEARN_FINISH') return portableSync.finishLearning(String(message.sessionId || ''));
+          if (message.type === 'STVAI_PORTABLE_APPROVE') return portableSync.approveLearning(message);
+          return portableSync.disable(String(message.itemId || ''));
+        }
         case "STVAI_TTS_SESSION_START":
         case "STVAI_TTS_SESSION_CLAIM_NEXT":
         case "STVAI_TTS_SESSION_UPDATE":

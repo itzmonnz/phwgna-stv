@@ -5,6 +5,9 @@
 })(typeof globalThis !== "undefined" ? globalThis : this, function createNameEditorApi() {
   "use strict";
 
+  const core = globalThis.STVAICore
+    || (typeof require === "function" ? require("../shared/core.js") : null);
+
   const CJK_RE = /[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]/u;
   const WORD_RE = /[\p{L}\p{N}]/u;
 
@@ -44,17 +47,8 @@
     if (!left || !right || left.length > 80 || right.length > 200 || /[=\r\n]/.test(left + right)) {
       throw new TypeError("Name không hợp lệ.");
     }
-    const mappings = new Map();
-    for (const rawLine of `${String(guide || "")}\n$${left}=${right}`.split(/\r?\n/)) {
-      let line = rawLine.trim();
-      if (line.startsWith("$")) line = line.slice(1).trim();
-      const separator = line.indexOf("=");
-      if (separator < 1) continue;
-      const key = line.slice(0, separator).trim();
-      const value = line.slice(separator + 1).trim();
-      if (key && value && !/[\r\n]/.test(key + value)) mappings.set(key, value);
-    }
-    return Array.from(mappings, ([key, value]) => `$${key}=${value}`).join("\n");
+    if (core?.mergeNameGuides) return core.mergeNameGuides(guide, `$${left}=${right}`).value;
+    return `${String(guide || "").trim()}\n$${left}=${right}`.trim();
   }
 
   function element(document, tag, className, text) {

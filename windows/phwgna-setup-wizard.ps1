@@ -18,7 +18,7 @@ $ipHelperPath = Join-Path $packageRoot 'windows\phwgna-show-ip.ps1'
 $browsers = @(Find-PhwgnaBrowsers)
 
 $form = New-Object Windows.Forms.Form
-$form.Text = 'Cài phwgna STV'
+$form.Text = 'Cài Phwgna Stv'
 $form.ClientSize = New-Object Drawing.Size(760,680)
 $form.MinimumSize = New-Object Drawing.Size(776,719)
 $form.MaximizeBox = $false
@@ -38,7 +38,7 @@ function Add-Label([string]$Text,[int]$X,[int]$Y,[int]$Width,[int]$Height,[int]$
     $label
 }
 
-[void](Add-Label 'Cài phwgna STV' 32 22 696 38 20 $true)
+[void](Add-Label 'Cài Phwgna Stv' 32 22 696 38 20 $true)
 [void](Add-Label 'Làm lần lượt theo 3 bước. Các nút mở trang web đều được ghi rõ.' 32 58 696 28)
 [void](Add-Label 'Bước 1 · Chọn thiết bị' 32 94 696 26 11 $true)
 $pcMode = New-Object Windows.Forms.RadioButton

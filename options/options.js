@@ -1,6 +1,10 @@
 (function attachOptions(root, factory) {
+  const core = root.STVAICore || (typeof require === "function" ? require("../src/shared/core.js") : null);
   const pronunciation = root.STVAITTSPronunciation || (typeof require === "function" ? require("../src/shared/tts-pronunciation.js") : null);
-  const api = factory(root.STVAICore, root.STVAISites, pronunciation);
+  const history = root.STVAINativeHistory || (typeof require === "function" ? require("../src/shared/native-history.js") : null);
+  const portable = root.STVAINativePortable || (typeof require === "function" ? require("../src/shared/native-portable.js") : null);
+  const dataBackup = root.STVAIDataBackup || (typeof require === "function" ? require("../src/shared/data-backup.js") : null);
+  const api = factory(core, root.STVAISites, pronunciation, history, portable, dataBackup);
   if (typeof module === "object" && module.exports) {
     module.exports = api;
   }
@@ -17,13 +21,23 @@
       });
     });
   }
-})(typeof globalThis !== "undefined" ? globalThis : this, function createOptionsApi(core, defaultSites, pronunciation) {
+})(typeof globalThis !== "undefined" ? globalThis : this, function createOptionsApi(core, defaultSites, pronunciation, history, portable, dataBackup) {
   "use strict";
 
   const STORAGE_KEY = "settings";
   const CREDENTIALS_KEY = "apiCredentials";
   const DEVELOPER_KEEP_TABS_KEY = "developerKeepAiTabs";
   const UI_SCALE_KEY = "stvaiUiScale";
+  const UI_POSITION_KEYS = Object.freeze([
+    "stvaiTtsOverlayPositionV1", "stvaiToolbarPositionV2",
+    "stvaiNameEditorPositionV2", "stvaiNameManagerPositionV2"
+  ]);
+  const UI_BOOLEAN_KEYS = Object.freeze(["stvaiNavigationExpanded", "stvaiToolbarCollapsed"]);
+  const UI_ZOOM_KEYS = Object.freeze(["stvaiZoomGeneralPercent", "stvaiZoomStoryPercent"]);
+  const UI_BACKUP_KEYS = Object.freeze([UI_SCALE_KEY, ...UI_BOOLEAN_KEYS, ...UI_POSITION_KEYS, ...UI_ZOOM_KEYS]);
+  const HISTORY_KEY = "stvai-native-history-v1";
+  const PORTABLE_KEY = "stvai-native-portable-v1";
+  const ROLLBACK_KEY = "stvai-data-rollback-v1";
   const UI_SCALES = Object.freeze([0.5, 0.75, 1, 1.25, 1.5]);
   const PROVIDERS = Object.freeze(["chatgpt", "gemini", "openrouter_api", "gemini_api", "openai_api", "deepseek_api"]);
   const API_PROVIDERS = Object.freeze(PROVIDERS.filter((provider) => provider.endsWith("_api")));
@@ -45,11 +59,29 @@
     "nameGuide",
     "ttsPronunciationGuide"
   ]);
-  const MAX_IMPORT_BYTES = 1024 * 1024;
+  const MAX_IMPORT_BYTES = 5 * 1024 * 1024;
 
   function normalizeUiScale(value) {
     const number = Number(value);
     return UI_SCALES.includes(number) ? number : 1;
+  }
+
+  function sanitizeUi(input) {
+    const source = input && typeof input === "object" && !Array.isArray(input) ? input : {};
+    const result = {};
+    if (UI_SCALES.includes(Number(source[UI_SCALE_KEY]))) result[UI_SCALE_KEY] = Number(source[UI_SCALE_KEY]);
+    for (const key of UI_BOOLEAN_KEYS) if (typeof source[key] === "boolean") result[key] = source[key];
+    for (const key of UI_POSITION_KEYS) {
+      const value = source[key];
+      if (typeof value?.x !== "number" || typeof value?.y !== "number"
+        || !Number.isFinite(value.x) || !Number.isFinite(value.y)) continue;
+      result[key] = { x: Math.min(1, Math.max(0, value.x)), y: Math.min(1, Math.max(0, value.y)) };
+    }
+    for (const key of UI_ZOOM_KEYS) {
+      const value = Math.round(Number(source[key]));
+      if (Number.isFinite(value) && value >= 25 && value <= 500) result[key] = value;
+    }
+    return result;
   }
 
   function renderSupportedSites(document, sites = defaultSites) {
@@ -209,7 +241,9 @@
         if (key === "ttsPronunciationGuide" && candidate[key].length > 20_000) {
           if (strict) throw new Error("Danh sách phát âm vượt quá giới hạn an toàn.");
           result[key] = candidate[key].slice(0, 20_000);
-        } else result[key] = candidate[key];
+        } else result[key] = key === "nameGuide" && core?.normalizeNameGuide
+          ? core.normalizeNameGuide(candidate[key])
+          : candidate[key];
       }
       else if (strict && Object.hasOwn(candidate, key)) throw new Error(`Giá trị ${key} phải là chuỗi.`);
     }
@@ -261,12 +295,30 @@
     });
   }
 
+  function storageRemove(chromeApi, keys) {
+    if (!keys.length || typeof chromeApi.storage.local.remove !== "function") return Promise.resolve();
+    return new Promise((resolve, reject) => chromeApi.storage.local.remove(keys, () => {
+      const error = chromeApi.runtime?.lastError;
+      if (error) reject(new Error(error.message || "Không thể xóa dữ liệu cũ.")); else resolve();
+    }));
+  }
+
   function storageSet(chromeApi, settings) {
     return new Promise((resolve, reject) => {
       chromeApi.storage.local.set({ [STORAGE_KEY]: copySettings(settings) }, () => {
         const error = chromeApi.runtime?.lastError;
         if (error) reject(new Error(error.message || "Không thể lưu cài đặt."));
         else resolve();
+      });
+    });
+  }
+
+  function runtimeCall(chromeApi, message) {
+    return new Promise((resolve, reject) => {
+      chromeApi.runtime.sendMessage(message, value => {
+        const error = chromeApi.runtime?.lastError;
+        if (error) reject(new Error(error.message || "Không thể kết nối phần nền."));
+        else resolve(value);
       });
     });
   }
@@ -303,12 +355,12 @@
     status.dataset.tone = tone;
   }
 
-  function defaultDownload(text, document) {
+  function defaultDownload(text, document, filename = "phwgna-stv-backup.json") {
     const blob = new Blob([text], { type: "application/json;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = "phwgna-stv-ai-settings.json";
+    link.download = filename;
     link.click();
     setTimeout(() => URL.revokeObjectURL(url), 0);
   }
@@ -325,7 +377,7 @@
 
   function validateImportFile(file) {
     if (!file || typeof file.size !== "number") throw new Error("Không tìm thấy tệp JSON.");
-    if (file.size > MAX_IMPORT_BYTES) throw new Error("Tệp JSON quá lớn; giới hạn là 1 MB.");
+    if (file.size > MAX_IMPORT_BYTES) throw new Error("Tệp JSON quá lớn; giới hạn là 5 MB.");
     return true;
   }
 
@@ -360,6 +412,16 @@
     const credentials = {};
     for (const provider of API_PROVIDERS) if (typeof storedCredentials?.[provider] === "string") credentials[provider] = storedCredentials[provider];
     let currentProvider = draftSettings.provider;
+    let pendingImportText = "";
+    const importPreview = document.getElementById("importPreview");
+    const restoreImportButton = document.getElementById("restoreImportButton");
+    const storedRollback = await storageGet(chromeApi, ROLLBACK_KEY);
+    restoreImportButton.hidden = storedRollback?.format !== dataBackup?.FORMAT;
+    async function readUi() {
+      const values = {};
+      for (const key of UI_BACKUP_KEYS) values[key] = await storageGet(chromeApi, key);
+      return sanitizeUi(values);
+    }
 
     function captureApiFields() {
       if (!API_PROVIDERS.includes(currentProvider)) return;
@@ -393,6 +455,114 @@
     document.getElementById("developerKeepAiTabs").checked = developerKeepAiTabs;
     updateProviderPanel();
     setStatus(document, "Đã tải cài đặt.");
+
+    const portableStatus = document.getElementById("portableStatus");
+    const portableCandidates = document.getElementById("portableCandidates");
+    const portableItemsNode = document.getElementById("portableItems");
+    const portableStart = document.getElementById("portableLearnStart");
+    const portableFinish = document.getElementById("portableLearnFinish");
+    const portableApprove = document.getElementById("portableApprove");
+    let portableSessionId = "", portableItems = [];
+    const portableLabel = category => category === "nativeNames" ? "Bộ Name STV" : "Cài đặt STV";
+    function setPortableStatus(message, tone = "neutral") {
+      portableStatus.textContent = message;
+      portableStatus.dataset.tone = tone;
+    }
+    function renderPortableItems(items) {
+      portableItems = Array.isArray(items) ? items : [];
+      portableItemsNode.replaceChildren();
+      for (const item of portableItems) {
+        const row = document.createElement("div"); row.className = "portable-row";
+        const meta = document.createElement("div"); meta.className = "portable-row__meta";
+        const title = document.createElement("strong"); title.textContent = portableLabel(item.category);
+        const detail = document.createElement("div"); detail.className = "field-help";
+        detail.textContent = `${Number(item.keyCount) || 0} website · ${Number(item.chars) || 0} ký tự`;
+        meta.append(title, detail);
+        const spacer = document.createElement("span");
+        const disable = document.createElement("button"); disable.type = "button";
+        disable.className = "button button--secondary"; disable.textContent = "Tắt đồng bộ";
+        disable.addEventListener("click", async () => {
+          disable.disabled = true;
+          try {
+            const response = await runtimeCall(chromeApi, { type: "STVAI_PORTABLE_DISABLE", itemId: item.itemId });
+            if (!response?.ok) throw new Error(response?.code || "Không tắt được đồng bộ.");
+            renderPortableItems(response.items); setPortableStatus("Đã tắt đồng bộ; dữ liệu trên STV được giữ nguyên.", "success");
+          } catch (error) { setPortableStatus(error.message, "error"); disable.disabled = false; }
+        });
+        row.append(meta, spacer, disable); portableItemsNode.append(row);
+      }
+    }
+    function renderPortableCandidates(candidates) {
+      portableCandidates.replaceChildren();
+      for (const candidate of candidates || []) {
+        const row = document.createElement("div"); row.className = "portable-row"; row.dataset.key = candidate.key;
+        const meta = document.createElement("label"); meta.className = "portable-row__meta";
+        const enabled = document.createElement("input"); enabled.type = "checkbox"; enabled.checked = true;
+        const key = document.createElement("code"); key.textContent = candidate.key;
+        const detail = document.createElement("span"); detail.className = "field-help";
+        detail.textContent = ` ${candidate.kind === "array" ? "Danh sách" : "Dữ liệu"} · ${Number(candidate.chars) || 0} ký tự`;
+        meta.append(enabled, " ", key, detail);
+        const category = document.createElement("select"); category.setAttribute("aria-label", `Loại dữ liệu ${candidate.key}`);
+        for (const [value, label] of [["nativeNames", "Bộ Name STV"], ["nativePreferences", "Cài đặt STV"]]) {
+          const option = document.createElement("option"); option.value = value; option.textContent = label; category.append(option);
+        }
+        const target = document.createElement("select"); target.setAttribute("aria-label", `Ghép dữ liệu ${candidate.key}`);
+        const newItem = document.createElement("option"); newItem.value = ""; newItem.textContent = "Tạo mục đồng bộ mới"; target.append(newItem);
+        for (const item of portableItems) {
+          const option = document.createElement("option"); option.value = item.itemId;
+          option.textContent = `Ghép với ${portableLabel(item.category)}`; target.append(option);
+        }
+        row.append(meta, category, target); portableCandidates.append(row);
+      }
+      portableApprove.hidden = !(candidates || []).length;
+    }
+    if (typeof chromeApi.runtime?.sendMessage === "function") {
+      try {
+        const response = await runtimeCall(chromeApi, { type: "STVAI_PORTABLE_STATUS" });
+        if (response?.ok) {
+          renderPortableItems(response.items);
+          portableSessionId = response.sessionId || "";
+          portableFinish.disabled = !portableSessionId;
+        }
+      } catch (_) { setPortableStatus("Chưa kết nối được dịch vụ đồng bộ STV.", "error"); }
+    }
+    portableStart.addEventListener("click", async () => {
+      portableStart.disabled = true;
+      try {
+        const response = await runtimeCall(chromeApi, { type: "STVAI_PORTABLE_LEARN_START" });
+        if (!response?.ok) throw new Error(response?.code === "portable_no_stv_tab"
+          ? "Hãy mở một tab STV HTTPS rồi thử lại." : "Không bắt đầu được quá trình tìm dữ liệu.");
+        portableSessionId = response.sessionId; portableFinish.disabled = false;
+        setPortableStatus("Hãy sang tab STV, sửa hoặc lưu Bộ Name/cài đặt cần đồng bộ, rồi quay lại bấm Kiểm tra thay đổi.", "success");
+      } catch (error) { setPortableStatus(error.message, "error"); portableStart.disabled = false; }
+    });
+    portableFinish.addEventListener("click", async () => {
+      portableFinish.disabled = true;
+      try {
+        const response = await runtimeCall(chromeApi, { type: "STVAI_PORTABLE_LEARN_FINISH", sessionId: portableSessionId });
+        if (!response?.ok) throw new Error("Không đọc được thay đổi từ tab STV đã chọn.");
+        renderPortableCandidates(response.candidates);
+        setPortableStatus(response.candidates.length ? "Chọn loại dữ liệu rồi xác nhận đồng bộ." : "Không tìm thấy dữ liệu JSON an toàn vừa thay đổi.");
+      } catch (error) { setPortableStatus(error.message, "error"); portableFinish.disabled = false; }
+    });
+    portableApprove.addEventListener("click", async () => {
+      const selections = Array.from(portableCandidates.querySelectorAll(".portable-row")).flatMap(row => {
+        if (!row.querySelector('input[type="checkbox"]').checked) return [];
+        const selection = { key: row.dataset.key, category: row.querySelectorAll("select")[0].value };
+        const itemId = row.querySelectorAll("select")[1].value;
+        if (itemId) selection.itemId = itemId;
+        return [selection];
+      });
+      if (!selections.length) { setPortableStatus("Hãy chọn ít nhất một dữ liệu.", "error"); return; }
+      portableApprove.disabled = true;
+      try {
+        const response = await runtimeCall(chromeApi, { type: "STVAI_PORTABLE_APPROVE", sessionId: portableSessionId, selections });
+        if (!response?.ok) throw new Error(response?.code || "Không lưu được dữ liệu STV.");
+        portableSessionId = ""; renderPortableCandidates([]); renderPortableItems(response.items);
+        portableStart.disabled = false; portableFinish.disabled = true;
+        setPortableStatus("Đã bật đồng bộ dữ liệu STV gốc.", "success");
+      } catch (error) { setPortableStatus(error.message, "error"); portableApprove.disabled = false; }
+    });
 
     async function save() {
       const saveButton = document.getElementById("saveButton");
@@ -445,15 +615,164 @@
     }
 
     async function importText(text) {
+      let payload;
+      try { payload = JSON.parse(text); } catch (_) { payload = null; }
+      if (payload?.format === dataBackup?.FORMAT) {
+        const validated = dataBackup.validatePayload(payload, { sanitizeSettings, history, portable });
+        if (!validated.ok) throw new Error(`Tệp sao lưu không hợp lệ (${validated.code}).`);
+        const currentSettings = sanitizeSettings(await storageGet(chromeApi));
+        const currentHistory = await storageGet(chromeApi, HISTORY_KEY);
+        const currentPortable = await storageGet(chromeApi, PORTABLE_KEY);
+        const currentUi = await readUi();
+        const rollback = dataBackup.createPayload({
+          settings: currentSettings,
+          ui: currentUi,
+          history: currentHistory,
+          portable: currentPortable
+        });
+        rollback.missingUiKeys = UI_BACKUP_KEYS.filter(key => !Object.hasOwn(currentUi, key));
+        const settings = validated.settings;
+        const importedUi = sanitizeUi(validated.ui);
+        const importedUiScale = Object.hasOwn(importedUi, UI_SCALE_KEY)
+          ? importedUi[UI_SCALE_KEY] : normalizeUiScale(currentUi[UI_SCALE_KEY]);
+        await storageWrite(chromeApi, {
+          [ROLLBACK_KEY]: rollback,
+          [STORAGE_KEY]: copySettings(settings),
+          ...importedUi,
+          [HISTORY_KEY]: dataBackup.mergeHistory(currentHistory, validated.history),
+          [PORTABLE_KEY]: dataBackup.mergePortable(currentPortable, validated.portable)
+        });
+        draftSettings = settings;
+        formBaseline = copySettings(settings);
+        currentProvider = settings.provider;
+        uiScale = showUiScale(importedUiScale);
+        writeForm(document, settings);
+        updateProviderPanel();
+        setStatus(document, "Đã nhập và lưu dữ liệu.", "success");
+        return settings;
+      }
+      if (payload?.name && typeof payload.name === 'object' && !Array.isArray(payload.name)) {
+        const validated = dataBackup.validateStvExport(payload, {
+          history, portable, origins: defaultSites.ORIGINS
+        });
+        if (!validated.ok) throw new Error(`Tệp STV không hợp lệ (${validated.code}).`);
+        const currentHistory = await storageGet(chromeApi, HISTORY_KEY);
+        const currentPortable = await storageGet(chromeApi, PORTABLE_KEY);
+        const currentUi = await readUi();
+        const rollback = dataBackup.createPayload({
+          settings: sanitizeSettings(await storageGet(chromeApi)), ui: currentUi,
+          history: currentHistory, portable: currentPortable
+        });
+        rollback.missingUiKeys = UI_BACKUP_KEYS.filter(key => !Object.hasOwn(currentUi, key));
+        await storageWrite(chromeApi, {
+          [ROLLBACK_KEY]: rollback,
+          [HISTORY_KEY]: dataBackup.mergeHistory(currentHistory, validated.history),
+          [PORTABLE_KEY]: dataBackup.mergePortable(currentPortable, validated.portable)
+        });
+        setStatus(document, "Đã nhập lịch sử và Bộ Name từ STV.", "success");
+        return copySettings(draftSettings);
+      }
       const settings = parseImportText(text);
+      const currentUi = await readUi();
+      const rollback = dataBackup.createPayload({
+        settings: sanitizeSettings(await storageGet(chromeApi)),
+        ui: currentUi,
+        history: await storageGet(chromeApi, HISTORY_KEY),
+        portable: await storageGet(chromeApi, PORTABLE_KEY)
+      });
+      rollback.missingUiKeys = UI_BACKUP_KEYS.filter(key => !Object.hasOwn(currentUi, key));
+      await storageWrite(chromeApi, { [ROLLBACK_KEY]: rollback, [STORAGE_KEY]: copySettings(settings) });
       draftSettings = settings;
       formBaseline = copySettings(settings);
       currentProvider = settings.provider;
       writeForm(document, settings);
-      await storageSet(chromeApi, settings);
       updateProviderPanel();
       setStatus(document, "Đã nhập và lưu cài đặt.", "success");
       return settings;
+    }
+
+    function previewImportText(text) {
+      let payload;
+      try { payload = JSON.parse(text); } catch (_) { throw new Error("Tệp không phải JSON hợp lệ."); }
+      let summary;
+      if (payload?.format === dataBackup?.FORMAT) {
+        const validated = dataBackup.validatePayload(payload, { sanitizeSettings, history, portable });
+        if (!validated.ok) throw new Error(`Tệp sao lưu không hợp lệ (${validated.code}).`);
+        const created = new Date(validated.generatedAt || Date.now());
+        const date = [created.getUTCDate(), created.getUTCMonth() + 1].map(value => String(value).padStart(2, "0"))
+          .concat(created.getUTCFullYear()).join("/");
+        const shelfCount = Object.keys(validated.history.entries || {}).length;
+        const nativeNameCount = Object.values(validated.portable.items || {}).filter(item => item.category === "nativeNames").length;
+        const nativePreferenceCount = Object.values(validated.portable.items || {}).filter(item => item.category === "nativePreferences").length;
+        summary = `${date}: cài đặt tool, ${shelfCount} mục lịch sử, ${nativeNameCount} Bộ Name STV và ${nativePreferenceCount} cài đặt STV.`;
+      } else if (payload?.name && typeof payload.name === 'object' && !Array.isArray(payload.name)) {
+        const validated = dataBackup.validateStvExport(payload, {
+          history, portable, origins: defaultSites.ORIGINS
+        });
+        if (!validated.ok) throw new Error(`Tệp STV không hợp lệ (${validated.code}).`);
+        summary = `Tệp STV: ${validated.historyCount} mục lịch sử và ${validated.nativeNameCount} Bộ Name. Cài đặt tool được giữ nguyên.`;
+      } else {
+        parseImportText(text);
+        summary = "Tệp cài đặt tool phiên bản cũ. Dữ liệu STV hiện tại sẽ được giữ nguyên.";
+      }
+      pendingImportText = text;
+      document.getElementById("importPreviewSummary").textContent = summary;
+      importPreview.hidden = false;
+      return summary;
+    }
+
+    async function confirmImport() {
+      if (!pendingImportText) throw new Error("Chưa chọn tệp dữ liệu để nhập.");
+      const text = pendingImportText;
+      pendingImportText = "";
+      try {
+        const settings = await importText(text);
+        restoreImportButton.hidden = false;
+        return settings;
+      } finally {
+        importPreview.hidden = true;
+      }
+    }
+
+    async function restoreLastImport() {
+      const rollback = await storageGet(chromeApi, ROLLBACK_KEY);
+      const validated = dataBackup.validatePayload(rollback, { sanitizeSettings, history, portable });
+      if (!validated.ok) throw new Error("Không còn bản hoàn tác hợp lệ.");
+      const settings = validated.settings;
+      const restoredUi = sanitizeUi(validated.ui);
+      const restoredUiScale = normalizeUiScale(restoredUi[UI_SCALE_KEY]);
+      await storageWrite(chromeApi, {
+        [ROLLBACK_KEY]: null,
+        [STORAGE_KEY]: copySettings(settings),
+        ...restoredUi,
+        [HISTORY_KEY]: validated.history,
+        [PORTABLE_KEY]: validated.portable
+      });
+      await storageRemove(chromeApi, Array.isArray(rollback.missingUiKeys)
+        ? rollback.missingUiKeys.filter(key => UI_BACKUP_KEYS.includes(key)) : []);
+      draftSettings = settings;
+      formBaseline = copySettings(settings);
+      currentProvider = settings.provider;
+      uiScale = showUiScale(restoredUiScale);
+      writeForm(document, settings);
+      updateProviderPanel();
+      restoreImportButton.hidden = true;
+      setStatus(document, "Đã hoàn tác lần nhập gần nhất.", "success");
+      return settings;
+    }
+
+    async function exportData() {
+      captureApiFields();
+      const payload = dataBackup.createPayload({
+        settings: readForm(document, draftSettings),
+        ui: await readUi(),
+        history: await storageGet(chromeApi, HISTORY_KEY),
+        portable: await storageGet(chromeApi, PORTABLE_KEY)
+      });
+      const text = `${JSON.stringify(payload, null, 2)}\n`;
+      downloadText(text, document, "phwgna-stv-backup.json");
+      setStatus(document, "Đã xuất tệp sao lưu dữ liệu.", "success");
+      return payload;
     }
 
     form.addEventListener("submit", (event) => {
@@ -513,18 +832,25 @@
       reset().catch((error) => setStatus(document, error.message, "error"));
     });
     document.getElementById("importButton").addEventListener("click", () => importInput.click());
+    document.getElementById("importPreviewCancel").addEventListener("click", () => {
+      pendingImportText = "";
+      importPreview.hidden = true;
+    });
+    document.getElementById("importPreviewConfirm").addEventListener("click", () => {
+      void confirmImport().catch(error => setStatus(document, error.message, "error"));
+    });
+    restoreImportButton.addEventListener("click", () => {
+      void restoreLastImport().catch(error => setStatus(document, error.message, "error"));
+    });
     document.getElementById("exportButton").addEventListener("click", () => {
-      captureApiFields();
-      const text = `${JSON.stringify(createExportPayload(readForm(document, draftSettings)), null, 2)}\n`;
-      downloadText(text, document);
-      setStatus(document, "Đã xuất tệp JSON.", "success");
+      void exportData().catch(error => setStatus(document, error.message, "error"));
     });
     importInput.addEventListener("change", async () => {
       const file = importInput.files?.[0];
       if (!file) return;
       try {
         validateImportFile(file);
-        await importText(await readFileText(file));
+        previewImportText(await readFileText(file));
       } catch (error) {
         setStatus(document, error instanceof Error ? error.message : "Không thể nhập cài đặt.", "error");
       } finally {
@@ -532,7 +858,7 @@
       }
     });
 
-    return Object.freeze({ save, reset, importText, testApi });
+    return Object.freeze({ save, reset, importText, previewImportText, confirmImport, restoreLastImport, exportData, testApi });
   }
 
   return Object.freeze({

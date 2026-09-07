@@ -90,8 +90,9 @@
       }
       if (!doc || doc.documentId !== sender.documentId || doc.url !== url.href || doc.ticket !== message.ticket
         || doc.chapterId !== message.chapterId) return fail('history_stale_document');
-      const state = (await storage.local.get(STATE_KEY))[STATE_KEY] || { schema: 1, revision: 0, entries: {}, origins: {} };
+      const state = (await storage.local.get(STATE_KEY))[STATE_KEY] || { schema: 1, revision: 0, entries: {}, tombstones: {}, origins: {} };
       if (state.schema !== 1 || !state.entries || !state.origins) return fail('history_invalid_data');
+      if (!state.tombstones || typeof state.tombstones !== 'object' || Array.isArray(state.tombstones)) state.tombstones = {};
       const previous = JSON.stringify(state);
       const insecureKeys = new Set(Array.isArray(state.insecureKeys)
         ? state.insecureKeys.filter(key => typeof key === 'string').slice(0, codec.MAX_RECORDS)
@@ -113,7 +114,8 @@
         .filter(([key]) => !origin.suppressed.includes(key)).map(([, value]) => value.record);
       const needsCleanup = () => {
         const live = codec.parse(probe.raw);
-        return live.ok && live.records.some(record => insecureKeys.has(codec.key(record)));
+        return live.ok && live.records.some(record => insecureKeys.has(codec.key(record))
+          || Object.hasOwn(state.tombstones, codec.key(record)));
       };
       const response = () => ({ ok: true, revision: state.revision, records: allowedRecords(),
         needsCleanup: needsCleanup() });
@@ -132,7 +134,8 @@
       if (message.action === 'prepare') {
         if (!origin.observed || origin.lastRaw !== message.raw || state.revision !== message.revision) return fail('history_stale_snapshot');
         if (origin.pending) return fail(origin.pending.expires > now() ? 'history_write_busy' : 'history_write_uncertain');
-        const trustedRaw = codec.removeKeys(message.raw, insecureKeys);
+        const blockedKeys = new Set([...insecureKeys, ...Object.keys(state.tombstones)]);
+        const trustedRaw = codec.removeKeys(message.raw, blockedKeys);
         const merged = codec.mergeRaw(trustedRaw, allowedRecords());
         if (merged === (message.raw || '')) return { ok: true, unchanged: true, revision: state.revision };
         if (!Object.hasOwn(origin, 'backup')) origin.backup = message.raw;
@@ -157,12 +160,17 @@
         const old = origin.observed ? positions(origin.lastRaw) : {};
         const fresh = positions(message.raw);
         for (const key of Object.keys(old)) {
-          if (!Object.hasOwn(fresh, key) && !origin.suppressed.includes(key)) origin.suppressed.push(key);
+          if (!Object.hasOwn(fresh, key)) {
+            delete state.entries[key];
+            state.tombstones[key] = { revision: state.revision + 1 };
+            if (!origin.suppressed.includes(key)) origin.suppressed.push(key);
+          }
         }
         const rank = codec.PRIORITY.indexOf(url.origin);
         for (const record of parsed.records) {
           const key = codec.key(record);
-          if (insecureKeys.has(key) || codec.current(record.current).chapterId === '0') continue; // Native unread bookmark, not a reading position.
+          if (insecureKeys.has(key) || Object.hasOwn(state.tombstones, key)
+            || codec.current(record.current).chapterId === '0') continue; // Native unread bookmark, not a reading position.
           if (origin.suppressed.includes(key) || (origin.observed && old[key] === record.current)) continue;
           const existing = state.entries[key];
           // Changed native data after a browser/extension session gap has unknown
@@ -184,6 +192,10 @@
           state.revision++;
         }
         const existing = state.entries[key];
+        if (Object.hasOwn(state.tombstones, key)) {
+          delete state.tombstones[key];
+          state.revision++;
+        }
         origin.suppressed = origin.suppressed.filter(value => value !== key);
         if (!existing || existing.kind !== 'read' || existing.epoch !== sessions.epoch || doc.order > existing.order) {
           state.entries[key] = { record: codec.portable(reading), kind: 'read', rank: codec.PRIORITY.indexOf(url.origin),

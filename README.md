@@ -1,4 +1,4 @@
-# phwgna STV AI Translator
+# Phwgna Stv
 
 Tiện ích dịch và nghe truyện trên Sáng Tác Việt của **phwgna**. Bản chính thức **luôn miễn phí**.
 

@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="light dark">
-    <title>Cài đặt · phwgna STV AI Translator</title>
+    <title>Cài đặt · Phwgna Stv</title>
     <link rel="icon" href="../assets/icons/phwgna-cat-32.png" type="image/png">
     <link rel="stylesheet" href="options.css">
   </head>
@@ -14,7 +14,7 @@
       <div class="topbar__inner">
         <img class="brand-mark" src="../assets/icons/phwgna-cat-128.png" alt="" aria-hidden="true" draggable="false">
         <div>
-          <p class="eyebrow">phwgna STV AI Translator</p>
+          <p class="eyebrow phwgna-product-name">Phwgna Stv</p>
           <h1>Cài đặt dịch</h1>
         </div>
       </div>
@@ -186,17 +186,41 @@
           </div>
         </section>
 
+        <section class="settings-card" aria-labelledby="portable-title">
+          <div class="section-heading">
+            <div><h2 id="portable-title">Dữ liệu STV gốc</h2></div>
+            <p>Bộ Name tự động đồng bộ khi bạn mở truyện trên STV. Hai nút dưới chỉ dùng để nhận thêm cài đặt STV khác. Tool không sao chép đăng nhập, cookie, token hoặc API key.</p>
+          </div>
+          <div class="portable-actions">
+            <button class="button button--secondary" id="portableLearnStart" type="button">Tìm cài đặt STV khác</button>
+            <button class="button button--secondary" id="portableLearnFinish" type="button" disabled>Kiểm tra thay đổi</button>
+          </div>
+          <p class="field-help" id="portableStatus" role="status" aria-live="polite">Chưa có dữ liệu STV gốc được đồng bộ.</p>
+          <div id="portableCandidates" class="portable-list" aria-label="Dữ liệu STV vừa thay đổi"></div>
+          <button class="button button--primary" id="portableApprove" type="button" hidden>Xác nhận đồng bộ</button>
+          <div id="portableItems" class="portable-list" aria-label="Dữ liệu STV đang đồng bộ"></div>
+        </section>
+
         <section class="settings-card settings-card--compact" aria-labelledby="data-title">
           <div class="section-heading">
             <div>
-              <h2 id="data-title">Sao lưu cài đặt</h2>
+              <h2 id="data-title">Sao lưu dữ liệu</h2>
             </div>
-            <p>JSON chỉ gồm các tùy chọn, prompt và bộ name của tiện ích.</p>
+            <p>Nhập bản sao lưu của tool hoặc tệp <code>.txt</code> do STV xuất. Không chứa API key, cookie hay cache dịch.</p>
           </div>
           <div class="data-actions">
-            <button class="button button--secondary" id="importButton" type="button">Nhập JSON</button>
+            <button class="button button--secondary" id="importButton" type="button">Nhập tệp sao lưu</button>
             <button class="button button--secondary" id="exportButton" type="button">Xuất JSON</button>
-            <input id="importFile" class="visually-hidden" type="file" accept="application/json,.json" aria-label="Chọn tệp JSON cài đặt">
+            <button class="button button--ghost" id="restoreImportButton" type="button" hidden>Hoàn tác lần nhập gần nhất</button>
+            <input id="importFile" class="visually-hidden" type="file" accept="application/json,text/plain,.json,.txt" aria-label="Chọn tệp sao lưu của tool hoặc STV">
+          </div>
+          <div class="import-preview" id="importPreview" role="dialog" aria-modal="true" aria-labelledby="importPreviewTitle" hidden>
+            <h3 id="importPreviewTitle">Xác nhận nhập dữ liệu</h3>
+            <p id="importPreviewSummary"></p>
+            <div class="data-actions">
+              <button class="button button--ghost" id="importPreviewCancel" type="button">Hủy</button>
+              <button class="button button--primary" id="importPreviewConfirm" type="button">Nhập dữ liệu</button>
+            </div>
           </div>
         </section>
 
@@ -237,6 +261,9 @@
     <script src="../src/shared/core.js"></script>
     <script src="../src/shared/tts-pronunciation.js"></script>
     <script src="../src/shared/stv-sites.js"></script>
+    <script src="../src/shared/native-history.js"></script>
+    <script src="../src/shared/native-portable.js"></script>
+    <script src="../src/shared/data-backup.js"></script>
     <script src="../src/shared/official-build.js"></script>
     <script src="options.js"></script>
   </body>

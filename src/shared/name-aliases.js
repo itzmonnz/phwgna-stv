@@ -1,8 +1,9 @@
 (function attachNameAliases(root, factory) {
-  const api = factory();
+  const core = root.STVAICore || (typeof require === "function" ? require("./core.js") : null);
+  const api = factory(core);
   if (typeof module === "object" && module.exports) module.exports = api;
   root.STVAINameAliases = api;
-})(typeof globalThis !== "undefined" ? globalThis : this, function createNameAliasesApi() {
+})(typeof globalThis !== "undefined" ? globalThis : this, function createNameAliasesApi(core) {
   "use strict";
 
   const LOCAL_ALIASES = Object.freeze({
@@ -19,7 +20,8 @@
 
   function exactGuideValue(guide, source) {
     let found = "";
-    for (const rawLine of String(guide || "").split(/\r?\n/)) {
+    const normalized = core?.normalizeNameGuide?.(guide) || String(guide || "");
+    for (const rawLine of normalized.split(/\r?\n/)) {
       let line = rawLine.trim();
       if (line.startsWith("$")) line = line.slice(1).trim();
       const separator = line.indexOf("=");

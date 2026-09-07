@@ -32,6 +32,7 @@
       nameEditor: root.STVAINameEditor,
       nameManager: root.STVAINameManager,
       nameAliases: root.STVAINameAliases,
+      portableContent: root.STVAIPortableContent,
       prefetch: root.STVAIPrefetch,
       sites: root.STVAISites,
       networkRequest: root.STVAIPrefetch.request,
@@ -332,6 +333,7 @@
       nameEditor,
       nameManager,
       nameAliases,
+      portableContent,
       prefetch,
       networkRequest,
       parseHtml,
@@ -574,6 +576,11 @@
         listeningPending: state.ttsPending || ttsOpening,
         captchaRetry
       });
+    }
+
+    function reportAction(value) {
+      updateToolbar(value);
+      ui.showToast?.(document, value, { kind: "notice", timeoutMs: 1_500 });
     }
 
     function listeningCanQueue() {
@@ -1385,7 +1392,7 @@
             );
             settings = sanitizedSettings(core, { ...settings, nameGuide });
             await storageSet(storage, { settings });
-            updateToolbar(`Đã lưu Name $${mapping.source}=${mapping.target} — Bấm Dịch AI để dịch lại.`);
+            reportAction(`Đã lưu Name $${mapping.source}=${mapping.target} — Bấm Dịch AI để dịch lại.`);
           }
         });
         removeSharedDomEventGuard?.protect?.(nameEditorInstance.root);
@@ -1408,7 +1415,27 @@
             await stopPrefetch();
             settings = sanitizedSettings(core, { ...settings, nameGuide });
             await storageSet(storage, { settings });
-            updateToolbar("Đã lưu bộ Name riêng của tool — chương hiện tại không tự dịch lại.");
+            reportAction("Đã lưu bộ Name riêng của tool — chương hiện tại không tự dịch lại.");
+          },
+          async onSyncStvName(draft) {
+            const shared = portableContent?.readNameForImport?.(document.defaultView);
+            if (!shared?.ok) {
+              const messages = {
+                stv_shared_name_missing: "STV chưa có Bộ Name dùng chung.",
+                stv_shared_name_unavailable: "Không đọc được Bộ Name dùng chung của STV.",
+                stv_shared_name_insecure: "Hãy mở STV bằng HTTPS để đồng bộ Bộ Name dùng chung.",
+                stv_shared_name_invalid: "Bộ Name dùng chung của STV không hợp lệ.",
+                portable_size_limit: "Bộ Name dùng chung của STV vượt giới hạn an toàn 512 KB.",
+                portable_invalid_name: "Bộ Name dùng chung của STV không hợp lệ."
+              };
+              throw new Error(messages[shared?.code] || "Không đọc được Bộ Name dùng chung của STV.");
+            }
+            const imported = core.importStvSharedName(draft, shared.raw);
+            await stopPrefetch();
+            settings = sanitizedSettings(core, { ...settings, nameGuide: imported.value });
+            await storageSet(storage, { settings });
+            reportAction("Đã bổ sung Name STV vào Bộ Name chung — chương hiện tại không tự dịch lại.");
+            return imported;
           }
         });
         removeSharedDomEventGuard?.protect?.(nameManagerInstance.root);
@@ -1432,7 +1459,10 @@
         runNow(async () => {
           const result = await sendRuntime(runtime, { type: "STVAI_CLEAR_ALL_CACHE" }).catch(() => null);
           toolbar.cacheClearing = false;
-          if (!destroyed) updateToolbar(result?.ok ? "Đã xóa cache." : "Không xóa được cache.");
+          if (!destroyed) {
+            if (result?.ok) reportAction("Đã xóa cache.");
+            else updateToolbar("Không xóa được cache.");
+          }
         });
       });
       toolbar.provider.addEventListener("change", () => {

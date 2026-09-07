@@ -573,8 +573,8 @@
     }
 
     function readResponseState() {
-      const text = readLatestResponse();
       const response = findLatestResponse();
+      const text = readResponseText(response);
       const complete = Boolean(domResolver.resolve("completion", { response }).element);
       const refused = common.classifyTerminalResponse(text, null, "") === "content_refused";
       return {
@@ -590,18 +590,27 @@
       return new Promise((resolve, reject) => {
         let observer;
         let timer;
+        let mutationTimer;
+        const coalesceMs = Math.max(0, Number(options.responseCoalesceMs ?? 125) || 0);
         const finish = value => {
           clearTimeout(timer);
+          clearTimeout(mutationTimer);
           observer?.disconnect();
           signal?.removeEventListener("abort", abort);
           resolve(value);
         };
         const abort = () => {
-          clearTimeout(timer); observer?.disconnect();
+          clearTimeout(timer); clearTimeout(mutationTimer); observer?.disconnect();
           reject(new common.ProviderError("cancelled", "Tác vụ đã bị hủy."));
         };
         if (signal?.aborted) return abort();
-        observer = new Observer(() => finish({ kind: "mutation", at: Date.now() }));
+        observer = new Observer(() => {
+          if (mutationTimer) return;
+          mutationTimer = setTimeout(
+            () => finish({ kind: "mutation", at: Date.now() }),
+            Math.min(coalesceMs, Math.max(0, Number(timeoutMs) || 0))
+          );
+        });
         observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true, attributes: true });
         timer = setTimeout(() => finish({ kind: "timer", at: Date.now() }), Math.max(0, Number(timeoutMs) || 0));
         signal?.addEventListener("abort", abort, { once: true });

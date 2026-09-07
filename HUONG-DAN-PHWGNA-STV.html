@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Hướng dẫn cài phwgna STV</title>
+  <title>Hướng dẫn cài Phwgna Stv</title>
   <style>
     :root{color-scheme:dark;--bg:#11131b;--panel:#1a1d28;--line:#34384b;--text:#f6f7fb;--muted:#bec2d4;--accent:#818cf8;--cyan:#22d3ee;--danger:#fda4af}
     *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:radial-gradient(circle at top,#242744 0,#11131b 34rem);color:var(--text);font:16px/1.65 system-ui,-apple-system,"Segoe UI",sans-serif}
@@ -18,18 +18,18 @@
 <body>
 <main>
   <header>
-    <div class="brand"><img src="assets/icons/phwgna-cat-128.png" alt="Icon mèo phwgna"><div><div class="eyebrow">phwgna STV 0.2.8</div><h1>Đọc truyện trên PC hoặc điện thoại</h1></div></div>
+    <div class="brand"><img src="assets/icons/phwgna-cat-128.png" alt="Icon mèo phwgna"><div><div class="eyebrow">Phwgna Stv 0.2.8</div><h1>Đọc truyện trên PC hoặc điện thoại</h1></div></div>
     <p class="lead">Chạy <strong>Cai-dat-phwgna-STV.bat</strong>, chọn đúng thiết bị và làm theo các bước hiện trên màn hình. Điện thoại điều khiển PC từ xa; extension vẫn chạy trên PC.</p>
     <nav><a class="button primary" href="#cai-nhanh">Cài nhanh</a><a class="button" href="#dien-thoai">Thiết lập điện thoại</a><a class="button" href="#su-co">Xử lý sự cố</a></nav>
   </header>
 
   <section aria-labelledby="chon"><h2 id="chon">Chọn cách dùng</h2><div class="choices">
     <div class="choice"><h3>Dùng trên PC</h3><p>Cài extension vào Chrome hoặc Cốc Cốc. Không yêu cầu quyền Admin.</p></div>
-    <div class="choice phone"><h3>Dùng trên điện thoại</h3><p>PC chạy trình duyệt, phwgna STV và Sunshine. Điện thoại Android dùng Artemis để xem và điều khiển.</p></div>
+    <div class="choice phone"><h3>Dùng trên điện thoại</h3><p>PC chạy trình duyệt, Phwgna Stv và Sunshine. Điện thoại Android dùng Artemis để xem và điều khiển.</p></div>
   </div></section>
 
   <section aria-labelledby="ket-noi"><h2 id="ket-noi">Sơ đồ kết nối</h2><div class="flow">
-    <div><strong>PC đang bật</strong><span class="muted">Chrome/Cốc Cốc + phwgna STV + Sunshine</span></div><div class="arrow" aria-hidden="true">→</div><div><strong>Điện thoại Android</strong><span class="muted">Artemis + cảm ứng + bàn phím mềm + âm thanh TTS</span></div>
+    <div><strong>PC đang bật</strong><span class="muted">Chrome/Cốc Cốc + Phwgna Stv + Sunshine</span></div><div class="arrow" aria-hidden="true">→</div><div><strong>Điện thoại Android</strong><span class="muted">Artemis + cảm ứng + bàn phím mềm + âm thanh TTS</span></div>
   </div><p class="small muted">Cùng Wi‑Fi là mặc định. Tailscale là tùy chọn khi đọc ngoài mạng nhà.</p></section>
 
   <section id="cai-nhanh" aria-labelledby="bang"><h2 id="bang">Bảng cài nhanh</h2><div class="table-wrap"><table>
@@ -43,7 +43,7 @@
   </table></div></section>
 
   <section id="dien-thoai" aria-labelledby="phone"><h2 id="phone">Thiết lập điện thoại</h2>
-    <div class="qr"><img src="windows/assets/artemis-qr.png" alt="QR tải Artemis non-root"><div><h3>1. Cài Artemis</h3><p>Quét QR bằng điện thoại. Đây là APK non-root đã khóa phiên bản cho bản phwgna STV này.</p><a class="button" href="https://github.com/ClassicOldSong/moonlight-android/releases/download/v20.2.6/artemis-nonRoot_game-release.apk">Tải Artemis 20.2.6</a></div></div>
+    <div class="qr"><img src="windows/assets/artemis-qr.png" alt="QR tải Artemis non-root"><div><h3>1. Cài Artemis</h3><p>Quét QR bằng điện thoại. Đây là APK non-root đã khóa phiên bản cho bản Phwgna Stv này.</p><a class="button" href="https://github.com/ClassicOldSong/moonlight-android/releases/download/v20.2.6/artemis-nonRoot_game-release.apk">Tải Artemis 20.2.6</a></div></div>
     <ol class="steps"><li>Tạo tài khoản Sunshine tại <code>https://localhost:47990</code>. Trình duyệt có thể cảnh báo chứng chỉ nội bộ ở lần đầu.</li><li>Trên PC, bấm <b>Lấy IP kết nối</b> trong wizard hoặc chạy <b>Lay-IP-ket-noi-Sunshine.bat</b>. IP trong nhà sẽ hiện lớn và đã tự sao chép.</li><li>Đảm bảo PC và điện thoại cùng Wi‑Fi. Trong Artemis, chọn <b>thêm máy tính</b> rồi <b>dán</b> IP vừa sao chép.</li><li>Chọn PC, lấy PIN rồi nhập PIN vào Sunshine.</li><li>Mở <b>Desktop</b>, mở STV và bật audio để nghe TTS trên điện thoại.</li></ol>
     <p class="muted"><strong>Chọn đúng loại IP:</strong> cùng Wi‑Fi dùng <b>IP trong nhà</b> (thường bắt đầu bằng <code>192.168</code> hoặc <code>10.</code>). Khi ở ngoài mạng nhà, bật Tailscale trên cả hai máy và dùng <b>IP Tailscale</b> mà file lấy IP hiển thị.</p>
   </section>

@@ -64,10 +64,50 @@
     }
     return count ? 'synced' : 'history_toc_unrecognized';
   }
+  function displayText(value) {
+    return String(value || '').replace(/<[^>]*>/g, '')
+      .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'").replace(/&amp;/g, '&');
+  }
+  function paintRecent(document, raw) {
+    const container = document.getElementById('tusach');
+    if (!container) return 'not_applicable';
+    const parsed = codec.parse(raw);
+    if (!parsed.ok) return parsed.code;
+    container.replaceChildren();
+    if (!parsed.records.length) {
+      container.textContent = 'Chưa đọc truyện nào, hãy bắt đầu đọc truyện để lưu';
+    }
+    for (const record of parsed.records.slice(0, 300)) {
+      const position = codec.current(record.current);
+      const row = document.createElement('div'); row.className = 'roundblock';
+      const title = document.createElement('a'); title.className = 'title';
+      title.href = `/truyen/${record.host}/1/${record.id}/`;
+      title.append(displayText(record.name), document.createElement('br'), displayText(position.title).slice(0, 40));
+      const buttons = document.createElement('div'); buttons.className = 'btngroup';
+      const target = `/truyen/${record.host}/1/${record.id}/${position.chapterId}/`;
+      const resume = document.createElement('button'); resume.className = 'btn'; resume.textContent = '…';
+      resume.dataset.stvaiContinue = target;
+      resume.addEventListener('click', () => document.defaultView.location.assign(target));
+      const remove = document.createElement('button'); remove.className = 'btn'; remove.textContent = '✕';
+      remove.addEventListener('click', () => {
+        let live;
+        try { live = codec.parse(document.defaultView.localStorage.getItem('tusach')); } catch (_) { return; }
+        if (!live.ok) return;
+        const next = live.records.filter(value => codec.key(value) !== codec.key(record)).map(JSON.stringify).join('~/~');
+        try { document.defaultView.localStorage.setItem('tusach', next); } catch (_) { return; }
+        paintRecent(document, next);
+      });
+      buttons.append(resume, remove); row.append(title, buttons); container.append(row);
+    }
+    container.style.visibility = 'visible';
+    container.style.height = 'auto';
+    return 'synced';
+  }
   function createObserver({ window, send = message => window.chrome.runtime.sendMessage(message) }) {
     const document = window.document;
     const documentToken = window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    let ticket = '', url = '', route = '', navigation = 0, lastRaw, revision = -1, readSent = false;
+    let ticket = '', url = '', route = '', navigation = 0, lastRaw, candidateRaw, revision = -1, readSent = false;
     let running = false, stopped = false, interval, observer;
     let status = 'idle', errorCode = 'none', count = 0, writes = 0, toc = 'not_applicable';
     let invalidRaw;
@@ -95,7 +135,7 @@
         const nextRoute = routeKey();
         if (route !== nextRoute) {
           route = nextRoute;
-          url = window.location.href; ticket = ''; lastRaw = undefined; readSent = false; revision = -1;
+          url = window.location.href; ticket = ''; lastRaw = undefined; candidateRaw = undefined; readSent = false; revision = -1;
           invalidRaw = undefined;
         }
         if (!sites.siteUrl(url)) return;
@@ -113,6 +153,15 @@
         if (!parsed.ok) { invalidRaw = raw; check(parsed); return; }
         count = parsed.records.length;
         const read = !readSent && readProof(document, raw);
+        if (raw !== lastRaw && lastRaw !== undefined && !read) {
+          if (candidateRaw !== raw) {
+            candidateRaw = raw;
+            status = 'synced'; errorCode = 'none';
+            toc = paintToc(document, raw);
+            return;
+          }
+          candidateRaw = undefined;
+        } else candidateRaw = undefined;
         const response = raw !== lastRaw || read
           ? await message('observe', { raw, read }) : await message('poll', { revision });
         if (stale() || !check(response)) return;
@@ -140,7 +189,8 @@
         if (!codec.parse(prepared.raw).ok) { check({ code: 'history_invalid_data' }); return; }
         try { window.localStorage.setItem('tusach', prepared.raw); }
         catch (error) { await settle('aborted'); throw error; }
-        lastRaw = prepared.raw; writes++;
+        paintRecent(document, prepared.raw);
+        lastRaw = prepared.raw; candidateRaw = undefined; writes++;
         const applied = await settle('applied');
         if (stale()) return;
         toc = paintToc(document, window.localStorage.getItem('tusach'));
@@ -190,5 +240,5 @@
     function snapshot() { return { status, errorCode, recordCount: count, writeCount: writes, toc }; }
     return Object.freeze({ start, stop, tick, snapshot });
   }
-  return Object.freeze({ createObserver, readProof, paintToc });
+  return Object.freeze({ createObserver, readProof, paintToc, paintRecent });
 });

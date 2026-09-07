@@ -6,7 +6,8 @@
   'use strict';
   const MAX_LENGTH = 1_000_000;
   const MAX_RECORDS = 2000;
-  const PRIORITY = ['https://sangtacviet.com', 'http://sangtacviet.com', 'https://sangtacviet.app', 'http://14.225.254.182'];
+  // Append new origins so persisted legacy ranks keep their original meaning.
+  const PRIORITY = ['https://sangtacviet.com', 'http://sangtacviet.com', 'https://sangtacviet.app', 'http://14.225.254.182', 'https://sangtacviet.vip'];
   const key = record => JSON.stringify([String(record.host), String(record.id)]);
   function id(value) {
     if (typeof value === 'number' && !Number.isSafeInteger(value)) return '';

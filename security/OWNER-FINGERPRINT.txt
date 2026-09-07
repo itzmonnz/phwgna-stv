@@ -1,4 +1,4 @@
-phwgna STV AI Translator official owner: phwgna
+Phwgna Stv official owner: phwgna
 Ed25519 public-key SHA-256 fingerprint:
 85ac74c199d0a6028bce843d6f68d7632317912b460aad1a7431193767ec9871
 

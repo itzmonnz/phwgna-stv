@@ -1517,20 +1517,20 @@
 
   function createToolbar(document, settings, options = {}) {
     const root = element(document, "section", "stvai-toolbar stvai-toolbar--side-menu");
-    root.setAttribute("aria-label", "phwgna STV AI Translator");
+    root.setAttribute("aria-label", "Phwgna Stv");
     root.dataset.collapsed = String(options.initialCollapsed === true);
 
     const identity = element(document, "div", "stvai-identity");
     identity.append(
       brandIcon(document, "stvai-brand-icon stvai-identity-mark"),
-      element(document, "span", "stvai-identity-name", "phwgna AI Translator")
+      element(document, "span", "stvai-identity-name phwgna-product-name", "Phwgna Stv")
     );
 
     const menuToggle = button(
       document,
       "stvai-menu-toggle",
       "‹",
-      "Thu gọn menu phwgna STV AI Translator"
+      "Thu gọn menu Phwgna Stv"
     );
     menuToggle.setAttribute("aria-expanded", "true");
     menuToggle.setAttribute("aria-controls", "stvai-menu-body");
@@ -1538,7 +1538,7 @@
       document,
       "stvai-mini-toggle",
       "",
-      "Mở menu phwgna STV AI Translator"
+      "Mở menu Phwgna Stv"
     );
     miniToggle.dataset.stvaiInteractiveDragHandle = "true";
     miniToggle.setAttribute("aria-expanded", "true");
@@ -1720,7 +1720,7 @@
       document,
       "stvai-button stvai-button--settings",
       "Cài đặt",
-      "Mở cài đặt phwgna STV AI Translator"
+      "Mở cài đặt Phwgna Stv"
     );
     const namesButton = button(
       document,
@@ -1793,11 +1793,11 @@
       menuToggle.setAttribute("aria-expanded", String(!collapsed));
       miniToggle.setAttribute("aria-expanded", String(!collapsed));
       menuToggle.setAttribute("aria-label", collapsed
-        ? "Mở menu phwgna STV AI Translator"
-        : "Thu gọn menu phwgna STV AI Translator");
+        ? "Mở menu Phwgna Stv"
+        : "Thu gọn menu Phwgna Stv");
       miniToggle.setAttribute("aria-label", collapsed
-        ? `Mở menu phwgna STV AI Translator${miniToggle.dataset.progressSummary || ""}`
-        : `Thu gọn menu phwgna STV AI Translator${miniToggle.dataset.progressSummary || ""}`);
+        ? `Mở menu Phwgna Stv${miniToggle.dataset.progressSummary || ""}`
+        : `Thu gọn menu Phwgna Stv${miniToggle.dataset.progressSummary || ""}`);
       if (animate) {
         if (iconBefore?.width > 0) options.onLayoutChange?.({
           x: iconBefore.left + iconBefore.width / 2,
@@ -1872,11 +1872,16 @@
 
   function showToast(document, message, options = {}) {
     document.querySelector(".stvai-toast")?.remove();
-    const toast = element(document, "div", "stvai-toast stvai-toast--error", String(message || "").trim());
-    toast.setAttribute("role", "alert");
-    toast.setAttribute("aria-live", "assertive");
+    const kind = options.kind === "notice" ? "notice" : "error";
+    const toast = element(document, "div", `stvai-toast stvai-toast--${kind}`, String(message || "").trim());
+    if (kind === "notice") toast.setAttribute("aria-hidden", "true");
+    else {
+      toast.setAttribute("role", "alert");
+      toast.setAttribute("aria-live", "assertive");
+    }
     document.body.append(toast);
-    const timeoutMs = Math.max(1, Math.min(10_000, Number(options.timeoutMs) || 3_000));
+    const defaultTimeout = kind === "notice" ? 1_500 : 3_000;
+    const timeoutMs = Math.max(1, Math.min(10_000, Number(options.timeoutMs) || defaultTimeout));
     document.defaultView?.setTimeout?.(() => toast.remove(), timeoutMs);
     return toast;
   }
@@ -1946,7 +1951,7 @@
       const action = toolbar.root.dataset.collapsed === "true" ? "Mở" : "Thu gọn";
       const summary = visible ? ` — đã dịch ${completed}/${total} batch` : "";
       toolbar.miniToggle.dataset.progressSummary = summary;
-      toolbar.miniToggle.setAttribute("aria-label", `${action} menu phwgna STV AI Translator${summary}`);
+      toolbar.miniToggle.setAttribute("aria-label", `${action} menu Phwgna Stv${summary}`);
       toolbar.miniToggle.title = visible ? `Tiến độ chương: ${completed}/${total} batch` : "";
     }
     toolbar.root.dataset.state = value.state || "idle";

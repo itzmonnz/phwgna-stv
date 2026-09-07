@@ -47,17 +47,49 @@
   position: fixed;
   z-index: 2147483400;
   top: max(16px, env(safe-area-inset-top));
-  right: max(16px, env(safe-area-inset-right));
-  width: min(360px, calc(100vw - 32px));
+  width: fit-content;
+  max-width: min(360px, calc(100vw - 32px));
   padding: 12px 14px;
-  border: 1px solid #f87171;
-  border-radius: 10px;
+  border-radius: 14px;
   color: #fff;
-  background: #7f1d1d;
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.32);
   font: 700 14px/1.45 "Segoe UI", Arial, sans-serif;
   text-align: left;
+  overflow-wrap: anywhere;
   pointer-events: none;
+}
+
+.stvai-toast--error {
+  right: max(16px, env(safe-area-inset-right));
+  border: 1px solid #f87171;
+  background: #7f1d1d;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.32);
+}
+
+.stvai-toast--notice {
+  left: max(16px, env(safe-area-inset-left));
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: linear-gradient(145deg, rgba(38, 43, 58, 0.82), rgba(19, 22, 31, 0.74));
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.3), inset 0 1px rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(16px) saturate(1.15);
+  -webkit-backdrop-filter: blur(16px) saturate(1.15);
+  animation: stvai-notice-toast 1.5s both;
+}
+
+@keyframes stvai-notice-toast {
+  0% { opacity: 0; transform: translateX(-24px) scale(0.98); }
+  16%, 78% { opacity: 1; transform: translateX(0) scale(1); }
+  100% { opacity: 0; transform: translateX(-14px) scale(0.99); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stvai-toast--notice {
+    animation-name: stvai-notice-toast-reduced;
+  }
+}
+
+@keyframes stvai-notice-toast-reduced {
+  0%, 100% { opacity: 0; }
+  8%, 88% { opacity: 1; }
 }
 
 .stvai-toolbar *,
@@ -821,8 +853,38 @@
 
 .stvai-name-manager-actions {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
   gap: 6px;
+}
+
+.stvai-name-manager-sync-stv {
+  flex: 1 0 100%;
+  font-weight: 700;
+}
+
+.stvai-name-manager-sync-confirmation:not([hidden]) {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 12px;
+  background: rgba(20, 22, 29, 0.72);
+}
+
+.stvai-name-manager-sync-confirmation-text {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--stvai-muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.stvai-name-manager-sync-confirm,
+.stvai-name-manager-sync-cancel {
+  min-width: 0;
+  font-weight: 700;
 }
 
 .stvai-name-manager-add,
@@ -1033,6 +1095,39 @@
 .stvai-identity-name {
   font-size: 13px;
   font-weight: 750;
+}
+
+@supports ((background-clip: text) or (-webkit-background-clip: text)) {
+  .phwgna-product-name {
+    color: var(--stvai-ink);
+    background-image: linear-gradient(120deg, #a78bfa 0%, #60a5fa 32%, #22d3ee 50%, #f472b6 68%, #a78bfa 100%);
+    background-size: 300% 100%;
+    background-position: 0% 50%;
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: phwgna-brand-flow 4s linear infinite;
+  }
+}
+
+@keyframes phwgna-brand-flow {
+  to { background-position: 100% 50%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .phwgna-product-name {
+    animation: none;
+    background-position: 50% 50%;
+  }
+}
+
+@media (forced-colors: active) {
+  .phwgna-product-name {
+    color: CanvasText;
+    background: none;
+    -webkit-text-fill-color: currentColor;
+    animation: none;
+  }
 }
 
 .stvai-actions {
@@ -2361,6 +2456,9 @@
   .stvai-name-editor .stvai-name-add,
   .stvai-name-editor .stvai-name-final-save,
   .stvai-name-manager input,
+  .stvai-name-manager .stvai-name-manager-sync-stv,
+  .stvai-name-manager .stvai-name-manager-sync-confirm,
+  .stvai-name-manager .stvai-name-manager-sync-cancel,
   .stvai-name-manager .stvai-name-manager-add,
   .stvai-name-manager .stvai-name-manager-save,
   .stvai-name-manager .stvai-name-manager-delete,

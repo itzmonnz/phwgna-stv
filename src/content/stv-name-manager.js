@@ -5,6 +5,9 @@
 })(typeof globalThis !== "undefined" ? globalThis : this, function createNameManagerApi() {
   "use strict";
 
+  const core = globalThis.STVAICore
+    || (typeof require === "function" ? require("../shared/core.js") : null);
+
   function element(document, tag, className, text = "") {
     const node = document.createElement(tag);
     node.className = className;
@@ -302,11 +305,26 @@
     const list = element(document, "div", "stvai-name-manager-list");
     const message = element(document, "p", "stvai-name-manager-message");
     const actions = element(document, "div", "stvai-name-manager-actions");
+    const syncStv = element(document, "button", "stvai-name-manager-sync-stv", "Đồng bộ Name STV");
+    const syncConfirmation = element(document, "div", "stvai-name-manager-sync-confirmation");
+    const syncConfirmationText = element(
+      document,
+      "p",
+      "stvai-name-manager-sync-confirmation-text",
+      "Nhập Name đang hiển thị của STV vào Bộ Name phwgna?"
+    );
+    const confirmSyncStv = element(document, "button", "stvai-name-manager-sync-confirm", "Xác nhận nhập");
+    const cancelSyncStv = element(document, "button", "stvai-name-manager-sync-cancel", "Hủy");
     const add = element(document, "button", "stvai-name-manager-add", "+ Thêm");
     const save = element(document, "button", "stvai-name-manager-save", "Lưu bộ Name");
-    add.type = save.type = "button";
-    actions.append(add, save);
-    root.append(topbar, search, list, message, actions);
+    syncStv.type = confirmSyncStv.type = cancelSyncStv.type = add.type = save.type = "button";
+    syncConfirmation.hidden = true;
+    syncConfirmation.setAttribute("role", "group");
+    syncConfirmation.setAttribute("aria-label", "Xác nhận nhập Name STV");
+    syncConfirmation.append(syncConfirmationText, confirmSyncStv, cancelSyncStv);
+    syncStv.setAttribute("aria-expanded", "false");
+    actions.append(syncStv, add, save);
+    root.append(topbar, search, list, message, syncConfirmation, actions);
     const positionController = (options.attachDraggable || attachDraggable)(root, topbar, {
       storage: options.positionStorage,
       storageKey: "stvai-name-manager-position"
@@ -325,6 +343,9 @@
     function setSaving(value) {
       saving = Boolean(value);
       add.disabled = saving;
+      syncStv.disabled = saving;
+      confirmSyncStv.disabled = saving;
+      cancelSyncStv.disabled = saving;
       save.disabled = saving;
       close.disabled = saving;
       for (const row of list.children) {
@@ -356,8 +377,10 @@
     }
 
     function load(value) {
+      closeSyncConfirmation();
       list.replaceChildren();
-      for (const mapping of sortRowsByTranslatedName(parseNameGuide(value))) addRow(mapping, { locked: true });
+      const normalized = core?.normalizeNameGuide?.(value) || value;
+      for (const mapping of sortRowsByTranslatedName(parseNameGuide(normalized))) addRow(mapping, { locked: true });
       if (!list.children.length) addRow();
       message.textContent = "";
     }
@@ -379,18 +402,24 @@
       if (rows.some(({ source, target }) => !source || !target || /[=\r\n]/.test(source) || /[\r\n]/.test(target))) {
         return { error: "Có mục sai định dạng hoặc còn trống." };
       }
-      const seen = new Set();
-      for (const row of rows) {
-        if (seen.has(row.source)) return { error: "Có tiếng Trung bị trùng." };
-        seen.add(row.source);
-      }
-      const sortedRows = sortRowsByTranslatedName(rows);
+      const normalized = core?.normalizeNameGuide?.(serializeRows(rows)) || serializeRows(rows);
+      const sortedRows = sortRowsByTranslatedName(parseNameGuide(normalized));
       return { value: serializeRows(sortedRows), rows: sortedRows };
+    }
+
+    function closeSyncConfirmation(restoreFocus = false) {
+      syncConfirmation.hidden = true;
+      syncStv.setAttribute("aria-expanded", "false");
+      if (restoreFocus && !root.hidden) syncStv.focus();
     }
 
     search.addEventListener("input", filter);
     add.addEventListener("click", () => { if (!saving) addRow().querySelector("input")?.focus(); });
-    close.addEventListener("click", () => { if (!saving) root.hidden = true; });
+    close.addEventListener("click", () => {
+      if (saving) return;
+      closeSyncConfirmation();
+      root.hidden = true;
+    });
     save.addEventListener("click", () => {
       if (saving) return;
       const result = collect();
@@ -399,26 +428,55 @@
       pending = pending.then(async () => {
         try {
           await options.onSave?.(result.value);
-          for (const mapping of result.rows) list.append(mapping.row);
           for (const row of list.children) {
-            const source = row.querySelector(".stvai-name-manager-source").value.trim();
-            const target = row.querySelector(".stvai-name-manager-target").value.trim();
-            if (source && target) setRowLocked(row, true);
+            const remove = row.querySelector(".stvai-name-manager-delete");
+            if (remove) remove.disabled = false;
           }
+          load(result.value);
           message.textContent = "Đã lưu bộ Name riêng của tool.";
         } catch (error) {
           message.textContent = error?.message || "Không lưu được bộ Name.";
         } finally { setSaving(false); }
       });
     });
+    syncStv.addEventListener("click", () => {
+      if (saving) return;
+      syncConfirmation.hidden = false;
+      syncStv.setAttribute("aria-expanded", "true");
+      confirmSyncStv.focus();
+    });
+    cancelSyncStv.addEventListener("click", () => closeSyncConfirmation(true));
+    confirmSyncStv.addEventListener("click", () => {
+      if (saving || syncConfirmation.hidden) return;
+      const draft = collect();
+      if (draft.error) { message.textContent = draft.error; return; }
+      closeSyncConfirmation();
+      setSaving(true);
+      pending = pending.then(async () => {
+        try {
+          if (typeof options.onSyncStvName !== "function") throw new Error("Chưa kết nối được dữ liệu Name STV.");
+          const synced = await options.onSyncStvName(draft.value);
+          if (!synced || typeof synced.value !== "string") throw new Error("Dữ liệu Name STV không hợp lệ.");
+          load(synced.value);
+          const stats = synced.stats || {};
+          message.textContent = `Đã đồng bộ Name STV: thêm ${stats.added || 0}, gộp ${stats.merged || 0}, trùng ${stats.duplicate || 0}, bỏ qua ${stats.ignored || 0}.`;
+        } catch (error) {
+          message.textContent = error?.message || "Không đồng bộ được Name STV.";
+        } finally { setSaving(false); }
+      });
+    });
     load(options.nameGuide || "");
     return {
-      root, search, add, save, message,
+      root, search, syncStv, syncConfirmation, confirmSyncStv, cancelSyncStv, add, save, message,
       open(value) {
         if (saving) return;
         load(value); root.hidden = false; positionController?.refresh?.(); search.focus();
       },
-      close() { if (!saving) root.hidden = true; },
+      close() {
+        if (saving) return;
+        closeSyncConfirmation();
+        root.hidden = true;
+      },
       destroy() { positionController?.destroy?.(); root.remove(); },
       refreshPosition() { return positionController?.refresh?.(); },
       whenIdle() { return pending; }
