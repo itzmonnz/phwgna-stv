@@ -11,7 +11,7 @@
     },
     {
       "path": "HUONG-DAN-PHWGNA-STV.html",
-      "sha256": "19e1dc6fdf2ef1239e2dbfb62af96ceacf2fa2442eeec27ea442be8748d83c9d"
+      "sha256": "41eb9d989021f6312d24ba06dee5da76f4d877a6b16f2220ee590bb002b01fb0"
     },
     {
       "path": "LICENSE",
@@ -23,7 +23,7 @@
     },
     {
       "path": "README.md",
-      "sha256": "77bbf2a0707102273421bd4ca0ed024b54dc986b33b044862db383d3c7a51cca"
+      "sha256": "0317e979a14fe83d07e8c843837a0428dd843088f916ff978c8cefa95b9eebf4"
     },
     {
       "path": "SECURITY.md",
@@ -59,7 +59,7 @@
     },
     {
       "path": "onboarding/onboarding.html",
-      "sha256": "2c8a71ccdf2a38cec82d206cf8df7406ae4b4127248bb21c6842998e084cd442"
+      "sha256": "f61cb54e1404c6bd906eb1fa97c24a995cc5b84f64bb0d88948672d13b720622"
     },
     {
       "path": "onboarding/onboarding.js",
@@ -71,7 +71,7 @@
     },
     {
       "path": "options/options.html",
-      "sha256": "35e901e61ea0e1906f926186971a8c50f8d00a7ef4f1690a8cf3a623384c241b"
+      "sha256": "14120e99172f012e6ca08e14b17fae749fecb81816cb6dfa2c1c846cea4ea74a"
     },
     {
       "path": "options/options.js",
@@ -83,11 +83,11 @@
     },
     {
       "path": "popup/popup.html",
-      "sha256": "b133491354d7923a1c4a189d8fb06eaba512b6e1f0ab57cf9beb236da1231f7c"
+      "sha256": "28065b199cac04f668fa77b60a41f7e154cb3f35ba3c1f8e59a2d5884035d501"
     },
     {
       "path": "popup/popup.js",
-      "sha256": "3dba06c2a311fd047e5fba500ec35a6dba85443a2abdc81a6488f26b6003a58f"
+      "sha256": "68477839a7814dcdf1f1f5d703a589e94e3e174748dd16d50520881ea4f623ae"
     },
     {
       "path": "security/OWNER-FINGERPRINT.txt",
@@ -99,7 +99,7 @@
     },
     {
       "path": "src/background.js",
-      "sha256": "e5262b23b76a5eb617f74d832defc9b5d4101e1329fcf183c40be7108c20526a"
+      "sha256": "87928048974e7393bb602ff476cb96e8146fe06e8846c4895ca39a966fc4383e"
     },
     {
       "path": "src/content/chatgpt-dom-resolver.js",
@@ -147,7 +147,7 @@
     },
     {
       "path": "src/content/stv-name-editor.js",
-      "sha256": "2dfc140b0ae5e469452db7a2890e915b33fd994f3a0c720fbc9fc7e3f89f887d"
+      "sha256": "da82875044cd80ac063ad46f4d2273be040da481ae3ace8ec05e0002220a78d9"
     },
     {
       "path": "src/content/stv-name-manager.js",
@@ -204,6 +204,10 @@
     {
       "path": "src/shared/data-backup.js",
       "sha256": "1c2fc4e771040d38fe4a70bff30152d586f85ce65a46bfc14c41c23a1a085349"
+    },
+    {
+      "path": "src/shared/distribution-channel.js",
+      "sha256": "7687df71a9599b990cc143235809035fd965b6814d7ec7040b8c30bd2edcb00f"
     },
     {
       "path": "src/shared/error-journal.js",
@@ -275,7 +279,7 @@
     },
     {
       "path": "windows/phwgna-setup-wizard.ps1",
-      "sha256": "cf089663c0f4f63ccbc7dd349b7486e680efc1e3e20a3ff8bc564889d56793f9"
+      "sha256": "e7ddcec04f85d9ffe2b5a4a861a5758925ddccb1d16b4ed6f3105db4fad306d9"
     },
     {
       "path": "windows/phwgna-show-ip.ps1",
@@ -283,7 +287,7 @@
     }
   ],
   "product": "Phwgna Stv",
-  "sourceCommit": "4aff641a95f6c675da9f9d007ebd89289d009b2b",
+  "sourceCommit": "59d3a0bd918a8717d2f7ee61cc63a8ab963e45f9",
   "officialRepository": "https://github.com/itzmonnz/phwgna-stv",
   "officialReleaseUrl": "https://github.com/itzmonnz/phwgna-stv/releases/tag/v0.2.8",
   "publicKeyFingerprint": "85ac74c199d0a6028bce843d6f68d7632317912b460aad1a7431193767ec9871"

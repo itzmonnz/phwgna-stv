@@ -784,9 +784,13 @@
       }).catch((error) => {
         if (lookupId === japaneseLookupRequest) {
           const tabCount = Math.min(5, Math.max(2, Math.trunc(Number(error?.tabCount)) || 2));
-          compareMessage.textContent = error?.message === "lookup-provider-busy"
-            ? `${tabCount} tab AI đang bận — hãy tra lại sau.`
-            : "Không kết nối được dịch vụ tra tên Nhật.";
+          if (["lookup-consent-required", "lookup-automation-consent-required"].includes(error?.message)) {
+            compareMessage.textContent = "Hãy bấm Dịch AI và xác nhận tự động một lần, rồi tra lại.";
+          } else {
+            compareMessage.textContent = error?.message === "lookup-provider-busy"
+              ? `${tabCount} tab AI đang bận — hãy tra lại sau.`
+              : "Không kết nối được dịch vụ tra tên Nhật.";
+          }
         }
       }).finally(() => {
         if (lookupId === japaneseLookupRequest) {

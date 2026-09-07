@@ -1,14 +1,17 @@
 (function attachPopup(root, factory) {
-  const api = factory(root.STVAIDiagnostics || (typeof require === "function" ? require("../src/content/stv-diagnostics.js") : null));
+  const api = factory(
+    root.STVAIDiagnostics || (typeof require === "function" ? require("../src/content/stv-diagnostics.js") : null),
+    root.STVAIDistribution || (typeof require === "function" ? require("../src/shared/distribution-channel.js") : null)
+  );
   if (typeof module === "object" && module.exports) module.exports = api;
   root.STVAIPopup = api;
 
   if (typeof module !== "object" && root.document && root.chrome?.tabs) {
     root.document.addEventListener("DOMContentLoaded", () => {
-      void api.initPopup({ document: root.document, chromeApi: root.chrome });
+      void api.initPopup({ document: root.document, chromeApi: root.chrome, distribution: root.STVAIDistribution });
     });
   }
-})(typeof globalThis !== "undefined" ? globalThis : this, function createPopupApi(diagnostics) {
+})(typeof globalThis !== "undefined" ? globalThis : this, function createPopupApi(diagnostics, defaultDistribution) {
   "use strict";
 
   const MESSAGE_TYPE = "STVAI_GET_PAGE_DIAGNOSTICS";
@@ -682,7 +685,7 @@
     document.getElementById("exportDiagnostic").disabled = true;
   }
 
-  async function initPopup({ document, chromeApi, copyText = defaultCopyText }) {
+  async function initPopup({ document, chromeApi, copyText = defaultCopyText, distribution = defaultDistribution }) {
     if (!document || !chromeApi?.tabs) throw new TypeError("document and chrome.tabs are required");
     const exportButton = document.getElementById("exportDiagnostic");
     const clearErrorLog = document.getElementById("clearErrorLog");
@@ -691,7 +694,10 @@
     let diagnostic;
     let activeTab;
     let toolEnabled = false;
-    const canCheckUpdate = typeof chromeApi.runtime?.sendMessage === "function";
+    const externalUpdates = distribution?.usesExternalUpdater?.() !== false;
+    const updateRow = document.querySelector(".update-row");
+    if (updateRow) updateRow.hidden = !externalUpdates;
+    const canCheckUpdate = externalUpdates && typeof chromeApi.runtime?.sendMessage === "function";
     const initialUpdate = canCheckUpdate
       ? runtimeMessage(chromeApi, { type: GET_UPDATE_STATUS }).catch(() => null)
       : Promise.resolve(null);
@@ -826,7 +832,7 @@
       toolEnabled = false;
     }
     renderToolToggle(document, toolEnabled);
-    renderUpdateStatus(document, await initialUpdate);
+    if (externalUpdates) renderUpdateStatus(document, await initialUpdate);
 
     return Object.freeze({ get diagnostic() { return diagnostic; } });
   }

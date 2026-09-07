@@ -8,13 +8,11 @@ Add-Type -AssemblyName System.Drawing
 # Source labels: Dùng trên PC; Dùng trên điện thoại; Đọc ngoài mạng nhà bằng Tailscale;
 # Tạo shortcut tăng tốc; Artemis; Sunshine.
 $packageRoot = Split-Path -Parent $PSScriptRoot
-$extensionSource = if (Test-Path -LiteralPath (Join-Path $packageRoot 'extension\manifest.json')) { Join-Path $packageRoot 'extension' } else { $packageRoot }
 $lock = Read-PhwgnaThirdPartyLock -Path (Join-Path $packageRoot 'third-party-lock.json')
-$stateRoot = Join-Path $env:LOCALAPPDATA 'phwgna-stv-ai-translator'
-$installRoot = $stateRoot
-$installedExtension = Join-Path $installRoot 'extension'
 $guidePath = Join-Path $packageRoot 'HUONG-DAN-PHWGNA-STV.html'
 $ipHelperPath = Join-Path $packageRoot 'windows\phwgna-show-ip.ps1'
+$installPageUrl = 'https://itzmonnz.github.io/phwgna-stv/install/'
+$toolsPageUrl = 'https://itzmonnz.github.io/phwgna-stv/tools/'
 $browsers = @(Find-PhwgnaBrowsers)
 
 $form = New-Object Windows.Forms.Form
@@ -97,7 +95,7 @@ $divider2.BackColor = [Drawing.Color]::FromArgb(49,53,68)
 $divider2.SetBounds(32,318,696,1)
 $form.Controls.Add($divider2)
 [void](Add-Label 'Bước 3 · Chuẩn bị' 32 335 696 26 11 $true)
-$install = New-SetupButton 'Chuẩn bị tiện ích trên PC' 32 369 696 $primary
+$install = New-SetupButton 'Mở trang cài Phwgna Stv' 32 369 696 $primary
 $install.SetBounds(32, 369, 696, 52)
 $install.Font = New-Object Drawing.Font('Segoe UI Semibold',11)
 $install.TabIndex = 4
@@ -121,10 +119,10 @@ $artemisDownload = New-SetupButton 'Sao chép link tải Artemis' 416 437 312 $s
 $artemisDownload.TabIndex = 6
 
 $supportHeading = Add-Label 'Công cụ hỗ trợ' 32 405 696 26 11 $true
-$openExtensions = New-SetupButton 'Sao chép địa chỉ Extensions' 32 437 220 $secondary
-$openExtensions.TabIndex = 8
-$openFolder = New-SetupButton 'Mở thư mục tiện ích' 264 437 220 $secondary
-$openFolder.TabIndex = 9
+$openInstall = New-SetupButton 'Mở trang cài extension' 32 437 220 $secondary
+$openInstall.TabIndex = 8
+$openTools = New-SetupButton 'Mở trang tải Công cụ' 264 437 220 $secondary
+$openTools.TabIndex = 9
 $guide = New-SetupButton 'Xem hướng dẫn trong trình duyệt' 496 437 232 $secondary
 $guide.TabIndex = 10
 $performance = New-SetupButton 'Tạo shortcut tăng tốc' 32 489 696 $positive
@@ -137,13 +135,13 @@ $status.BackColor = [Drawing.Color]::FromArgb(26,29,40)
 
 function Update-WizardMode {
     $phone = $phoneMode.Checked
-    $install.Text = if ($phone) { 'Chuẩn bị PC cho điện thoại' } else { 'Chuẩn bị tiện ích trên PC' }
+    $install.Text = if ($phone) { 'Chuẩn bị PC cho điện thoại' } else { 'Mở trang cài Phwgna Stv' }
     foreach ($control in @($phoneHeading,$artemisQr,$tailscale,$artemisDownload,$showIp)) { $control.Visible = $phone }
     if (-not $phone) { $tailscale.Checked = $false }
     $supportY = if ($phone) { 521 } else { 405 }
     $supportHeading.SetBounds(32,$supportY,696,26)
-    $openExtensions.SetBounds(32,($supportY+32),220,44)
-    $openFolder.SetBounds(264,($supportY+32),220,44)
+    $openInstall.SetBounds(32,($supportY+32),220,44)
+    $openTools.SetBounds(264,($supportY+32),220,44)
     $guide.SetBounds(496,($supportY+32),232,44)
     $performance.SetBounds(32,($supportY+84),696,44)
     $status.SetBounds(32,($supportY+144),696,64)
@@ -152,23 +150,9 @@ function Update-WizardMode {
 $phoneMode.Add_CheckedChanged({ Update-WizardMode })
 $pcMode.Add_CheckedChanged({ Update-WizardMode })
 function Selected-Browser { if ($browserSelect.SelectedIndex -ge 0 -and $browserSelect.SelectedIndex -lt $browsers.Count) { $browsers[$browserSelect.SelectedIndex] } }
-function Open-ExtensionsPage {
-    $browser = Selected-Browser
-    if ($browser -and -not $DryRun) {
-        try { Set-Clipboard -Value $browser.extensionsUrl }
-        catch {
-            $status.Text = 'Không sao chép được địa chỉ Extensions. Hãy mở hướng dẫn để làm thủ công.'
-            return
-        }
-        $arguments = Get-PhwgnaExtensionsLaunchArguments -Url $browser.extensionsUrl
-        Start-Process -FilePath $browser.path -ArgumentList $arguments
-        $instruction = 'Đã sao chép địa chỉ Extensions. Trong tab mới, nhấn Ctrl+V rồi Enter.'
-        $status.Text = if ($phoneMode.Checked) { "$($status.Text)`r`n$instruction" } else { $instruction }
-    }
-}
 $download.Add_Click({ if(-not $DryRun){Start-Process 'https://www.google.com/chrome/'} })
-$openExtensions.Add_Click({ Open-ExtensionsPage })
-$openFolder.Add_Click({ if(Test-Path -LiteralPath $installedExtension){Start-Process explorer.exe -ArgumentList $installedExtension}else{$status.Text='Chưa có thư mục tiện ích. Hãy hoàn thành Bước 3 trước.'} })
+$openInstall.Add_Click({ if(-not $DryRun){Start-Process $installPageUrl} })
+$openTools.Add_Click({ if(-not $DryRun){Start-Process $toolsPageUrl} })
 $guide.Add_Click({ if(Test-Path -LiteralPath $guidePath){Start-Process $guidePath} })
 $artemisDownload.Add_Click({
     if (-not $DryRun) {
@@ -194,13 +178,9 @@ $performance.Add_Click({
 $install.Add_Click({
     $install.Enabled=$false
     try {
-        $extension = Install-PhwgnaExtension -SourceDirectory $extensionSource -DestinationRoot $installRoot -DryRun:$DryRun
-        $browser = Selected-Browser
-        if (-not $DryRun) {
-            Write-SetupLog -StateRoot $stateRoot -Step 'install' -Code 'completed' -Version $extension.version -Browser $(if($browser){$browser.id}else{''})
-        }
         if ($pcMode.Checked) {
-            $status.Text='Đã chuẩn bị tiện ích và mở đúng thư mục. Trình duyệt không cho tiện ích tự bấm “Tải tiện ích đã giải nén”, nên bạn hãy bấm nút đó rồi chọn thư mục vừa mở.'
+            if (-not $DryRun) { Start-Process $installPageUrl }
+            $status.Text='Đã mở trang cài Phwgna Stv. Bản Chrome Web Store sẽ được Chrome tự cập nhật.'
         }
         else {
             $status.Text='Đang kiểm tra và cài Sunshine. Windows có thể hỏi quyền một lần...'
@@ -222,15 +202,14 @@ $install.Add_Click({
                 $ip=Get-PhwgnaLanAddress
                 if ($ip) {
                     try { Set-Clipboard -Value $ip } catch { }
-                    $status.Text="Sunshine đã sẵn sàng. Trang tạo tài khoản Sunshine và trang Extensions sẽ mở trong trình duyệt; đây là hai bước cần bạn xác nhận thủ công.`r`nIP cùng Wi-Fi: $ip (đã sao chép)"
+                    $status.Text="Sunshine đã sẵn sàng. Trang tạo tài khoản Sunshine và trang cài extension sẽ mở; đây là hai bước cần bạn xác nhận thủ công.`r`nIP cùng Wi-Fi: $ip (đã sao chép)"
                 } else {
                     $status.Text='Sunshine đã sẵn sàng. Hãy bấm “Lấy IP kết nối” sau khi PC đã vào Wi-Fi.'
                 }
             }
-            if (-not $DryRun) { Start-Process 'https://localhost:47990' }
+            if (-not $DryRun) { Start-Process 'https://localhost:47990'; Start-Process $installPageUrl }
         }
-        if (-not $DryRun) { Open-ExtensionsPage; Start-Process explorer.exe -ArgumentList $extension.path }
-    } catch { $status.Text="Không thể chuẩn bị tiện ích; bản cài cũ vẫn được giữ nguyên. Code: $($_.Exception.Message)" }
+    } catch { $status.Text="Không thể hoàn tất bước chuẩn bị. Code: $($_.Exception.Message)" }
     finally { $install.Enabled=$browsers.Count -gt 0 }
 })
 

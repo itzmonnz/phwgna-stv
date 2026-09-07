@@ -1,5 +1,9 @@
 if (typeof importScripts === "function") {
-  importScripts("shared/stv-sites.js", "shared/native-history.js", "shared/history-sync.js", "shared/native-portable.js", "shared/portable-sync.js", "shared/core.js", "shared/tts-pronunciation.js", "shared/cache.js", "shared/name-preview.js", "shared/api-providers.js", "shared/update-check.js", "shared/onboarding.js", "shared/error-journal.js");
+  importScripts("shared/distribution-channel.js");
+  const backgroundImports = ["shared/stv-sites.js", "shared/native-history.js", "shared/history-sync.js", "shared/native-portable.js", "shared/portable-sync.js", "shared/core.js", "shared/tts-pronunciation.js", "shared/cache.js", "shared/name-preview.js", "shared/api-providers.js"];
+  if (globalThis.STVAIDistribution?.usesExternalUpdater?.() !== false) backgroundImports.push("shared/update-check.js");
+  backgroundImports.push("shared/onboarding.js", "shared/error-journal.js");
+  importScripts(...backgroundImports);
 }
 
 (function attachBackground(root, factory) {
@@ -12,14 +16,15 @@ if (typeof importScripts === "function") {
   const historyApi = root.STVAIHistorySync || (typeof require === 'function' ? require('./shared/history-sync.js') : null);
   const portableSyncApi = root.STVAIPortableSync || (typeof require === 'function' ? require('./shared/portable-sync.js') : null);
   const updateApi = root.STVAIUpdateCheck || (typeof require === "function" ? require("./shared/update-check.js") : null);
+  const distributionApi = root.STVAIDistribution || (typeof require === "function" ? require("./shared/distribution-channel.js") : null);
   const onboardingApi = root.STVAIOnboarding || (typeof require === "function" ? require("./shared/onboarding.js") : null);
   const errorJournalApi = root.STVAIErrorJournal || (typeof require === "function" ? require("./shared/error-journal.js") : null);
-  const api = factory(core, pronunciation, cacheApi, previewApi, apiProviders, sites, historyApi, portableSyncApi, updateApi, onboardingApi, errorJournalApi);
+  const api = factory(core, pronunciation, cacheApi, previewApi, apiProviders, sites, historyApi, portableSyncApi, updateApi, onboardingApi, errorJournalApi, distributionApi);
   if (typeof module === "object" && module.exports) {
     module.exports = api;
   }
   root.STVAIBackground = api;
-})(typeof globalThis !== "undefined" ? globalThis : this, function createBackgroundApi(defaultCore, pronunciation, cacheApi, previewApi, defaultApiProviders, sites, historyApi, portableSyncApi, defaultUpdateApi, defaultOnboardingApi, defaultErrorJournalApi) {
+})(typeof globalThis !== "undefined" ? globalThis : this, function createBackgroundApi(defaultCore, pronunciation, cacheApi, previewApi, defaultApiProviders, sites, historyApi, portableSyncApi, defaultUpdateApi, defaultOnboardingApi, defaultErrorJournalApi, defaultDistribution) {
   "use strict";
 
   const SETUP_PARTS = ["introduction", "system", "names"];
@@ -4697,6 +4702,10 @@ if (typeof importScripts === "function") {
             consent = false;
           }
           if (!consent) return { ok: false, requestId, reason: "lookup-consent-required" };
+          const automation = await readAutomationConfig();
+          if (!automation.consented) {
+            return { ok: false, requestId, reason: "lookup-automation-consent-required" };
+          }
           const tabId = sender.tab.id;
           await cancelJapaneseLookup(activeJapaneseLookups.get(tabId));
           const controller = new AbortController();
@@ -5261,7 +5270,9 @@ if (typeof importScripts === "function") {
       }
     }
     const repository = cacheApi.createCacheRepository({ indexedDB: rootObject.indexedDB });
-    const updateChecker = defaultUpdateApi?.createUpdateChecker?.({ storage: chromeApi.storage?.local });
+    const updateChecker = defaultDistribution?.usesExternalUpdater?.() === false
+      ? null
+      : defaultUpdateApi?.createUpdateChecker?.({ storage: chromeApi.storage?.local });
     const extensionVersion = chromeApi.runtime?.getManifest?.().version || "0.0.0";
     const controller = createBackgroundController({
       core: defaultCore,
