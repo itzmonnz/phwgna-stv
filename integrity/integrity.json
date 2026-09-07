@@ -23,7 +23,7 @@
     },
     {
       "path": "README.md",
-      "sha256": "a2721f5ead8bbaa69c2fece1ce59f7e924d7a6cfd8df0233e012fca10249e49e"
+      "sha256": "2e652ca0f08c3366334fa776e04f123f273e688f7cc9364638c1265fc7047666"
     },
     {
       "path": "SECURITY.md",
@@ -59,7 +59,7 @@
     },
     {
       "path": "onboarding/onboarding.html",
-      "sha256": "f61cb54e1404c6bd906eb1fa97c24a995cc5b84f64bb0d88948672d13b720622"
+      "sha256": "de1176b3f81adb4753f4c9590d7571f0367cc142f16b7e5a54381bc14a0947a7"
     },
     {
       "path": "onboarding/onboarding.js",
@@ -71,7 +71,7 @@
     },
     {
       "path": "options/options.html",
-      "sha256": "14120e99172f012e6ca08e14b17fae749fecb81816cb6dfa2c1c846cea4ea74a"
+      "sha256": "1dc3f96195d692f3ffd40dc65c7bec04c14c1c6aa5ff0d5eaab76290216709a0"
     },
     {
       "path": "options/options.js",
@@ -199,7 +199,7 @@
     },
     {
       "path": "src/shared/core.js",
-      "sha256": "200c617baf38ddf07d6cb4928bb4c398e7e8a55f6b9cfcf824785aebe3690f41"
+      "sha256": "acbb4c313468e3ee249ab325f43e8b3c03593d5e9360854e4b950848512affb1"
     },
     {
       "path": "src/shared/data-backup.js",
@@ -207,7 +207,7 @@
     },
     {
       "path": "src/shared/distribution-channel.js",
-      "sha256": "7687df71a9599b990cc143235809035fd965b6814d7ec7040b8c30bd2edcb00f"
+      "sha256": "922a46ef49ff6ffedc84f45c5e2774c5a26f9f0b394fc5a5345aa94bc7271830"
     },
     {
       "path": "src/shared/error-journal.js",
@@ -251,7 +251,7 @@
     },
     {
       "path": "src/shared/tts-pronunciation.js",
-      "sha256": "cd7946805d28a79ed3cc1a31fe7542ee50e1370433c09637627015f882702499"
+      "sha256": "ad9309490d490f987b2dcf7ba900173f9886fe6113e4d47857ab029b84f41f0c"
     },
     {
       "path": "src/shared/update-check.js",
@@ -275,11 +275,11 @@
     },
     {
       "path": "windows/phwgna-setup-core.ps1",
-      "sha256": "ca08fbd569df09b88d9643dae3619b8a59994877fe04ee6778ccbcb23a5ed1fd"
+      "sha256": "f9e472caa0b734e592ffeec537b6be74f77250b9977bd238ca5f84778cec08b1"
     },
     {
       "path": "windows/phwgna-setup-wizard.ps1",
-      "sha256": "e7ddcec04f85d9ffe2b5a4a861a5758925ddccb1d16b4ed6f3105db4fad306d9"
+      "sha256": "c18341a0f2ef9784e30bf60b71fdaf76ca33afc717fdb3653d8400958ac0129c"
     },
     {
       "path": "windows/phwgna-show-ip.ps1",
@@ -287,8 +287,8 @@
     }
   ],
   "product": "Phwgna Stv",
-  "sourceCommit": "9b40b9f69c0cd95556b50e3c37bc4cef0746e000",
+  "sourceCommit": "0fd63aecc7569ba2d2bef51733222d77320b4995",
   "officialRepository": "https://github.com/itzmonnz/phwgna-stv",
-  "officialReleaseUrl": "https://github.com/itzmonnz/phwgna-stv/releases/tag/v0.2.8",
+  "officialReleaseUrl": "https://github.com/itzmonnz/phwgna-stv/releases",
   "publicKeyFingerprint": "85ac74c199d0a6028bce843d6f68d7632317912b460aad1a7431193767ec9871"
 }

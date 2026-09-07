@@ -11,8 +11,9 @@ $packageRoot = Split-Path -Parent $PSScriptRoot
 $lock = Read-PhwgnaThirdPartyLock -Path (Join-Path $packageRoot 'third-party-lock.json')
 $guidePath = Join-Path $packageRoot 'HUONG-DAN-PHWGNA-STV.html'
 $ipHelperPath = Join-Path $packageRoot 'windows\phwgna-show-ip.ps1'
-$installPageUrl = 'https://itzmonnz.github.io/phwgna-stv/install/'
-$toolsPageUrl = 'https://itzmonnz.github.io/phwgna-stv/tools/'
+$releasePageUrl = 'https://github.com/itzmonnz/phwgna-stv/releases'
+$bundledExtension = (Test-PhwgnaExtensionPackage -SourceDirectory $packageRoot).ok
+$installRoot = Join-Path $env:LOCALAPPDATA 'phwgna-stv-ai-translator'
 $browsers = @(Find-PhwgnaBrowsers)
 
 $form = New-Object Windows.Forms.Form
@@ -95,7 +96,7 @@ $divider2.BackColor = [Drawing.Color]::FromArgb(49,53,68)
 $divider2.SetBounds(32,318,696,1)
 $form.Controls.Add($divider2)
 [void](Add-Label 'Bước 3 · Chuẩn bị' 32 335 696 26 11 $true)
-$install = New-SetupButton 'Mở trang cài Phwgna Stv' 32 369 696 $primary
+$install = New-SetupButton $(if ($bundledExtension) { 'Chuẩn bị tiện ích trên PC' } else { 'Mở trang tải Phwgna Stv' }) 32 369 696 $primary
 $install.SetBounds(32, 369, 696, 52)
 $install.Font = New-Object Drawing.Font('Segoe UI Semibold',11)
 $install.TabIndex = 4
@@ -119,9 +120,9 @@ $artemisDownload = New-SetupButton 'Sao chép link tải Artemis' 416 437 312 $s
 $artemisDownload.TabIndex = 6
 
 $supportHeading = Add-Label 'Công cụ hỗ trợ' 32 405 696 26 11 $true
-$openInstall = New-SetupButton 'Mở trang cài extension' 32 437 220 $secondary
+$openInstall = New-SetupButton $(if ($bundledExtension) { 'Chuẩn bị lại tiện ích' } else { 'Mở trang tải extension' }) 32 437 220 $secondary
 $openInstall.TabIndex = 8
-$openTools = New-SetupButton 'Mở trang tải Công cụ' 264 437 220 $secondary
+$openTools = New-SetupButton $(if ($bundledExtension) { 'Mở thư mục bộ cài' } else { 'Mở trang tải Công cụ' }) 264 437 220 $secondary
 $openTools.TabIndex = 9
 $guide = New-SetupButton 'Xem hướng dẫn trong trình duyệt' 496 437 232 $secondary
 $guide.TabIndex = 10
@@ -135,7 +136,7 @@ $status.BackColor = [Drawing.Color]::FromArgb(26,29,40)
 
 function Update-WizardMode {
     $phone = $phoneMode.Checked
-    $install.Text = if ($phone) { 'Chuẩn bị PC cho điện thoại' } else { 'Mở trang cài Phwgna Stv' }
+    $install.Text = if ($phone) { 'Chuẩn bị PC cho điện thoại' } elseif ($bundledExtension) { 'Chuẩn bị tiện ích trên PC' } else { 'Mở trang tải Phwgna Stv' }
     foreach ($control in @($phoneHeading,$artemisQr,$tailscale,$artemisDownload,$showIp)) { $control.Visible = $phone }
     if (-not $phone) { $tailscale.Checked = $false }
     $supportY = if ($phone) { 521 } else { 405 }
@@ -151,8 +152,26 @@ $phoneMode.Add_CheckedChanged({ Update-WizardMode })
 $pcMode.Add_CheckedChanged({ Update-WizardMode })
 function Selected-Browser { if ($browserSelect.SelectedIndex -ge 0 -and $browserSelect.SelectedIndex -lt $browsers.Count) { $browsers[$browserSelect.SelectedIndex] } }
 $download.Add_Click({ if(-not $DryRun){Start-Process 'https://www.google.com/chrome/'} })
-$openInstall.Add_Click({ if(-not $DryRun){Start-Process $installPageUrl} })
-$openTools.Add_Click({ if(-not $DryRun){Start-Process $toolsPageUrl} })
+function Prepare-BundledExtension {
+    $browser = Selected-Browser
+    if (-not $browser) { throw 'browser_missing' }
+    $installed = Install-PhwgnaExtension -SourceDirectory $packageRoot -DestinationRoot $installRoot -DryRun:$DryRun
+    [void](Open-PhwgnaExtensionLoader -Browser $browser -ExtensionDirectory $installed.path -DryRun:$DryRun)
+    $status.Text = "Đã chuẩn bị tiện ích và sao chép đường dẫn thư mục.`r`nTrong trang Extensions: bật Chế độ dành cho nhà phát triển → Tải tiện ích đã giải nén → chọn thư mục vừa mở."
+    return $installed
+}
+$openInstall.Add_Click({
+    try {
+        if ($bundledExtension) { [void](Prepare-BundledExtension) }
+        elseif (-not $DryRun) { Start-Process $releasePageUrl }
+    } catch { $status.Text="Không chuẩn bị được tiện ích. Code: $($_.Exception.Message)" }
+})
+$openTools.Add_Click({
+    if (-not $DryRun) {
+        if ($bundledExtension) { Start-Process 'explorer.exe' -ArgumentList @($packageRoot) }
+        else { Start-Process $releasePageUrl }
+    }
+})
 $guide.Add_Click({ if(Test-Path -LiteralPath $guidePath){Start-Process $guidePath} })
 $artemisDownload.Add_Click({
     if (-not $DryRun) {
@@ -179,8 +198,11 @@ $install.Add_Click({
     $install.Enabled=$false
     try {
         if ($pcMode.Checked) {
-            if (-not $DryRun) { Start-Process $installPageUrl }
-            $status.Text='Đã mở trang cài Phwgna Stv. Bản Chrome Web Store sẽ được Chrome tự cập nhật.'
+            if ($bundledExtension) { [void](Prepare-BundledExtension) }
+            else {
+                if (-not $DryRun) { Start-Process $releasePageUrl }
+                $status.Text='Đã mở trang phát hành Phwgna Stv. Hãy tải gói Demo mới nhất.'
+            }
         }
         else {
             $status.Text='Đang kiểm tra và cài Sunshine. Windows có thể hỏi quyền một lần...'
@@ -207,7 +229,8 @@ $install.Add_Click({
                     $status.Text='Sunshine đã sẵn sàng. Hãy bấm “Lấy IP kết nối” sau khi PC đã vào Wi-Fi.'
                 }
             }
-            if (-not $DryRun) { Start-Process 'https://localhost:47990'; Start-Process $installPageUrl }
+            if ($bundledExtension) { [void](Prepare-BundledExtension) }
+            if (-not $DryRun) { Start-Process 'https://localhost:47990'; if (-not $bundledExtension) { Start-Process $releasePageUrl } }
         }
     } catch { $status.Text="Không thể hoàn tất bước chuẩn bị. Code: $($_.Exception.Message)" }
     finally { $install.Enabled=$browsers.Count -gt 0 }

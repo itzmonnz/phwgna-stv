@@ -8,7 +8,7 @@ Tiện ích dịch và nghe truyện trên Sáng Tác Việt của **phwgna**. B
 
 | Nhu cầu | Cách cài |
 |---|---|
-| PC | Cài từ Chrome Web Store; Chrome tự cập nhật |
+| PC dùng thử Demo | Tải ZIP Demo, giải nén và chạy `Cai-dat-phwgna-STV.bat` |
 | Điện thoại cùng Wi-Fi | Cài extension từ Store, sau đó chạy `Cai-dat-phwgna-STV.bat` trong gói Công cụ |
 | Điện thoại ngoài nhà | Bật thêm Tailscale (tùy chọn) và đăng nhập cùng tài khoản trên hai máy |
 
@@ -18,13 +18,14 @@ Không biết IP để thêm PC vào Artemis: chạy **Lay-IP-ket-noi-Sunshine.b
 
 Wizard chỉ cài Sunshine và **không ghi đè cấu hình Sunshine** đang có. Để vuốt một ngón như trên điện thoại, chọn **Artemis → Cài đặt đầu vào → Chế độ màn hình cảm ứng → Chạm đa điểm**. Nếu máy không nhận tốt, chọn **Bàn di chuột (Tự nhiên – Nhấn đúp để kéo)** và vuốt hai ngón để cuộn. Xem các bước và cách xử lý lỗi trong [hướng dẫn cảm ứng](HUONG-DAN-PHWGNA-STV.html#cam-ung).
 
-### Cài extension
+### Cài nhanh bản Demo
 
-1. Mở <https://itzmonnz.github.io/phwgna-stv/install/>.
-2. Mở listing Chrome Web Store chính thức và bấm **Thêm vào Chrome**.
-3. Tự đăng nhập dịch vụ AI trong trình duyệt hoặc nhập API key của riêng bạn trong Cài đặt.
+1. Tải `Phwgna-Stv-Demo-0.2.8.zip` trong trang Releases và giải nén đầy đủ.
+2. Chạy `Cai-dat-phwgna-STV.bat`, chọn trình duyệt rồi bấm **Chuẩn bị tiện ích trên PC**.
+3. Trong trang Extensions vừa mở, bật **Chế độ dành cho nhà phát triển**, bấm **Tải tiện ích đã giải nén** và chọn thư mục wizard vừa mở.
+4. Mở một chương STV. Công cụ mặc định dùng Gemini Web, 3 tab AI và bộ prompt/phát âm đóng gói sẵn.
 
-Chrome Web Store tự cập nhật extension. Gói Công cụ Sunshine/Artemis được tải riêng từ <https://itzmonnz.github.io/phwgna-stv/tools/>. Không gửi API key, cookie hay mật khẩu cho người khác.
+Trang phát hành chính thức: <https://github.com/itzmonnz/phwgna-stv/releases>. Bản Demo phải cập nhật thủ công bằng cách tải ZIP mới và chạy lại wizard. Không gửi API key, cookie hay mật khẩu cho người khác.
 
 ## Xác minh bản chính thức
 

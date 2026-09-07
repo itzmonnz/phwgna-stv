@@ -219,7 +219,36 @@ function Get-PhwgnaExtensionsLaunchArguments {
         [ValidatePattern('^(chrome|coccoc)://extensions/$')]
         [string]$Url
     )
-    return '--new-tab'
+    return @('--new-tab', $Url)
+}
+
+function Open-PhwgnaExtensionLoader {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][psobject]$Browser,
+        [Parameter(Mandatory)][string]$ExtensionDirectory,
+        [switch]$DryRun
+    )
+    if ($Browser.id -notin @('chrome','coccoc')) { throw 'unsupported_browser' }
+    $browserPath = [IO.Path]::GetFullPath([string]$Browser.path)
+    if (-not (Test-Path -LiteralPath $browserPath -PathType Leaf)) { throw 'browser_missing' }
+    $extensionPath = [IO.Path]::GetFullPath($ExtensionDirectory)
+    $validation = Test-PhwgnaExtensionPackage -SourceDirectory $extensionPath
+    if (-not $validation.ok) { throw "$($validation.code):$($validation.file)" }
+    $arguments = @(Get-PhwgnaExtensionsLaunchArguments -Url ([string]$Browser.extensionsUrl))
+    if (-not $DryRun) {
+        try { Set-Clipboard -Value $extensionPath } catch { }
+        Start-Process -FilePath $browserPath -ArgumentList $arguments
+        Start-Process -FilePath 'explorer.exe' -ArgumentList @($extensionPath)
+    }
+    [pscustomobject]@{
+        ok = $true
+        code = 'extension_loader_opened'
+        browser = [string]$Browser.id
+        extensionPath = $extensionPath
+        arguments = $arguments
+        dryRun = [bool]$DryRun
+    }
 }
 
 function Get-PhwgnaPerformanceArguments {

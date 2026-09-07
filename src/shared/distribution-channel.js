@@ -7,7 +7,7 @@
 
   const CHANNEL = "direct";
   const SITE_ROOT = "https://itzmonnz.github.io/phwgna-stv/";
-  const TOOLS_URL = `${SITE_ROOT}tools/`;
+  const TOOLS_URL = "https://github.com/itzmonnz/phwgna-stv/releases";
 
   function usesExternalUpdater() {
     return CHANNEL !== "web-store";
