@@ -525,6 +525,9 @@
         });
         row.append(meta, spacer, disable); portableItemsNode.append(row);
       }
+      setPortableStatus(portableItems.length
+        ? `Đang đồng bộ ${portableItems.length} mục dữ liệu STV.`
+        : "Chưa có dữ liệu STV gốc được đồng bộ.", portableItems.length ? "success" : "neutral");
     }
     function renderPortableCandidates(candidates) {
       portableCandidates.replaceChildren();

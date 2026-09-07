@@ -532,6 +532,7 @@ code {
   overflow-wrap: anywhere;
 }
 
+#portableApprove[hidden] { display: none; }
 #portableApprove:not([hidden]) { margin-top: 12px; }
 
 .button {
