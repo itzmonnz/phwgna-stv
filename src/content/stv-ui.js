@@ -7,6 +7,7 @@
 
   const UI_SCALES = Object.freeze([0.5, 0.75, 1, 1.25, 1.5]);
   const VIETNAMESE_SORTER = new Intl.Collator('vi', { sensitivity: 'base', numeric: true });
+  let toolbarGradientSequence = 0;
   function firstSortWord(value) {
     return String(value || '').trim().split(/\s+/u, 1)[0] || '';
   }
@@ -1603,10 +1604,47 @@
     const miniCompleteRing = element(document, "span", "stvai-mini-complete-ring");
     miniCompleteRing.dataset.active = "false";
     miniCompleteRing.setAttribute("aria-hidden", "true");
+    const miniTomoe = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    miniTomoe.classList.add("stvai-mini-tomoe");
+    miniTomoe.dataset.active = "false";
+    miniTomoe.dataset.count = "0";
+    miniTomoe.setAttribute("viewBox", "0 0 48 48");
+    miniTomoe.setAttribute("aria-hidden", "true");
+    miniTomoe.setAttribute("focusable", "false");
+    const tomoeDefs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
+    const tomoeGradient = document.createElementNS("http://www.w3.org/2000/svg", "linearGradient");
+    const gradientId = `stvai-mini-tomoe-gradient-${++toolbarGradientSequence}`;
+    tomoeGradient.id = gradientId;
+    tomoeGradient.setAttribute("x1", "0%");
+    tomoeGradient.setAttribute("y1", "0%");
+    tomoeGradient.setAttribute("x2", "100%");
+    tomoeGradient.setAttribute("y2", "0%");
+    for (const [offset, color] of [["0%", "#a78bfa"], ["34%", "#60a5fa"], ["54%", "#22d3ee"], ["76%", "#f472b6"], ["100%", "#a78bfa"]]) {
+      const stop = document.createElementNS("http://www.w3.org/2000/svg", "stop");
+      stop.setAttribute("offset", offset);
+      stop.setAttribute("stop-color", color);
+      tomoeGradient.append(stop);
+    }
+    tomoeDefs.append(tomoeGradient);
+    const tomoeSpinner = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    tomoeSpinner.classList.add("stvai-mini-tomoe-spinner");
+    const tomoePath = "M 24 1.5 C 28.2 1.5 30.7 5.5 29 8.9 C 27.6 11.6 24.2 12.4 21.7 10.7 C 19.9 9.5 19.2 7.3 19.9 5.5 C 17.6 6.5 15.7 8.2 14.4 10.6 C 15.3 5.2 18.7 1.5 24 1.5 Z";
+    const createTomoe = (index, rotation) => {
+      const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      path.classList.add("stvai-mini-tomoe-seed");
+      path.dataset.tomoeIndex = String(index);
+      path.setAttribute("d", tomoePath);
+      path.setAttribute("fill", `url(#${gradientId})`);
+      if (rotation) path.setAttribute("transform", `rotate(${rotation} 24 24)`);
+      return path;
+    };
+    tomoeSpinner.append(createTomoe(0, 0), createTomoe(1, 180));
+    miniTomoe.append(tomoeDefs, tomoeSpinner);
     miniToggle.append(
       brandIcon(document, "stvai-brand-icon stvai-menu-toggle-icon stvai-mini-toggle-icon"),
       miniProgress,
-      miniCompleteRing
+      miniCompleteRing,
+      miniTomoe
     );
     const header = element(document, "div", "stvai-menu-header");
     header.append(identity, menuToggle, miniToggle);
@@ -1880,6 +1918,7 @@
       miniToggle,
       miniProgress,
       miniCompleteRing,
+      miniTomoe,
       announcement,
       dragHandle: header,
       dragHandles: [header, miniToggle],
@@ -2003,14 +2042,27 @@
         segment.classList.toggle("is-complete", completedIndexes.has(Number(segment.dataset.batchIndex)));
       }
       const chapterComplete = value.state === "completed" && completed === total;
+      const prefetchTotal = Math.min(2, Math.max(0, Number(value.prefetchTotal) || 0));
+      const prefetchCompleted = Math.min(prefetchTotal, Math.max(0, Number(value.prefetchCompleted) || 0));
+      const prefetchRunning = value.prefetchRunning === true;
+      const prefetchCacheable = value.prefetchCacheable !== false;
+      const tomoeCount = chapterComplete && prefetchCacheable ? prefetchCompleted : 0;
+      const tomoeActive = tomoeCount > 0;
+      const prefetchOwnsIndicator = chapterComplete && (prefetchRunning || tomoeActive);
       miniProgress.dataset.running = String(value.running === true && !chapterComplete);
       miniProgress.dataset.complete = String(chapterComplete);
-      toolbar.miniCompleteRing.dataset.active = String(chapterComplete);
+      toolbar.miniCompleteRing.dataset.active = String(chapterComplete && !prefetchOwnsIndicator);
+      if (toolbar.miniTomoe) {
+        toolbar.miniTomoe.dataset.active = String(tomoeActive);
+        toolbar.miniTomoe.dataset.count = String(tomoeCount);
+        toolbar.miniTomoe.dataset.running = String(prefetchRunning);
+      }
       const action = toolbar.root.dataset.collapsed === "true" ? "Mở" : "Thu gọn";
       const summary = visible ? ` — đã dịch ${completed}/${total} batch` : "";
+      const prefetchSummary = prefetchTotal > 0 ? `; dịch trước chương kế ${prefetchCompleted}/${prefetchTotal} batch` : "";
       toolbar.miniToggle.dataset.progressSummary = summary;
-      toolbar.miniToggle.setAttribute("aria-label", `${action} menu Phwgna Stv${summary}`);
-      toolbar.miniToggle.title = visible ? `Tiến độ chương: ${completed}/${total} batch` : "";
+      toolbar.miniToggle.setAttribute("aria-label", `${action} menu Phwgna Stv${summary}${prefetchSummary}`);
+      toolbar.miniToggle.title = visible ? `Tiến độ chương: ${completed}/${total} batch${prefetchSummary}` : "";
     }
     toolbar.root.dataset.state = value.state || "idle";
     toolbar.clearCache.disabled = busy || toolbar.cacheClearing;

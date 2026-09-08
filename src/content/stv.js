@@ -354,6 +354,10 @@
       completedBatches: 0,
       completedBatchIndexes: new Set(),
       totalBatches: 1,
+      prefetchCompleted: 0,
+      prefetchTotal: 0,
+      prefetchRunning: false,
+      prefetchCacheable: true,
       activeJobId: null,
       ttsActive: false,
       ttsPending: false,
@@ -429,6 +433,11 @@
       const jobId = prefetchJobId;
       prefetchJobId = "";
       prefetchStatus = "";
+      state.prefetchCompleted = 0;
+      state.prefetchTotal = 0;
+      state.prefetchRunning = false;
+      state.prefetchCacheable = true;
+      if (active && toolbar) updateToolbar();
       return jobId ? sendRuntime(runtime, { type: "STV_CANCEL_JOB", jobId, reason: "prefetch_superseded" }).catch(() => undefined) : Promise.resolve();
     }
 
@@ -572,6 +581,10 @@
         completed: state.completedBatches,
         completedIndexes: Array.from(state.completedBatchIndexes),
         total: state.totalBatches,
+        prefetchCompleted: state.prefetchCompleted,
+        prefetchTotal: state.prefetchTotal,
+        prefetchRunning: state.prefetchRunning,
+        prefetchCacheable: state.prefetchCacheable,
         showingOriginal: state.view === "stv",
         canListen: state.firstBatchReady || listeningCanQueue(),
         listening: state.ttsActive,
@@ -800,23 +813,32 @@
         });
         if (!active || generation !== prefetchGeneration || setupSnapshot !== core.stableSettingsPayload(settings)) return;
         prefetchJobId = jobId;
+        state.prefetchCompleted = 0;
+        state.prefetchTotal = Math.min(2, Math.max(1, result.batches.length));
+        state.prefetchRunning = true;
+        state.prefetchCacheable = true;
         setPrefetchDiagnostic({ stage: "dispatch_job", failureCode: "none" });
         reportPrefetch(`Đang dịch trước chương kế 0/${result.batches.length}…`);
         const response = await sendRuntime(runtime, message);
         if (active && generation === prefetchGeneration && state.status === "completed") {
           if (response?.status === "completed") {
+            state.prefetchCompleted = state.prefetchTotal;
+            state.prefetchRunning = false;
+            state.prefetchCacheable = !response.fallbackCount;
             setPrefetchDiagnostic({ stage: "completed", failureCode: "none" });
             reportPrefetch(response.fallbackCount
               ? 'Dịch trước có câu Convert — không lưu cache chương kế.'
               : `Đã chuẩn bị ${result.batches.length}/${result.batches.length} batch chương kế.`);
           }
           else if (!response?.ok) {
+            state.prefetchRunning = false;
             setPrefetchDiagnostic({ stage: "failed", failureCode: response?.reason });
             reportPrefetchFailure(response?.reason);
           }
         }
       } catch (error) {
         if (active && generation === prefetchGeneration && !controller.signal.aborted) {
+          state.prefetchRunning = false;
           setPrefetchDiagnostic({ stage: "failed", failureCode: error?.message });
           reportPrefetchFailure(error?.message);
         }
@@ -1075,8 +1097,13 @@
         if (state.status === "completed") {
           const total = Math.min(2, Math.max(1, Number(message.total) || 1));
           const completed = Math.min(total, Math.max(0, Number(message.completed) || 0));
+          const failed = ['paused', 'failed', 'cancelled', 'error'].includes(message.status);
+          state.prefetchTotal = total;
+          state.prefetchCompleted = completed;
+          state.prefetchCacheable = message.cacheable !== false;
+          state.prefetchRunning = !failed && message.status !== 'completed' && state.prefetchCacheable;
           if (message.cacheable === false) reportPrefetch('Dịch trước có câu Convert — không lưu cache chương kế.');
-          else if (['paused', 'failed', 'cancelled', 'error'].includes(message.status)) reportPrefetchFailure(message.reason);
+          else if (failed) reportPrefetchFailure(message.reason);
           else reportPrefetch(message.status === 'completed'
             ? `Đã chuẩn bị ${completed}/${total} batch chương kế.`
             : `Đang dịch trước chương kế ${completed}/${total}…`);

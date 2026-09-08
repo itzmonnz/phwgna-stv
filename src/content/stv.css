@@ -1099,9 +1099,49 @@
   to { background-position: 100% 50%; }
 }
 
+.stvai-mini-tomoe {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 3;
+  width: 48px;
+  height: 48px;
+  overflow: visible;
+  pointer-events: none;
+  opacity: 0;
+  shape-rendering: geometricPrecision;
+  transform: translate(-50%, -50%);
+  transition: opacity 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.stvai-mini-tomoe-seed {
+  filter: drop-shadow(0 0 2px rgba(96, 165, 250, 0.36));
+}
+
+.stvai-mini-tomoe[data-count="1"] .stvai-mini-tomoe-seed[data-tomoe-index="1"] {
+  display: none;
+}
+
+.stvai-toolbar[data-collapsed="true"] .stvai-mini-tomoe[data-active="true"] {
+  opacity: 1;
+}
+
+.stvai-mini-tomoe[data-active="true"] .stvai-mini-tomoe-spinner {
+  transform-box: view-box;
+  transform-origin: 24px 24px;
+  animation: stvai-mini-tomoe-spin 8s linear infinite;
+  will-change: transform;
+}
+
+@keyframes stvai-mini-tomoe-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(-360deg); }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .stvai-mini-progress[data-running="true"],
-  .stvai-mini-complete-ring[data-active="true"] {
+  .stvai-mini-complete-ring[data-active="true"],
+  .stvai-mini-tomoe[data-active="true"] .stvai-mini-tomoe-spinner {
     animation: none;
   }
 }
@@ -1118,6 +1158,11 @@
 
   .stvai-mini-complete-ring {
     background: CanvasText;
+    filter: none;
+  }
+
+  .stvai-mini-tomoe-seed {
+    fill: Highlight;
     filter: none;
   }
 }
