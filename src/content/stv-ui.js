@@ -2052,12 +2052,21 @@
         toolbar.miniTomoe.dataset.count = String(tomoeCount);
         toolbar.miniTomoe.dataset.running = String(prefetchRunning);
         const tomoeSeeds = toolbar.miniTomoe.querySelectorAll('.stvai-mini-tomoe-seed');
-        const stepAngle = tomoeCount === 2 ? 180 : 120;
+        const tomoeAngles = tomoeCount === 1
+          ? [0]
+          : tomoeCount === 2
+            ? [0, 180]
+            : tomoeCount === 3
+              ? [0, 120, 240]
+              : [];
         for (const seed of tomoeSeeds) {
           const index = Number(seed.dataset.tomoeIndex);
-          const angle = index * stepAngle;
-          if (angle) seed.setAttribute('transform', `rotate(${angle} 40 40)`);
-          else seed.removeAttribute('transform');
+          const angle = tomoeAngles[index];
+          if (Number.isFinite(angle) && angle !== 0) {
+            seed.setAttribute('transform', `rotate(${angle} 40 40)`);
+          } else {
+            seed.removeAttribute('transform');
+          }
         }
       }
       const action = toolbar.root.dataset.collapsed === "true" ? "Mở" : "Thu gọn";
