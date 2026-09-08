@@ -394,6 +394,7 @@
     const lateRecords = [];
     let sourceLayer = null;
     let reader = null;
+    let readerParked = false;
     let observer = null;
     let suppress = false;
     const cid = container.getAttribute("cid");
@@ -576,11 +577,15 @@
 
     function showReader(nextReader) {
       if (!nextReader || container.getAttribute("cid") !== cid) return;
-      if (reader === nextReader && reader.isConnected) return;
-      if (reader) showOriginal();
+      const reusingParkedReader = reader === nextReader && reader.isConnected && readerParked;
+      if (reader === nextReader && reader.isConnected && !readerParked) return;
+      if (reader && !reusingParkedReader) showOriginal();
       suppress = true;
       observer?.disconnect();
       reader = nextReader;
+      reader.hidden = false;
+      delete reader.dataset.stvaiTtsBackground;
+      readerParked = false;
       if (!sourceLayer) {
         container.classList.add("stvai-native-sync-active");
         sourceLayer = element(document, "div", "stvai-native-source-layer");
@@ -602,11 +607,11 @@
       observe();
     }
 
-    function showOriginal() {
+    function showOriginal(options = {}) {
       suppress = true;
       observer?.disconnect();
       if (container.getAttribute("cid") !== cid || (sourceLayer && !container.contains(sourceLayer))) {
-        reader?.remove(); reader = null; sourceLayer = null;
+        reader?.remove(); reader = null; readerParked = false; sourceLayer = null;
         container.classList.remove("stvai-native-sync-active");
         suppress = false;
         return;
@@ -628,19 +633,31 @@
           onTrace({ type: "native_restored_to_source", candidateType: record.type, boundary: record.resolved });
         }
       }
-      reader?.remove();
-      reader = null;
+      const preserveReader = options.preserveReader === true && reader?.isConnected;
+      if (preserveReader) {
+        reader.hidden = true;
+        reader.dataset.stvaiTtsBackground = "true";
+        readerParked = true;
+      } else {
+        reader?.remove();
+        reader = null;
+        readerParked = false;
+      }
       if (sourceLayer?.parentNode === container) {
         sourceLayer.replaceWith(...Array.from(sourceLayer.childNodes));
       }
       sourceLayer = null;
       container.classList.remove("stvai-native-sync-active");
+      if (preserveReader) document.body.append(reader);
       suppress = false;
     }
 
     return Object.freeze({
       showReader,
       showOriginal,
+      getBackgroundReader() {
+        return readerParked && reader?.isConnected ? reader : null;
+      },
       destroy() {
         showOriginal();
         for (const node of Array.from(nativeActionRelays.keys())) disarmNativeActionRelay(node);
@@ -1791,7 +1808,7 @@
       document,
       "stvai-button stvai-button--quiet stvai-button--original",
       "Bản gốc",
-      "Dừng bản dịch và hiện lại nội dung gốc của Sáng Tác Việt"
+      "Hiện nội dung gốc; Dịch AI và Nghe sách vẫn tiếp tục ở nền"
     );
     original.disabled = true;
     const cancel = button(document, "stvai-button stvai-button--quiet", "Hủy");

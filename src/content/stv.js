@@ -557,12 +557,13 @@
         copyrightGuard = undefined;
         nameEditorInstance?.bind(null);
         chapter.container.hidden = false;
-        nativeSync?.showOriginal();
+        nativeSync?.showOriginal({ preserveReader: state.ttsActive || ttsOpening });
         return;
       }
       const mode = name === "chinese" ? "chinese" : "translation";
       let reader = mode === "translation"
-        ? chapter.container.querySelector(".stvai-reader--translation")
+        ? nativeSync?.getBackgroundReader?.()
+          || chapter.container.querySelector(".stvai-reader--translation")
         : null;
       if (reader) {
         ui.updateReaderView(reader, chapter.blocks, state.translations, mode, state.translationOrigins);
@@ -635,6 +636,13 @@
         merged += 1;
       }
       if (state.view === "translation") renderView("translation");
+      else if (state.ttsActive) {
+        const backgroundReader = nativeSync?.getBackgroundReader?.();
+        if (backgroundReader) {
+          ui.updateReaderView(backgroundReader, chapter.blocks, state.translations, "translation", state.translationOrigins);
+          backgroundReader.dataset.stvaiTtsReady = String(state.firstBatchReady);
+        }
+      }
       return merged;
     }
 
@@ -1045,13 +1053,13 @@
       const jobIsActive = Boolean(state.activeJobId)
         && ["running", "waiting-provider", "paused"].includes(state.status);
 
-      const stopping = stopListening();
       originalViewPinned = true;
       renderView("stv");
-      updateToolbar(jobIsActive
-        ? "Đang xem bản gốc. Dịch AI vẫn tiếp tục ở nền."
-        : "Đang xem bản gốc. Cache bản dịch vẫn được giữ.");
-      await stopping;
+      updateToolbar(state.ttsActive
+        ? "Đang xem bản gốc. Nghe sách và Dịch AI vẫn tiếp tục ở nền."
+        : jobIsActive
+          ? "Đang xem bản gốc. Dịch AI vẫn tiếp tục ở nền."
+          : "Đang xem bản gốc. Cache bản dịch vẫn được giữ.");
     }
 
     async function resumeJob() {
