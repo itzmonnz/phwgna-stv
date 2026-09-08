@@ -1607,7 +1607,7 @@
     miniTomoe.classList.add("stvai-mini-tomoe");
     miniTomoe.dataset.active = "false";
     miniTomoe.dataset.count = "0";
-    miniTomoe.setAttribute("viewBox", "0 0 56 56");
+    miniTomoe.setAttribute("viewBox", "0 0 80 80");
     miniTomoe.setAttribute("aria-hidden", "true");
     miniTomoe.setAttribute("focusable", "false");
     const tomoeSpinner = document.createElementNS("http://www.w3.org/2000/svg", "g");
@@ -1617,6 +1617,9 @@
       const seed = document.createElementNS("http://www.w3.org/2000/svg", "g");
       seed.classList.add("stvai-mini-tomoe-seed");
       seed.dataset.tomoeIndex = String(index);
+      const glyph = document.createElementNS("http://www.w3.org/2000/svg", "g");
+      glyph.classList.add("stvai-mini-tomoe-glyph");
+      glyph.setAttribute("transform", "translate(40 10) rotate(-120) scale(0.5) translate(-28 -8)");
       const tail = document.createElementNS("http://www.w3.org/2000/svg", "path");
       tail.classList.add("stvai-mini-tomoe-body");
       tail.setAttribute("d", tomoeTailPath);
@@ -1625,8 +1628,9 @@
       head.setAttribute("cx", "28");
       head.setAttribute("cy", "8");
       head.setAttribute("r", "6.5");
-      seed.append(tail, head);
-      if (rotation) seed.setAttribute("transform", `rotate(${rotation} 28 28)`);
+      glyph.append(tail, head);
+      seed.append(glyph);
+      if (rotation) seed.setAttribute("transform", `rotate(${rotation} 40 40)`);
       return seed;
     };
     tomoeSpinner.append(createTomoe(0, 0), createTomoe(1, 120), createTomoe(2, 240));
@@ -2052,7 +2056,7 @@
         for (const seed of tomoeSeeds) {
           const index = Number(seed.dataset.tomoeIndex);
           const angle = index * stepAngle;
-          if (angle) seed.setAttribute('transform', `rotate(${angle} 28 28)`);
+          if (angle) seed.setAttribute('transform', `rotate(${angle} 40 40)`);
           else seed.removeAttribute('transform');
         }
       }

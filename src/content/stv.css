@@ -1104,8 +1104,8 @@
   top: 50%;
   left: 50%;
   z-index: 3;
-  width: 56px;
-  height: 56px;
+  width: 80px;
+  height: 80px;
   overflow: visible;
   pointer-events: none;
   opacity: 0;
@@ -1134,7 +1134,7 @@
 
 .stvai-mini-tomoe[data-active="true"] .stvai-mini-tomoe-spinner {
   transform-box: view-box;
-  transform-origin: 28px 28px;
+  transform-origin: 40px 40px;
   animation: stvai-mini-tomoe-spin 8s linear infinite;
   will-change: transform;
 }
