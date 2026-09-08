@@ -1613,6 +1613,14 @@
     const tomoeSpinner = document.createElementNS("http://www.w3.org/2000/svg", "g");
     tomoeSpinner.classList.add("stvai-mini-tomoe-spinner");
     const tomoeTailPath = "M 30.2 2.1 C 37.8 2.7 44.8 8.4 47.4 17.2 C 42.5 11.9 37.3 9.5 32.2 10.5 C 33.5 7.1 32.8 4.1 30.2 2.1 Z";
+    const protectTomoePaint = (node) => {
+      // STV applies late SVG-wide paint rules. Inline important values keep the
+      // tool-owned glyph black without allowing those page rules to turn it white.
+      node.style.setProperty("fill", "#000000", "important");
+      node.style.setProperty("filter",
+        "drop-shadow(0 0 1.5px rgba(0, 0, 0, 0.82)) drop-shadow(0 0 3px rgba(0, 0, 0, 0.38))",
+        "important");
+    };
     const createTomoe = (index, rotation) => {
       const seed = document.createElementNS("http://www.w3.org/2000/svg", "g");
       seed.classList.add("stvai-mini-tomoe-seed");
@@ -1623,11 +1631,13 @@
       const tail = document.createElementNS("http://www.w3.org/2000/svg", "path");
       tail.classList.add("stvai-mini-tomoe-body");
       tail.setAttribute("d", tomoeTailPath);
+      protectTomoePaint(tail);
       const head = document.createElementNS("http://www.w3.org/2000/svg", "circle");
       head.classList.add("stvai-mini-tomoe-body");
       head.setAttribute("cx", "28");
       head.setAttribute("cy", "8");
       head.setAttribute("r", "6.5");
+      protectTomoePaint(head);
       glyph.append(tail, head);
       seed.append(glyph);
       if (rotation) seed.setAttribute("transform", `rotate(${rotation} 40 40)`);

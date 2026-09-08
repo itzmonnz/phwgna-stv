@@ -1118,10 +1118,11 @@
   fill: #000000;
 }
 
-.stvai-mini-tomoe-body {
+.stvai-toolbar .stvai-mini-tomoe-body {
+  fill: #000000 !important;
   filter:
     drop-shadow(0 0 1.5px rgba(0, 0, 0, 0.82))
-    drop-shadow(0 0 3px rgba(0, 0, 0, 0.38));
+    drop-shadow(0 0 3px rgba(0, 0, 0, 0.38)) !important;
 }
 
 .stvai-mini-tomoe[data-count="1"] .stvai-mini-tomoe-seed[data-tomoe-index="1"],
@@ -1169,9 +1170,9 @@
     filter: none;
   }
 
-  .stvai-mini-tomoe-body {
-    fill: Highlight;
-    filter: none;
+  .stvai-toolbar .stvai-mini-tomoe-body {
+    fill: Highlight !important;
+    filter: none !important;
   }
 }
 
