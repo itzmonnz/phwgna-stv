@@ -803,7 +803,7 @@
         if (!active || generation !== prefetchGeneration || state.status !== "completed" || !result.batches.length
           || setupSnapshot !== core.stableSettingsPayload(settings)) return;
         // Send the full source to the trusted background for cache identity.
-        // Only its first two batches may be sent to the AI during prefetch.
+        // Only its first three batches may be sent to the AI during prefetch.
         const targetChapter = result.chapter;
         const jobId = `prefetch-${createJobId()}`;
         const message = await buildStartMessage(jobId, false, targetChapter, {
@@ -814,7 +814,7 @@
         if (!active || generation !== prefetchGeneration || setupSnapshot !== core.stableSettingsPayload(settings)) return;
         prefetchJobId = jobId;
         state.prefetchCompleted = 0;
-        state.prefetchTotal = Math.min(2, Math.max(1, result.batches.length));
+        state.prefetchTotal = Math.min(core.PREFETCH_BATCH_LIMIT, Math.max(1, result.batches.length));
         state.prefetchRunning = true;
         state.prefetchCacheable = true;
         setPrefetchDiagnostic({ stage: "dispatch_job", failureCode: "none" });
@@ -1095,7 +1095,7 @@
           failureCode: ['paused', 'failed', 'cancelled', 'error'].includes(message.status) ? message.reason : "none"
         });
         if (state.status === "completed") {
-          const total = Math.min(2, Math.max(1, Number(message.total) || 1));
+          const total = Math.min(core.PREFETCH_BATCH_LIMIT, Math.max(1, Number(message.total) || 1));
           const completed = Math.min(total, Math.max(0, Number(message.completed) || 0));
           const failed = ['paused', 'failed', 'cancelled', 'error'].includes(message.status);
           state.prefetchTotal = total;

@@ -1638,7 +1638,7 @@
       if (rotation) path.setAttribute("transform", `rotate(${rotation} 24 24)`);
       return path;
     };
-    tomoeSpinner.append(createTomoe(0, 0), createTomoe(1, 180));
+    tomoeSpinner.append(createTomoe(0, 0), createTomoe(1, 120), createTomoe(2, 240));
     miniTomoe.append(tomoeDefs, tomoeSpinner);
     miniToggle.append(
       brandIcon(document, "stvai-brand-icon stvai-menu-toggle-icon stvai-mini-toggle-icon"),
@@ -2042,7 +2042,7 @@
         segment.classList.toggle("is-complete", completedIndexes.has(Number(segment.dataset.batchIndex)));
       }
       const chapterComplete = value.state === "completed" && completed === total;
-      const prefetchTotal = Math.min(2, Math.max(0, Number(value.prefetchTotal) || 0));
+      const prefetchTotal = Math.min(3, Math.max(0, Number(value.prefetchTotal) || 0));
       const prefetchCompleted = Math.min(prefetchTotal, Math.max(0, Number(value.prefetchCompleted) || 0));
       const prefetchRunning = value.prefetchRunning === true;
       const prefetchCacheable = value.prefetchCacheable !== false;
@@ -2056,6 +2056,14 @@
         toolbar.miniTomoe.dataset.active = String(tomoeActive);
         toolbar.miniTomoe.dataset.count = String(tomoeCount);
         toolbar.miniTomoe.dataset.running = String(prefetchRunning);
+        const tomoeSeeds = toolbar.miniTomoe.querySelectorAll('.stvai-mini-tomoe-seed');
+        const stepAngle = tomoeCount === 2 ? 180 : 120;
+        for (const seed of tomoeSeeds) {
+          const index = Number(seed.dataset.tomoeIndex);
+          const angle = index * stepAngle;
+          if (angle) seed.setAttribute('transform', `rotate(${angle} 24 24)`);
+          else seed.removeAttribute('transform');
+        }
       }
       const action = toolbar.root.dataset.collapsed === "true" ? "Mở" : "Thu gọn";
       const summary = visible ? ` — đã dịch ${completed}/${total} batch` : "";
@@ -2216,7 +2224,7 @@
         : "Nội dung chương chỉ được gửi khi bạn bấm Dịch AI. Mật khẩu và cookie không được đọc."
     );
     if (autoTranslate) {
-      note.append(document.createTextNode(" Sau khi chương hiện tại hoàn tất, tối đa 2 batch đầu của chương kế có thể được gửi trước để giảm thời gian chờ."));
+      note.append(document.createTextNode(" Sau khi chương hiện tại hoàn tất, tối đa 3 batch đầu của chương kế có thể được gửi trước để giảm thời gian chờ."));
     }
     const actions = element(document, "div", "stvai-consent-actions");
     const cancel = button(

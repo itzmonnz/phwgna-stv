@@ -1394,7 +1394,7 @@ if (typeof importScripts === "function") {
       let batches;
       try {
         batches = core.splitIntoBatches(blocks, core.TRANSLATION_BATCH_LIMITS);
-        if (record.prefetch === true) batches = batches.slice(0, 2);
+        if (record.prefetch === true) batches = batches.slice(0, core.PREFETCH_BATCH_LIMIT);
       } catch (_error) {
         await removePersistedJob(record.id);
         return null;
@@ -3913,7 +3913,7 @@ if (typeof importScripts === "function") {
       try {
         allBatches = core.splitIntoBatches(blocks, core.TRANSLATION_BATCH_LIMITS);
         batches = allBatches;
-        if (message.prefetch === true) batches = batches.slice(0, 2);
+        if (message.prefetch === true) batches = batches.slice(0, core.PREFETCH_BATCH_LIMIT);
       } catch (error) {
         if (error instanceof RangeError) return { ok: false, reason: "block-too-large" };
         throw error;

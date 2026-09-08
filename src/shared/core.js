@@ -360,6 +360,7 @@ Chỉ trả kết quả dịch. Cấm giải thích, chú thích, giải nghĩa 
   }
 
   const TRANSLATION_BATCH_LIMITS = Object.freeze({ maxChars: 5000, maxBlocks: 30 });
+  const PREFETCH_BATCH_LIMIT = 3;
 
   function splitIntoBatches(blocks, options) {
     const maxChars = Math.max(1, Number(options && options.maxChars) || 6000);
@@ -745,6 +746,7 @@ Chỉ trả kết quả dịch. Cấm giải thích, chú thích, giải nghĩa 
     READY_MARKER,
     READY_MARKERS,
     TRANSLATION_BATCH_LIMITS,
+    PREFETCH_BATCH_LIMIT,
     SETTINGS_DEFAULTS_VERSION,
     DEFAULT_SETTINGS,
     PROVIDERS,

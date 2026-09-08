@@ -1118,7 +1118,9 @@
   filter: drop-shadow(0 0 2px rgba(96, 165, 250, 0.36));
 }
 
-.stvai-mini-tomoe[data-count="1"] .stvai-mini-tomoe-seed[data-tomoe-index="1"] {
+.stvai-mini-tomoe[data-count="1"] .stvai-mini-tomoe-seed[data-tomoe-index="1"],
+.stvai-mini-tomoe[data-count="1"] .stvai-mini-tomoe-seed[data-tomoe-index="2"],
+.stvai-mini-tomoe[data-count="2"] .stvai-mini-tomoe-seed[data-tomoe-index="2"] {
   display: none;
 }
 

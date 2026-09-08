@@ -1,9 +1,10 @@
 (function attachPrefetch(root, factory) {
   const api = factory(root.STVAISites || (typeof require === 'function' ? require('../shared/stv-sites.js') : null),
-    root.STVAIExtractor || (typeof require === 'function' ? require('./stv-extractor.js') : null));
+    root.STVAIExtractor || (typeof require === 'function' ? require('./stv-extractor.js') : null),
+    root.STVAICore || (typeof require === 'function' ? require('../shared/core.js') : null));
   if (typeof module === "object" && module.exports) module.exports = api;
   else root.STVAIPrefetch = Object.freeze({ ...api, request: root.fetch.bind(root) });
-})(typeof globalThis !== "undefined" ? globalThis : this, function createPrefetchApi(sites, extractor) {
+})(typeof globalThis !== "undefined" ? globalThis : this, function createPrefetchApi(sites, extractor, core) {
   "use strict";
 
   function safeChapterUrl(value, baseUrl) {
@@ -200,7 +201,8 @@
       trace?.update({ extraction: { state: "failed", errorCode: ["SOURCE_NOT_FOUND", "SOURCE_NOT_CHINESE"].includes(error?.code) ? error.code : "UNEXPECTED" } });
       throw new Error('next_chapter_source_unavailable');
     }
-    const batches = options.splitIntoBatches(chapter.translatableBlocks, { maxChars: 5000, maxBlocks: 30 }).slice(0, 2);
+    const batches = options.splitIntoBatches(chapter.translatableBlocks, { maxChars: 5000, maxBlocks: 30 })
+      .slice(0, core.PREFETCH_BATCH_LIMIT);
     trace?.update({ stage: "ready", extraction: { state: "ok", errorCode: "none",
       blockCount: markerBucket(chapter.translatableBlocks.length), batchCount: batches.length } });
     return { url: finalUrl, chapter, batches };

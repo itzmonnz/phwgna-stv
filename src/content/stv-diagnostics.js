@@ -258,7 +258,7 @@
         extraction: { attempted: extraction.attempted === true,
           state: safeEnum(extraction.state, ["idle", "running", "ok", "failed"], "idle"),
           errorCode: safeEnum(extraction.errorCode, ["none", "SOURCE_NOT_FOUND", "SOURCE_NOT_CHINESE", "UNEXPECTED"], "UNEXPECTED"),
-          blockCount: marker(extraction.blockCount), batchCount: Math.max(0, Math.min(2, Number(extraction.batchCount) || 0)) }
+          blockCount: marker(extraction.blockCount), batchCount: Math.max(0, Math.min(3, Number(extraction.batchCount) || 0)) }
       };
     }
     if (input.pool && typeof input.pool === "object") {
