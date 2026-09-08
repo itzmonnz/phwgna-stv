@@ -80,8 +80,18 @@
       return noop;
     }
     const ownedNodes = new Set();
+    const protectedRoots = new Set();
     const observers = new Set();
-    const types = ["click", "change", "dblclick", "submit", "keydown", "pointerdown"];
+    const types = ["click", "change", "dblclick", "submit", "keydown", "keyup", "pointerdown"];
+    const stopChapterArrowAtToolBoundary = (event) => {
+      if (!["keydown", "keyup"].includes(event.type)
+        || !["ArrowLeft", "ArrowRight"].includes(event.key)) return;
+      const toolbar = document.querySelector?.(".stvai-toolbar");
+      if (!toolbar?.isConnected || toolbar.dataset.collapsed === "true") return;
+      // Preserve the browser's default caret/range behavior inside tool inputs,
+      // but do not let STV's page-level chapter shortcut receive the key.
+      event.stopPropagation?.();
+    };
     const guardOwned = (event) => {
       if (verify(event, document.defaultView)) return;
       event.preventDefault?.();
@@ -106,6 +116,9 @@
     const protect = (root) => {
       if (!root || ownedNodes.has(root)) return root;
       rememberTree(root);
+      protectedRoots.add(root);
+      root.addEventListener("keydown", stopChapterArrowAtToolBoundary);
+      root.addEventListener("keyup", stopChapterArrowAtToolBoundary);
       const Observer = document.defaultView?.MutationObserver;
       if (Observer) {
         const observer = new Observer(records => {
@@ -120,6 +133,11 @@
     for (const type of types) document.addEventListener(type, guard, true);
     const remove = () => {
       for (const type of types) document.removeEventListener(type, guard, true);
+      for (const root of protectedRoots) {
+        root.removeEventListener("keydown", stopChapterArrowAtToolBoundary);
+        root.removeEventListener("keyup", stopChapterArrowAtToolBoundary);
+      }
+      protectedRoots.clear();
       for (const observer of observers) observer.disconnect();
       observers.clear();
       // Retained page references must never resurrect synthetic actions.

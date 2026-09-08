@@ -2043,7 +2043,10 @@
       const prefetchCacheable = value.prefetchCacheable !== false;
       const tomoeCount = chapterComplete && prefetchCacheable ? prefetchCompleted : 0;
       const tomoeActive = tomoeCount > 0;
-      const prefetchOwnsIndicator = chapterComplete && (prefetchRunning || tomoeActive);
+      // Keep the completed-chapter ring visible while the next chapter is only
+      // preparing (0/N). Hand the indicator over once the first cached batch
+      // has produced a visible tomoe, so the mini dock never goes blank.
+      const prefetchOwnsIndicator = chapterComplete && tomoeActive;
       miniProgress.dataset.running = String(value.running === true && !chapterComplete);
       miniProgress.dataset.complete = String(chapterComplete);
       toolbar.miniCompleteRing.dataset.active = String(chapterComplete && !prefetchOwnsIndicator);

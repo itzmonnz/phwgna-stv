@@ -1135,7 +1135,7 @@
 .stvai-mini-tomoe[data-active="true"] .stvai-mini-tomoe-spinner {
   transform-box: view-box;
   transform-origin: 40px 40px;
-  animation: stvai-mini-tomoe-spin 8s linear infinite;
+  animation: stvai-mini-tomoe-spin 30s linear infinite;
   will-change: transform;
 }
 
