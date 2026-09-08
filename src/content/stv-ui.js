@@ -1610,6 +1610,12 @@
     miniTomoe.setAttribute("viewBox", "0 0 80 80");
     miniTomoe.setAttribute("aria-hidden", "true");
     miniTomoe.setAttribute("focusable", "false");
+    // Browser force-dark/high-contrast modes may recolor inline SVG after its
+    // author paint is resolved. Keep this decorative status mark opt-out and
+    // preserve the exact black requested by the product UI.
+    miniTomoe.style.setProperty("color-scheme", "only light", "important");
+    miniTomoe.style.setProperty("forced-color-adjust", "none", "important");
+    miniTomoe.style.setProperty("filter", "none", "important");
     const tomoeSpinner = document.createElementNS("http://www.w3.org/2000/svg", "g");
     tomoeSpinner.classList.add("stvai-mini-tomoe-spinner");
     const tomoeTailPath = "M 30.2 2.1 C 37.8 2.7 44.8 8.4 47.4 17.2 C 42.5 11.9 37.3 9.5 32.2 10.5 C 33.5 7.1 32.8 4.1 30.2 2.1 Z";

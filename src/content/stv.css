@@ -1110,6 +1110,11 @@
   pointer-events: none;
   opacity: 0;
   shape-rendering: geometricPrecision;
+  color-scheme: only light !important;
+  forced-color-adjust: none !important;
+  filter: none !important;
+  isolation: isolate;
+  mix-blend-mode: normal;
   transform: translate(-50%, -50%);
   transition: opacity 180ms cubic-bezier(0.22, 1, 0.36, 1);
 }
@@ -1170,10 +1175,6 @@
     filter: none;
   }
 
-  .stvai-toolbar .stvai-mini-tomoe-body {
-    fill: Highlight !important;
-    filter: none !important;
-  }
 }
 
 .stvai-toolbar[data-collapsed="true"] {
