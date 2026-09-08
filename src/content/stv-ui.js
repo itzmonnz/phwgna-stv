@@ -1980,7 +1980,7 @@
       const visible = busy || completed > 0;
       miniProgress.dataset.visible = String(visible);
       if (miniProgress.children.length !== total) {
-        const radius = 22;
+        const radius = 20.5;
         const segments = Array.from({ length: total }, (_, index) => {
           const segment = miniProgress.ownerDocument.createElementNS("http://www.w3.org/2000/svg", total === 1 ? "circle" : "path");
           segment.classList.add("stvai-mini-progress-segment");
