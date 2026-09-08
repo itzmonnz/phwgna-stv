@@ -359,7 +359,10 @@
         : { text: rawState, generating: undefined };
       const text = String(state.text || "").trim();
       const terminalCode = typeof state.terminalCode === "string" ? state.terminalCode : "";
-      const changed = Boolean(terminalCode) || Boolean(text && text !== ignored);
+      const currentBatchResponse = message?.phase === "batch"
+        && responseHasRequestId(text, message.requestId || message.batchId);
+      const changed = Boolean(terminalCode)
+        || Boolean(text && (text !== ignored || currentBatchResponse));
       const protocolValid = changed && responseMatchesMessage(text, message);
       const currentTime = now();
       const staleStopCandidate = staleStopGraceMs > 0
@@ -766,9 +769,12 @@
             }
             if (typeof adapter.readResponseState === "function") {
               const state = adapter.readResponseState();
+              const responseText = String(state?.text || "").trim();
+              const currentBatchResponse = message.phase === "batch"
+                && responseHasRequestId(responseText, message.requestId || message.batchId);
               if (state?.generating === false
-                && String(state.text || "").trim()
-                && String(state.text || "").trim() !== String(previousResponse || "").trim()
+                && responseText
+                && (responseText !== String(previousResponse || "").trim() || currentBatchResponse)
                 && !diagnosticState.completionSeenAt) {
                 diagnosticState.completionSeenAt = Date.now();
               }
