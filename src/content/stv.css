@@ -1115,11 +1115,13 @@
 }
 
 .stvai-mini-tomoe-seed {
-  fill: #ef4444;
+  fill: #000000;
 }
 
 .stvai-mini-tomoe-body {
-  filter: drop-shadow(0 0 2px rgba(239, 68, 68, 0.58));
+  filter:
+    drop-shadow(0 0 1.5px rgba(0, 0, 0, 0.82))
+    drop-shadow(0 0 3px rgba(0, 0, 0, 0.38));
 }
 
 .stvai-mini-tomoe[data-count="1"] .stvai-mini-tomoe-seed[data-tomoe-index="1"],
