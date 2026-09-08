@@ -1608,35 +1608,48 @@
     miniTomoe.classList.add("stvai-mini-tomoe");
     miniTomoe.dataset.active = "false";
     miniTomoe.dataset.count = "0";
-    miniTomoe.setAttribute("viewBox", "0 0 48 48");
+    miniTomoe.setAttribute("viewBox", "0 0 128 128");
     miniTomoe.setAttribute("aria-hidden", "true");
     miniTomoe.setAttribute("focusable", "false");
     const tomoeDefs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
-    const tomoeGradient = document.createElementNS("http://www.w3.org/2000/svg", "linearGradient");
-    const gradientId = `stvai-mini-tomoe-gradient-${++toolbarGradientSequence}`;
-    tomoeGradient.id = gradientId;
-    tomoeGradient.setAttribute("x1", "0%");
-    tomoeGradient.setAttribute("y1", "0%");
-    tomoeGradient.setAttribute("x2", "100%");
-    tomoeGradient.setAttribute("y2", "0%");
-    for (const [offset, color] of [["0%", "#a78bfa"], ["34%", "#60a5fa"], ["54%", "#22d3ee"], ["76%", "#f472b6"], ["100%", "#a78bfa"]]) {
+    const tomoeTrailGradient = document.createElementNS("http://www.w3.org/2000/svg", "linearGradient");
+    const trailGradientId = `stvai-mini-tomoe-trail-${++toolbarGradientSequence}`;
+    tomoeTrailGradient.id = trailGradientId;
+    tomoeTrailGradient.setAttribute("gradientUnits", "userSpaceOnUse");
+    tomoeTrailGradient.setAttribute("x1", "64");
+    tomoeTrailGradient.setAttribute("y1", "14");
+    tomoeTrailGradient.setAttribute("x2", "100");
+    tomoeTrailGradient.setAttribute("y2", "29");
+    for (const [offset, opacity] of [["0%", "0.68"], ["48%", "0.24"], ["100%", "0"]]) {
       const stop = document.createElementNS("http://www.w3.org/2000/svg", "stop");
       stop.setAttribute("offset", offset);
-      stop.setAttribute("stop-color", color);
-      tomoeGradient.append(stop);
+      stop.setAttribute("stop-color", "#ef4444");
+      stop.setAttribute("stop-opacity", opacity);
+      tomoeTrailGradient.append(stop);
     }
-    tomoeDefs.append(tomoeGradient);
+    tomoeDefs.append(tomoeTrailGradient);
     const tomoeSpinner = document.createElementNS("http://www.w3.org/2000/svg", "g");
     tomoeSpinner.classList.add("stvai-mini-tomoe-spinner");
-    const tomoePath = "M 24 1.5 C 28.2 1.5 30.7 5.5 29 8.9 C 27.6 11.6 24.2 12.4 21.7 10.7 C 19.9 9.5 19.2 7.3 19.9 5.5 C 17.6 6.5 15.7 8.2 14.4 10.6 C 15.3 5.2 18.7 1.5 24 1.5 Z";
+    const tomoeTailPath = "M 59.5 7 C 54.5 6.3 49.5 4.1 45.5 0.8 C 52.5 2.2 59.5 1.4 66 0 C 62.7 3.1 62 5.8 63.5 8.3 Z";
     const createTomoe = (index, rotation) => {
-      const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-      path.classList.add("stvai-mini-tomoe-seed");
-      path.dataset.tomoeIndex = String(index);
-      path.setAttribute("d", tomoePath);
-      path.setAttribute("fill", `url(#${gradientId})`);
-      if (rotation) path.setAttribute("transform", `rotate(${rotation} 24 24)`);
-      return path;
+      const seed = document.createElementNS("http://www.w3.org/2000/svg", "g");
+      seed.classList.add("stvai-mini-tomoe-seed");
+      seed.dataset.tomoeIndex = String(index);
+      const trail = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      trail.classList.add("stvai-mini-tomoe-trail");
+      trail.setAttribute("d", "M 64 14 A 50 50 0 0 1 99.3553 28.6447");
+      trail.setAttribute("stroke", `url(#${trailGradientId})`);
+      const tail = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      tail.classList.add("stvai-mini-tomoe-body");
+      tail.setAttribute("d", tomoeTailPath);
+      const head = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      head.classList.add("stvai-mini-tomoe-body");
+      head.setAttribute("cx", "64");
+      head.setAttribute("cy", "14");
+      head.setAttribute("r", "9");
+      seed.append(trail, tail, head);
+      if (rotation) seed.setAttribute("transform", `rotate(${rotation} 64 64)`);
+      return seed;
     };
     tomoeSpinner.append(createTomoe(0, 0), createTomoe(1, 120), createTomoe(2, 240));
     miniTomoe.append(tomoeDefs, tomoeSpinner);
@@ -2061,7 +2074,7 @@
         for (const seed of tomoeSeeds) {
           const index = Number(seed.dataset.tomoeIndex);
           const angle = index * stepAngle;
-          if (angle) seed.setAttribute('transform', `rotate(${angle} 24 24)`);
+          if (angle) seed.setAttribute('transform', `rotate(${angle} 64 64)`);
           else seed.removeAttribute('transform');
         }
       }
