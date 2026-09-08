@@ -1619,7 +1619,7 @@
       seed.dataset.tomoeIndex = String(index);
       const glyph = document.createElementNS("http://www.w3.org/2000/svg", "g");
       glyph.classList.add("stvai-mini-tomoe-glyph");
-      glyph.setAttribute("transform", "translate(40 16) rotate(-75) scale(0.6) translate(-28 -8)");
+      glyph.setAttribute("transform", "translate(40 16) rotate(-45) scale(0.6) translate(-28 -8)");
       const tail = document.createElementNS("http://www.w3.org/2000/svg", "path");
       tail.classList.add("stvai-mini-tomoe-body");
       tail.setAttribute("d", tomoeTailPath);
