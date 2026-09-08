@@ -177,6 +177,11 @@
         if (key === "stop" && menuPaused && overlayInteraction) pausedByTool = false;
         if (chapterChanged()) holdForChapter();
         if (guardedReader && allowBoundReader(args)) return invoke();
+        // STV removes its TTS overlay when the visible chapter subtree changes.
+        // Switching to the native/Convert view parks the same AI reader in the
+        // document, so that automatic cleanup must not close the listening UI.
+        // A click/keydown inside the overlay is still an explicit user close.
+        if (key === "removeOverlay" && guardedReader && !overlayInteraction) return undefined;
         if (nativeStart) {
           const now = Date.now();
           if (now - lastNativeRequestAt >= 500) {
@@ -704,10 +709,12 @@
       const current = sites?.chapterRoot
         ? sites.chapterRoot(document, root.location?.href)
         : document.querySelector("#content-container .contentbox[cid]");
+      const readerParkedForOriginalView = guardedReader?.isConnected
+        && guardedReader.dataset?.stvaiTtsBackground === "true";
       return !guardedContainer.isConnected
         || current !== guardedContainer
         || !guardedReader?.isConnected
-        || !guardedContainer.contains(guardedReader)
+        || (!guardedContainer.contains(guardedReader) && !readerParkedForOriginalView)
         || String(current?.getAttribute("cid") || "") !== guardedCid
         || String(root.location?.href || "") !== guardedUrl;
     }
