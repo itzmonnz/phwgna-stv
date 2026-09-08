@@ -7,7 +7,6 @@
 
   const UI_SCALES = Object.freeze([0.5, 0.75, 1, 1.25, 1.5]);
   const VIETNAMESE_SORTER = new Intl.Collator('vi', { sensitivity: 'base', numeric: true });
-  let toolbarGradientSequence = 0;
   function firstSortWord(value) {
     return String(value || '').trim().split(/\s+/u, 1)[0] || '';
   }
@@ -1608,51 +1607,30 @@
     miniTomoe.classList.add("stvai-mini-tomoe");
     miniTomoe.dataset.active = "false";
     miniTomoe.dataset.count = "0";
-    miniTomoe.setAttribute("viewBox", "0 0 128 128");
+    miniTomoe.setAttribute("viewBox", "0 0 56 56");
     miniTomoe.setAttribute("aria-hidden", "true");
     miniTomoe.setAttribute("focusable", "false");
-    const tomoeDefs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
-    const tomoeTrailGradient = document.createElementNS("http://www.w3.org/2000/svg", "linearGradient");
-    const trailGradientId = `stvai-mini-tomoe-trail-${++toolbarGradientSequence}`;
-    tomoeTrailGradient.id = trailGradientId;
-    tomoeTrailGradient.setAttribute("gradientUnits", "userSpaceOnUse");
-    tomoeTrailGradient.setAttribute("x1", "64");
-    tomoeTrailGradient.setAttribute("y1", "14");
-    tomoeTrailGradient.setAttribute("x2", "100");
-    tomoeTrailGradient.setAttribute("y2", "29");
-    for (const [offset, opacity] of [["0%", "0.68"], ["48%", "0.24"], ["100%", "0"]]) {
-      const stop = document.createElementNS("http://www.w3.org/2000/svg", "stop");
-      stop.setAttribute("offset", offset);
-      stop.setAttribute("stop-color", "#ef4444");
-      stop.setAttribute("stop-opacity", opacity);
-      tomoeTrailGradient.append(stop);
-    }
-    tomoeDefs.append(tomoeTrailGradient);
     const tomoeSpinner = document.createElementNS("http://www.w3.org/2000/svg", "g");
     tomoeSpinner.classList.add("stvai-mini-tomoe-spinner");
-    const tomoeTailPath = "M 59.5 7 C 54.5 6.3 49.5 4.1 45.5 0.8 C 52.5 2.2 59.5 1.4 66 0 C 62.7 3.1 62 5.8 63.5 8.3 Z";
+    const tomoeTailPath = "M 30.2 2.1 C 37.8 2.7 44.8 8.4 47.4 17.2 C 42.5 11.9 37.3 9.5 32.2 10.5 C 33.5 7.1 32.8 4.1 30.2 2.1 Z";
     const createTomoe = (index, rotation) => {
       const seed = document.createElementNS("http://www.w3.org/2000/svg", "g");
       seed.classList.add("stvai-mini-tomoe-seed");
       seed.dataset.tomoeIndex = String(index);
-      const trail = document.createElementNS("http://www.w3.org/2000/svg", "path");
-      trail.classList.add("stvai-mini-tomoe-trail");
-      trail.setAttribute("d", "M 64 14 A 50 50 0 0 1 99.3553 28.6447");
-      trail.setAttribute("stroke", `url(#${trailGradientId})`);
       const tail = document.createElementNS("http://www.w3.org/2000/svg", "path");
       tail.classList.add("stvai-mini-tomoe-body");
       tail.setAttribute("d", tomoeTailPath);
       const head = document.createElementNS("http://www.w3.org/2000/svg", "circle");
       head.classList.add("stvai-mini-tomoe-body");
-      head.setAttribute("cx", "64");
-      head.setAttribute("cy", "14");
-      head.setAttribute("r", "9");
-      seed.append(trail, tail, head);
-      if (rotation) seed.setAttribute("transform", `rotate(${rotation} 64 64)`);
+      head.setAttribute("cx", "28");
+      head.setAttribute("cy", "8");
+      head.setAttribute("r", "6.5");
+      seed.append(tail, head);
+      if (rotation) seed.setAttribute("transform", `rotate(${rotation} 28 28)`);
       return seed;
     };
     tomoeSpinner.append(createTomoe(0, 0), createTomoe(1, 120), createTomoe(2, 240));
-    miniTomoe.append(tomoeDefs, tomoeSpinner);
+    miniTomoe.append(tomoeSpinner);
     miniToggle.append(
       brandIcon(document, "stvai-brand-icon stvai-menu-toggle-icon stvai-mini-toggle-icon"),
       miniProgress,
@@ -2074,7 +2052,7 @@
         for (const seed of tomoeSeeds) {
           const index = Number(seed.dataset.tomoeIndex);
           const angle = index * stepAngle;
-          if (angle) seed.setAttribute('transform', `rotate(${angle} 64 64)`);
+          if (angle) seed.setAttribute('transform', `rotate(${angle} 28 28)`);
           else seed.removeAttribute('transform');
         }
       }

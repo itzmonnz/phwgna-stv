@@ -1104,8 +1104,8 @@
   top: 50%;
   left: 50%;
   z-index: 3;
-  width: 128px;
-  height: 128px;
+  width: 56px;
+  height: 56px;
   overflow: visible;
   pointer-events: none;
   opacity: 0;
@@ -1119,16 +1119,7 @@
 }
 
 .stvai-mini-tomoe-body {
-  filter:
-    drop-shadow(0 0 2px rgba(239, 68, 68, 0.72))
-    drop-shadow(0 0 5px rgba(220, 38, 38, 0.28));
-}
-
-.stvai-mini-tomoe-trail {
-  fill: none;
-  stroke-width: 4;
-  stroke-linecap: round;
-  filter: drop-shadow(0 0 3px rgba(239, 68, 68, 0.34));
+  filter: drop-shadow(0 0 2px rgba(239, 68, 68, 0.58));
 }
 
 .stvai-mini-tomoe[data-count="1"] .stvai-mini-tomoe-seed[data-tomoe-index="1"],
@@ -1143,7 +1134,7 @@
 
 .stvai-mini-tomoe[data-active="true"] .stvai-mini-tomoe-spinner {
   transform-box: view-box;
-  transform-origin: 64px 64px;
+  transform-origin: 28px 28px;
   animation: stvai-mini-tomoe-spin 8s linear infinite;
   will-change: transform;
 }
@@ -1158,10 +1149,6 @@
   .stvai-mini-complete-ring[data-active="true"],
   .stvai-mini-tomoe[data-active="true"] .stvai-mini-tomoe-spinner {
     animation: none;
-  }
-
-  .stvai-mini-tomoe-trail {
-    opacity: 0;
   }
 }
 
@@ -1182,13 +1169,6 @@
 
   .stvai-mini-tomoe-body {
     fill: Highlight;
-    filter: none;
-  }
-
-
-  .stvai-mini-tomoe-trail {
-    stroke: Highlight;
-    opacity: 0.45;
     filter: none;
   }
 }
