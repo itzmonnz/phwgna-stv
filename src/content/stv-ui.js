@@ -1438,15 +1438,26 @@
       placeSaved(node, kind);
       let drag = null;
       let suppressClickUntil = 0;
+      let relayingTouchTap = false;
 
       const interactiveTarget = target => Boolean(target?.closest?.(
         "button,input,select,textarea,a,[role='button'],.closer,.fuller,.minimize"
       ));
       const acceptsDrag = event => effectiveHandle.contains(event.target)
         && (event.target === node || !interactiveTarget(event.target));
+      const minimizedControlFor = target => {
+        const minimized = target?.closest?.(".tts-minimized-control");
+        return minimized && node.contains(minimized) ? minimized : null;
+      };
       const blockNativeDrag = event => {
         if (!acceptsDrag(event)) return;
-        event.preventDefault();
+        // Keep STV's own touch drag handler out of the gesture, but leave a
+        // stationary touch eligible for activation on remote touch clients.
+        if (event.type === "touchstart") {
+          if (drag) drag.touchLike = true;
+        } else {
+          event.preventDefault();
+        }
         event.stopImmediatePropagation();
       };
 
@@ -1461,6 +1472,7 @@
           dx: event.clientX - rect.left,
           dy: event.clientY - rect.top,
           moved: false,
+          touchLike: event.pointerType === "touch" || event.pointerType === "pen",
           measured
         };
       };
@@ -1477,16 +1489,36 @@
       };
       const pointerFinish = event => {
         if (!drag || drag.id !== event.pointerId) return;
-        if (drag.moved) {
+        const completed = drag;
+        drag = null;
+        if (completed.moved) {
           event.preventDefault();
           event.stopPropagation();
           save(node, kind);
           suppressClickUntil = Date.now() + 500;
+        } else if (event.type === "pointerup" && completed.touchLike) {
+          const minimized = minimizedControlFor(event.target);
+          if (minimized) {
+            // Sunshine/Artemis can emit pointer/touch events without the final
+            // compatibility click. Relay only a true tap on the minimized
+            // player, then swallow any delayed browser click to avoid toggling
+            // the player twice.
+            relayingTouchTap = true;
+            try {
+              minimized.dispatchEvent(new document.defaultView.MouseEvent("click", {
+                bubbles: true,
+                cancelable: true,
+                view: document.defaultView
+              }));
+            } finally {
+              relayingTouchTap = false;
+            }
+            suppressClickUntil = Date.now() + 500;
+          }
         }
-        drag = null;
       };
       const suppressMovedClick = event => {
-        if (Date.now() > suppressClickUntil) return;
+        if (relayingTouchTap || Date.now() > suppressClickUntil) return;
         suppressClickUntil = 0;
         event.preventDefault();
         event.stopImmediatePropagation();
