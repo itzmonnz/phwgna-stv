@@ -474,6 +474,39 @@
       };
       const now = options.now || Date.now;
       const busyTimeoutMs = sendOptions.busyTimeoutMs ?? sendOptions.timeoutMs ?? options.sendTimeoutMs ?? 30_000;
+      async function waitForSafeSendButton(timeoutMs) {
+        try {
+          const button = await common.waitForElement(
+            () => {
+              const candidate = updateSendButtonState();
+              return common.buttonIsEnabled(candidate) ? candidate : null;
+            },
+            { ...waitOptions, timeoutMs }
+          );
+          return { button, alreadySent: false };
+        } catch (error) {
+          if (error?.code === "cancelled") throw error;
+          if (reconcileExistingRequest()) return { button: null, alreadySent: true };
+
+          const pendingComposer = findComposer();
+          const pendingText = readComposerText(pendingComposer);
+          if (pendingComposer
+            && comparableComposerText(pendingText) === comparablePrompt
+            && !submissionDiagnostic.clickAttempted) {
+            // A complete prompt with no safe Send control is an ambiguous
+            // Gemini transition, not proof that the whole UI changed. Never
+            // guess-click another control: let background retire only this tab
+            // and resend the same request from a verified READY slot.
+            updateSendButtonState();
+            sendOptions.onBusyState?.("timeout");
+            throw new common.ProviderError(
+              "provider_busy_timeout",
+              "Gemini chưa đưa nút Gửi về trạng thái sẵn sàng; nội dung chưa được gửi."
+            );
+          }
+          throw error;
+        }
+      }
       async function waitForBusyTab() {
         if (!findStopButton()) return false;
         submissionDiagnostic.sendButtonState = "stop_visible";
@@ -518,37 +551,24 @@
       if (comparableComposerText(after) !== comparablePrompt) {
         throw new common.ProviderError("ui_changed", "Gemini không nhận đủ nội dung trong ô nhập.");
       }
-      const button = await common.waitForElement(
-        () => {
-          const candidate = updateSendButtonState();
-          return common.buttonIsEnabled(candidate) ? candidate : null;
-        },
-        { ...waitOptions, timeoutMs: remaining() }
-      );
+      const initialSend = await waitForSafeSendButton(remaining());
+      if (initialSend.alreadySent) return { alreadySent: true };
       const settleMs = Math.max(0, Number(options.sendSettleMs ?? 500) || 0);
       if (settleMs) {
         const settleSleep = options.sleep || ((duration) => new Promise((resolve) => setTimeout(resolve, duration)));
         await settleSleep(settleMs);
         if (sendOptions.signal?.aborted) throw new common.ProviderError("cancelled", "Tác vụ đã bị hủy.");
       }
-      let settledButton = await common.waitForElement(
-        () => {
-          const candidate = updateSendButtonState();
-          return common.buttonIsEnabled(candidate) ? candidate : null;
-        },
-        { ...waitOptions, timeoutMs: remaining() }
-      );
+      const settledSend = await waitForSafeSendButton(remaining());
+      if (settledSend.alreadySent) return { alreadySent: true };
+      let settledButton = settledSend.button;
       if (reconcileExistingRequest()) return { alreadySent: true };
       if (await waitForBusyTab()) return { alreadySent: true };
       if (submissionDiagnostic.sendButtonState === "stop_visible") {
         startedAt = now();
-        settledButton = await common.waitForElement(
-          () => {
-            const candidate = updateSendButtonState();
-            return common.buttonIsEnabled(candidate) ? candidate : null;
-          },
-          { ...waitOptions, timeoutMs: remaining() }
-        );
+        const resumedSend = await waitForSafeSendButton(remaining());
+        if (resumedSend.alreadySent) return { alreadySent: true };
+        settledButton = resumedSend.button;
       }
       const settledComposer = findComposer();
       const settledText = readComposerText(settledComposer);
