@@ -978,6 +978,7 @@
 
     async function requestListening(source = "tool") {
       const controllerHadIntent = state.ttsActive || state.ttsPending || ttsOpening;
+      if (source === "tool" && controllerHadIntent) return stopListening("Đã dừng nghe sách.");
       let evidence = null;
       if (state.ttsActive || (source === "native" && Boolean(ttsSessionId))) {
         evidence = await reconcileListening({ adopt: source === "native" });
@@ -986,7 +987,6 @@
         updateToolbar();
         return;
       }
-      if (source === "tool" && controllerHadIntent) return stopListening("Đã dừng nghe sách.");
       if (state.ttsActive || state.ttsPending || ttsOpening) return stopListening("Đã dừng nghe sách.");
       if (["paused", "error", "cancelled"].includes(state.status)) {
         reportListening("Bản dịch đang tạm dừng — chưa thể Nghe sách.");
