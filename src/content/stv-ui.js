@@ -1000,6 +1000,16 @@
     let settingsPosition = null;
     let observer = null;
     let pendingVoiceAnchor = null;
+    let suppressOverlayClickUntil = 0;
+    let relayingTouchTap = false;
+
+    const suppressTransientOverlayClick = event => {
+      if (!enabled || relayingTouchTap || Date.now() > suppressOverlayClickUntil
+        || !event.target?.closest?.(".tts-control-overlay")) return;
+      suppressOverlayClickUntil = 0;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    };
 
     function sanitizePosition(value) {
       return typeof value?.x === "number" && typeof value?.y === "number"
@@ -1437,8 +1447,6 @@
       effectiveHandle.style.touchAction = "none";
       placeSaved(node, kind);
       let drag = null;
-      let suppressClickUntil = 0;
-      let relayingTouchTap = false;
 
       const interactiveTarget = target => Boolean(target?.closest?.(
         "button,input,select,textarea,a,[role='button'],.closer,.fuller,.minimize"
@@ -1495,7 +1503,7 @@
           event.preventDefault();
           event.stopPropagation();
           save(node, kind);
-          suppressClickUntil = Date.now() + 500;
+          suppressOverlayClickUntil = Date.now() + 500;
         } else if (event.type === "pointerup" && completed.touchLike) {
           const minimized = minimizedControlFor(event.target);
           if (minimized) {
@@ -1513,15 +1521,9 @@
             } finally {
               relayingTouchTap = false;
             }
-            suppressClickUntil = Date.now() + 500;
+            suppressOverlayClickUntil = Date.now() + 500;
           }
         }
-      };
-      const suppressMovedClick = event => {
-        if (relayingTouchTap || Date.now() > suppressClickUntil) return;
-        suppressClickUntil = 0;
-        event.preventDefault();
-        event.stopImmediatePropagation();
       };
       const keyDown = event => {
         if (!enabled || !["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) return;
@@ -1540,7 +1542,6 @@
       node.addEventListener("pointermove", pointerMove, true);
       node.addEventListener("pointerup", pointerFinish, true);
       node.addEventListener("pointercancel", pointerFinish, true);
-      node.addEventListener("click", suppressMovedClick, true);
       node.addEventListener("keydown", keyDown, true);
       bindingKinds.set(node, kind);
       cleanups.set(node, () => {
@@ -1550,7 +1551,6 @@
         node.removeEventListener("pointermove", pointerMove, true);
         node.removeEventListener("pointerup", pointerFinish, true);
         node.removeEventListener("pointercancel", pointerFinish, true);
-        node.removeEventListener("click", suppressMovedClick, true);
         node.removeEventListener("keydown", keyDown, true);
         delete node.dataset.stvaiTtsDraggable;
         if (original.title == null) node.removeAttribute("title"); else node.setAttribute("title", original.title);
@@ -1597,6 +1597,7 @@
       });
       observer.observe(document.body, { childList: true, subtree: true });
     }
+    document.addEventListener?.("click", suppressTransientOverlayClick, true);
     document.addEventListener?.("click", rememberVoiceAnchor, true);
     view?.addEventListener?.("resize", onResize);
 
@@ -1608,6 +1609,7 @@
         if (enabled) refresh();
         else {
           pendingVoiceAnchor = null;
+          suppressOverlayClickUntil = 0;
           for (const close of pronunciationClosers.values()) close();
           for (const cleanup of cleanups.values()) cleanup();
           cleanups.clear();
@@ -1620,6 +1622,7 @@
         for (const close of pronunciationClosers.values()) close();
         pronunciationClosers.clear();
         observer?.disconnect();
+        document.removeEventListener?.("click", suppressTransientOverlayClick, true);
         document.removeEventListener?.("click", rememberVoiceAnchor, true);
         view?.removeEventListener?.("resize", onResize);
         for (const cleanup of cleanups.values()) cleanup();
