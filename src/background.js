@@ -3457,7 +3457,7 @@ if (typeof importScripts === "function") {
       if (job.status !== "running") return { ok: false, reason: "not-runnable" };
       if (job.phase !== "setup") {
         job.workState = "settled";
-        if (job.provider === "gemini" && reason === "response_timeout"
+        if (["gemini", "chatgpt"].includes(job.provider) && reason === "response_timeout"
           && /^batch_\d+_\d{4}$/.test(job.activeRequestId || "")) {
           if (job.retryAttempts < 1) {
             // A confirmed Send can finish just after our response watchdog.
@@ -3505,7 +3505,7 @@ if (typeof importScripts === "function") {
           && job.settings?.temporaryChat !== false) {
           return recoverLostGeminiTemporaryChat(job);
         }
-        if (reason === "send_not_confirmed" && job.provider === "gemini"
+        if (reason === "send_not_confirmed" && ["gemini", "chatgpt"].includes(job.provider)
           && job.unsentRequestId && job.retryAttempts < 1) {
           job.retryAttempts += 1;
           job.workState = "queued";
