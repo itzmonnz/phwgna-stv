@@ -754,21 +754,29 @@
               diagnosticState.pageFocused = Boolean(performanceState.focused);
             }
             const currentStatus = adapter.getStatus();
+            const state = typeof adapter.readResponseState === "function"
+              ? adapter.readResponseState()
+              : null;
             if (currentStatus.state !== "ready") {
               const submittedGeminiTemporaryChat = defaults.provider === "gemini"
                 && message.phase === "batch"
                 && currentStatus.code === "temporary_unavailable"
                 && ["confirmed", "reconciled"].includes(diagnosticState.sendState);
+              const submittedGeminiUiTransition = defaults.provider === "gemini"
+                && message.phase === "batch"
+                && currentStatus.code === "ui_changed"
+                && ["confirmed", "reconciled"].includes(diagnosticState.sendState);
               // Once a batch Send is confirmed, losing Gemini's temporary-route
               // marker must not discard the response already being generated.
-              // READY setup is different: abort it so background can recreate
-              // Temporary Chat and restart from READY 1.
-              if (!submittedGeminiTemporaryChat) {
+              // Gemini may also rebuild/remove its composer while the response
+              // remains readable. UI structure is no longer send evidence after
+              // confirmation; response evidence and its timeout decide recovery.
+              // READY setup is intentionally stricter.
+              if (!submittedGeminiTemporaryChat && !submittedGeminiUiTransition) {
                 throw new ProviderError(currentStatus.code || "ui_changed", currentStatus.message);
               }
             }
-            if (typeof adapter.readResponseState === "function") {
-              const state = adapter.readResponseState();
+            if (state) {
               const responseText = String(state?.text || "").trim();
               const currentBatchResponse = message.phase === "batch"
                 && responseHasRequestId(responseText, message.requestId || message.batchId);

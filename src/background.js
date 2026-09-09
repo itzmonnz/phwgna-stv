@@ -3457,6 +3457,28 @@ if (typeof importScripts === "function") {
       if (job.status !== "running") return { ok: false, reason: "not-runnable" };
       if (job.phase !== "setup") {
         job.workState = "settled";
+        if (job.provider === "gemini" && reason === "response_timeout"
+          && /^batch_\d+_\d{4}$/.test(job.activeRequestId || "")) {
+          if (job.retryAttempts < 1) {
+            // A confirmed Send can finish just after our response watchdog.
+            // Re-read the exact request once before creating another marker or
+            // retiring the tab. The adapter will not click again when it sees
+            // the existing user-query marker.
+            job.retryAttempts += 1;
+            job.unsentRequestId = job.activeRequestId;
+            job.workState = "queued";
+            await persistJob(job);
+            await notifyStatus(job, "running", "rechecking_response");
+            await retrySleep(retryDelayMs);
+            if (job.status !== "running") return { ok: false, reason: "not-runnable" };
+            return dispatchCurrent(job);
+          }
+          // The exact request stayed unresolved through its bounded recheck.
+          // Consume the recovery budget and move on without an infinite loop.
+          job.unsentRequestId = "";
+          job.retryAttempts = 0;
+          job.batchAttempts = Math.max(2, Number(job.batchAttempts) || 0);
+        }
         if (job.provider === "gemini" && ["provider_busy", "provider_busy_timeout"].includes(reason)) {
           const requestId = job.unsentRequestId || job.activeRequestId;
           const alreadyTracked = job.busyRequestId === requestId && job.busyStartedAt > 0;

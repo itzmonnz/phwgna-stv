@@ -1273,6 +1273,8 @@
             const actual = message.batchDiagnostic?.actualCount;
             const counts = Number.isFinite(actual) ? `nhận ${Math.max(0, actual)}/${expected} đoạn — ` : '';
             updateToolbar(`Batch ${batchNumber}: ${counts}đang thử lại nguyên batch…`);
+          } else if (message.reason === 'rechecking_response') {
+            updateToolbar(`Batch ${batchNumber}: đang kiểm tra phản hồi đến muộn đúng mã yêu cầu…`);
           } else if (message.reason === 'switching_ready_batch') {
             updateToolbar(`Batch ${batchNumber} vẫn lỗi — chuyển sang tab READY…`);
           } else if (message.reason === 'waiting_provider_busy') {
