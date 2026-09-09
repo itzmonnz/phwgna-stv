@@ -73,6 +73,10 @@
     return !activation || activation.isActive === true;
   }
 
+  function isTrustedNativeInput(event) {
+    return event?.isTrusted === true;
+  }
+
   function installSharedDomEventGuard(document, verify = isTrustedUserGesture) {
     if (!document?.addEventListener || !document?.removeEventListener) {
       const noop = () => {};
@@ -411,6 +415,8 @@
     let copyrightGuard;
     let nativeSync;
     let removeSharedDomEventGuard;
+    let removeNativeListenGestureGuard;
+    let trustedNativeListenGesture = false;
     let messageListener;
     let pending = Promise.resolve();
     let prefetchStarted = false;
@@ -624,6 +630,24 @@
     function reportListening(message) {
       updateToolbar();
       ui.announceToolbar?.(toolbar, message);
+    }
+
+    function installNativeListenGestureGuard() {
+      const verify = typeof dependencies.isTrustedNativeEvent === "function"
+        ? dependencies.isTrustedNativeEvent
+        : isTrustedNativeInput;
+      const types = ["click", "pointerup", "touchend"];
+      const remember = event => {
+        const relay = event.target?.closest?.("[data-stvai-native-action-relay='true']");
+        if (!relay || !chapter?.container?.contains(relay) || !verify(event)) return;
+        trustedNativeListenGesture = true;
+        document.defaultView?.queueMicrotask?.(() => { trustedNativeListenGesture = false; });
+      };
+      for (const type of types) document.addEventListener(type, remember, true);
+      return () => {
+        for (const type of types) document.removeEventListener(type, remember, true);
+        trustedNativeListenGesture = false;
+      };
     }
 
     function mergeItems(items) {
@@ -1259,6 +1283,7 @@
           container: chapter.container, blocks: chapter.blocks, sourceNodeBlockIds: chapter.sourceNodeBlockIds,
           onTrace: event => document.defaultView?.STVAINativeTrace?.record(event)
         });
+        removeNativeListenGestureGuard = installNativeListenGestureGuard();
       } catch (error) {
         state.status = error?.code || "inactive";
         const errorCode = ["SOURCE_NOT_FOUND", "SOURCE_NOT_CHINESE"].includes(error?.code)
@@ -1541,10 +1566,13 @@
       unsubscribeTts = ttsClient?.subscribe?.(document, ({ code }) => {
         if (!active) return;
         // Page-visible status is not authority to create a continuing TTS session.
-        // Check browser activation synchronously before scheduling the request.
-        if (code === "native_listen_requested"
-          && document.defaultView?.navigator?.userActivation?.isActive === true) {
-          enqueue(() => requestListening("native"));
+        // Sunshine touch is trusted browser input but may not set userActivation.
+        // Accept it only while handling the real relayed STV button event.
+        if (code === "native_listen_requested") {
+          const activated = document.defaultView?.navigator?.userActivation?.isActive === true
+            || trustedNativeListenGesture;
+          trustedNativeListenGesture = false;
+          if (activated) enqueue(() => requestListening("native"));
         }
         if (code === "reader_opened") {
           ttsOverlayDrag?.setEnabled?.(true);
@@ -1616,6 +1644,8 @@
         void sendRuntime(runtime, { type: "STV_CANCEL_JOB", jobId: state.activeJobId, reason: "chapter_changed" }).catch(() => undefined);
       }
       nativeSync?.destroy();
+      removeNativeListenGestureGuard?.();
+      removeNativeListenGestureGuard = undefined;
       removeSharedDomEventGuard?.();
       removeSharedDomEventGuard = undefined;
       document.defaultView?.STVAINativeTrace?.setView("stv");
@@ -1807,6 +1837,7 @@
     sanitizedSettings,
     createRuntimeStorage,
     isTrustedUserGesture,
+    isTrustedNativeInput,
     installSharedDomEventGuard,
     setDiagnosticState,
     waitForChapterRoot,
