@@ -33,6 +33,13 @@
   const fail = code => ({ ok: false, code });
   const positions = raw => Object.fromEntries(codec.parse(raw).records.map(r => [codec.key(r), r.current]));
   const SECURE_ORIGINS = sites.ORIGINS.filter(origin => origin.startsWith('https://'));
+  const numericChapter = value => /^\d{1,100}$/.test(String(value || '')) ? String(value) : '';
+  const laterChapter = (left, right) => {
+    const a = numericChapter(left), b = numericChapter(right);
+    if (!a) return b;
+    if (!b) return a;
+    return BigInt(a) >= BigInt(b) ? a : b;
+  };
 
   function createHistorySync({ storage, tabs, now = Date.now, createId = () => crypto.randomUUID() }) {
     let serial = Promise.resolve();
@@ -110,13 +117,36 @@
       }
       if (!doc || doc.documentId !== sender.documentId || doc.url !== url.href || doc.ticket !== message.ticket
         || doc.chapterId !== message.chapterId) return fail('history_stale_document');
-      const state = (await storage.local.get(STATE_KEY))[STATE_KEY] || { schema: 1, revision: 0, entries: {}, order: [], tombstones: {}, origins: {} };
+      const state = (await storage.local.get(STATE_KEY))[STATE_KEY] || { schema: 1, revision: 0, entries: {}, order: [], progress: {}, tombstones: {}, origins: {} };
       if (state.schema !== 1 || !state.entries || !state.origins) return fail('history_invalid_data');
       const previous = JSON.stringify(state);
       if (!state.tombstones || typeof state.tombstones !== 'object' || Array.isArray(state.tombstones)) state.tombstones = {};
+      let progressMigrated = false;
+      if (!state.progress || typeof state.progress !== 'object' || Array.isArray(state.progress)) {
+        state.progress = {};
+        progressMigrated = true;
+      }
       if (!Array.isArray(state.order)) state.order = [];
       state.order = [...new Set(state.order.filter(key => typeof key === 'string' && Object.hasOwn(state.entries, key)))];
       for (const key of Object.keys(state.entries)) if (!state.order.includes(key)) state.order.push(key);
+      for (const key of Object.keys(state.progress)) {
+        if (!Object.hasOwn(state.entries, key)) {
+          delete state.progress[key];
+          progressMigrated = true;
+        }
+      }
+      for (const [key, entry] of Object.entries(state.entries)) {
+        if (numericChapter(state.progress[key]?.through)) continue;
+        const through = numericChapter(codec.current(entry?.record?.current)?.chapterId);
+        if (through) {
+          state.progress[key] = { through };
+          progressMigrated = true;
+        } else if (state.progress[key]) {
+          delete state.progress[key];
+          progressMigrated = true;
+        }
+      }
+      if (progressMigrated) state.revision++;
       const insecureKeys = new Set(Array.isArray(state.insecureKeys)
         ? state.insecureKeys.filter(key => typeof key === 'string').slice(0, codec.MAX_RECORDS)
         : []);
@@ -124,6 +154,7 @@
       for (const [key, value] of Object.entries(state.entries)) {
         if (!INSECURE_RANKS.has(value?.rank)) continue;
         delete state.entries[key];
+        delete state.progress[key];
         state.order = state.order.filter(value => value !== key);
         insecureKeys.add(key);
         removedInsecureHistory = true;
@@ -142,8 +173,10 @@
         return live.ok && live.records.some(record => insecureKeys.has(codec.key(record))
           || Object.hasOwn(state.tombstones, codec.key(record)));
       };
+      const pageBook = sites.parseChapter(url.href, { chapterId: '_' });
+      const pageBookKey = pageBook ? JSON.stringify([pageBook.source, pageBook.bookId]) : '';
       const response = () => ({ ok: true, revision: state.revision, records: allowedRecords(),
-        needsCleanup: needsCleanup() });
+        readThrough: numericChapter(state.progress[pageBookKey]?.through), needsCleanup: needsCleanup() });
       async function persist() {
         if (JSON.stringify(state) === previous) return;
         if (Object.keys(state.entries).length > codec.MAX_RECORDS || JSON.stringify(state).length > 8_000_000) throw new Error('size');
@@ -153,7 +186,8 @@
       if (message.action === 'poll') {
         await persist();
         return message.revision === state.revision && !needsCleanup()
-          ? { ok: true, unchanged: true, revision: state.revision } : response();
+          ? { ok: true, unchanged: true, revision: state.revision,
+            readThrough: numericChapter(state.progress[pageBookKey]?.through) } : response();
       }
       const parsed = codec.parse(message.raw);
       if (!parsed.ok) return fail(parsed.code);
@@ -188,6 +222,7 @@
         for (const key of Object.keys(old)) {
           if (!Object.hasOwn(fresh, key)) {
             delete state.entries[key];
+            delete state.progress[key];
             state.order = state.order.filter(value => value !== key);
             state.tombstones[key] = { revision: state.revision + 1 };
             if (!origin.suppressed.includes(key)) origin.suppressed.push(key);
@@ -225,6 +260,14 @@
       }
       if (reading && !doc.read) {
         const key = codec.key(reading);
+        const readChapter = numericChapter(chapter.chapterId);
+        if (readChapter) {
+          const through = laterChapter(state.progress[key]?.through, readChapter);
+          if (through !== state.progress[key]?.through) {
+            state.progress[key] = { through };
+            state.revision++;
+          }
+        }
         if (insecureKeys.delete(key)) {
           state.insecureKeys = [...insecureKeys];
           state.revision++;

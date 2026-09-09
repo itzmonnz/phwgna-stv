@@ -45,7 +45,7 @@
   function currentChapter(document) {
     return sites.parseChapter(document.URL, { chapterId: sites.chapterRoot(document)?.getAttribute('cid') });
   }
-  function paintToc(document, raw) {
+  function paintToc(document, raw, readThrough) {
     const book = sites.parseChapter(document.URL, { chapterId: '_' });
     if (!book || currentChapter(document)) return 'not_applicable';
     const container = document.querySelector('#chaptercontainerinner');
@@ -53,12 +53,14 @@
     const record = bookRecord(document, raw);
     const current = record && codec.current(record.current).chapterId;
     if (current && !/^\d+$/.test(current)) return 'history_toc_unrecognized';
+    const through = /^\d{1,100}$/.test(String(readThrough || '')) ? String(readThrough) : current;
     let count = 0;
     for (const link of container.querySelectorAll('a.listchapitem[href]')) {
       const chapter = sites.parseChapter(link.href);
       if (!chapter || chapter.source !== book.source || chapter.bookId !== book.bookId || !/^\d+$/.test(chapter.chapterId)) continue;
       const value = BigInt(chapter.chapterId), last = current ? BigInt(current) : null;
-      link.classList.toggle('chapreaded', last !== null && value < last);
+      const read = through ? BigInt(through) : null;
+      link.classList.toggle('chapreaded', read !== null && value <= read && value !== last);
       link.classList.toggle('chaplastreaded', last !== null && value === last);
       count++;
     }
@@ -107,7 +109,7 @@
   function createObserver({ window, send = message => window.chrome.runtime.sendMessage(message) }) {
     const document = window.document;
     const documentToken = window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    let ticket = '', url = '', route = '', navigation = 0, lastRaw, candidateRaw, revision = -1, readSent = false;
+    let ticket = '', url = '', route = '', navigation = 0, lastRaw, candidateRaw, revision = -1, readSent = false, readThrough = '';
     let running = false, stopped = false, interval, observer;
     let status = 'idle', errorCode = 'none', count = 0, writes = 0, toc = 'not_applicable';
     let invalidRaw;
@@ -136,7 +138,7 @@
         if (route !== nextRoute) {
           route = nextRoute;
           url = window.location.href; ticket = ''; lastRaw = undefined; candidateRaw = undefined; readSent = false; revision = -1;
-          invalidRaw = undefined;
+          invalidRaw = undefined; readThrough = '';
         }
         if (!sites.siteUrl(url)) return;
         if (!ticket) {
@@ -157,7 +159,7 @@
           if (candidateRaw !== raw) {
             candidateRaw = raw;
             status = 'synced'; errorCode = 'none';
-            toc = paintToc(document, raw);
+            toc = paintToc(document, raw, readThrough);
             return;
           }
           candidateRaw = undefined;
@@ -167,8 +169,9 @@
         if (stale() || !check(response)) return;
         lastRaw = raw;
         if (read) readSent = true;
+        readThrough = /^\d{1,100}$/.test(String(response.readThrough || '')) ? String(response.readThrough) : readThrough;
         status = 'synced'; errorCode = 'none';
-        toc = paintToc(document, raw);
+        toc = paintToc(document, raw, readThrough);
         if (response.unchanged) return;
         revision = response.revision;
         // Never manufacture the evidence of a real reading event by first
@@ -193,7 +196,7 @@
         lastRaw = prepared.raw; candidateRaw = undefined; writes++;
         const applied = await settle('applied');
         if (stale()) return;
-        toc = paintToc(document, window.localStorage.getItem('tusach'));
+        toc = paintToc(document, window.localStorage.getItem('tusach'), readThrough);
         if (check(applied)) revision = prepared.revision;
       } catch (_) { status = 'error'; errorCode = 'history_storage_unavailable'; }
       finally { running = false; }
@@ -205,7 +208,7 @@
     }
     function repaint() {
       if (!stopped && document.visibilityState !== 'hidden') {
-        try { toc = paintToc(document, window.localStorage.getItem('tusach')); } catch (_) { /* Next tick reports safely. */ }
+        try { toc = paintToc(document, window.localStorage.getItem('tusach'), readThrough); } catch (_) { /* Next tick reports safely. */ }
       }
     }
     function onProbe(request, sender, reply) {

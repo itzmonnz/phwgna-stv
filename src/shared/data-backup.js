@@ -10,7 +10,7 @@
   const fail = code => ({ ok: false, code });
 
   function safeShelf(input) {
-    const shelf = { schema: 1, revision: Math.max(0, Number(input?.revision) || 0), entries: {}, order: [], tombstones: {} };
+    const shelf = { schema: 1, revision: Math.max(0, Number(input?.revision) || 0), entries: {}, order: [], progress: {}, tombstones: {} };
     const entries = input?.entries || {};
     const orderedKeys = [...new Set([...(Array.isArray(input?.order) ? input.order : []), ...Object.keys(entries)])]
       .filter(key => typeof key === 'string' && Object.hasOwn(entries, key));
@@ -19,6 +19,11 @@
       if (value?.record) shelf.entries[key] = { record: structuredClone(value.record) };
     }
     shelf.order = orderedKeys.filter(key => Object.hasOwn(shelf.entries, key));
+    for (const [key, value] of Object.entries(input?.progress || {})) {
+      if (Object.hasOwn(shelf.entries, key) && /^\d{1,100}$/.test(String(value?.through || ''))) {
+        shelf.progress[key] = { through: String(value.through) };
+      }
+    }
     for (const [key, value] of Object.entries(input?.tombstones || {})) {
       shelf.tombstones[key] = { revision: Math.max(0, Number(value?.revision) || 0) };
     }
@@ -60,7 +65,7 @@
 
   function validateShelf(input, history) {
     if (!input || input.schema !== 1 || !input.entries || !input.tombstones) return null;
-    const result = { schema: 1, revision: Math.max(0, Number(input.revision) || 0), entries: {}, order: [], tombstones: {}, origins: {} };
+    const result = { schema: 1, revision: Math.max(0, Number(input.revision) || 0), entries: {}, order: [], progress: {}, tombstones: {}, origins: {} };
     for (const [key, value] of Object.entries(input.entries)) {
       let safe;
       try { safe = history.portable(value?.record); } catch (_) { return null; }
@@ -69,12 +74,17 @@
     }
     result.order = [...new Set([...(Array.isArray(input.order) ? input.order : []), ...Object.keys(result.entries)])]
       .filter(key => typeof key === 'string' && Object.hasOwn(result.entries, key));
+    for (const [key, value] of Object.entries(input.progress || {})) {
+      if (!Object.hasOwn(result.entries, key) || !/^\d{1,100}$/.test(String(value?.through || ''))) return null;
+      result.progress[key] = { through: String(value.through) };
+    }
     for (const [key, value] of Object.entries(input.tombstones)) {
       let identity;
       try { identity = JSON.parse(key); } catch (_) { return null; }
       if (!Array.isArray(identity) || identity.length !== 2 || !history.id(identity[0]) || !history.id(identity[1])) return null;
       result.tombstones[key] = { revision: Math.max(0, Number(value?.revision) || 0) };
       delete result.entries[key];
+      delete result.progress[key];
       result.order = result.order.filter(value => value !== key);
     }
     if (Object.keys(result.entries).length + Object.keys(result.tombstones).length > history.MAX_RECORDS) return null;
@@ -88,7 +98,7 @@
     }
     const parsed = dependencies.history.parse(payload.tusach ?? '');
     if (!parsed.ok) return fail('backup_history_invalid');
-    const shelfInput = { schema: 1, revision: 0, entries: {}, order: [], tombstones: {} };
+    const shelfInput = { schema: 1, revision: 0, entries: {}, order: [], progress: {}, tombstones: {} };
     for (const record of parsed.records) {
       const safe = dependencies.history.portable(record);
       const key = dependencies.history.key(safe);
@@ -184,13 +194,20 @@
   }
 
   function mergeHistory(current, incoming) {
-    const state = current?.schema === 1 ? structuredClone(current) : { schema: 1, revision: 0, entries: {}, order: [], tombstones: {}, origins: {} };
-    state.entries ||= {}; state.order ||= []; state.tombstones ||= {}; state.origins ||= {};
+    const state = current?.schema === 1 ? structuredClone(current) : { schema: 1, revision: 0, entries: {}, order: [], progress: {}, tombstones: {}, origins: {} };
+    state.entries ||= {}; state.order ||= []; state.progress ||= {}; state.tombstones ||= {}; state.origins ||= {};
     for (const [key, value] of Object.entries(incoming.entries || {})) {
       state.entries[key] = structuredClone(value); delete state.tombstones[key];
     }
+    for (const [key, value] of Object.entries(incoming.progress || {})) {
+      if (!Object.hasOwn(state.entries, key) || !/^\d{1,100}$/.test(String(value?.through || ''))) continue;
+      const local = /^\d{1,100}$/.test(String(state.progress[key]?.through || '')) ? BigInt(state.progress[key].through) : -1n;
+      const remote = BigInt(value.through);
+      state.progress[key] = { through: String(local >= remote ? local : remote) };
+    }
     for (const [key, value] of Object.entries(incoming.tombstones || {})) {
       state.tombstones[key] = structuredClone(value); delete state.entries[key];
+      delete state.progress[key];
       state.order = state.order.filter(value => value !== key);
     }
     const incomingOrder = [...new Set([...(Array.isArray(incoming.order) ? incoming.order : []), ...Object.keys(incoming.entries || {})])]
