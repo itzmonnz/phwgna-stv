@@ -239,7 +239,7 @@
       const endpoint = value.endpoint && typeof value.endpoint === "object" ? value.endpoint : {};
       const extraction = value.extraction && typeof value.extraction === "object" ? value.extraction : {};
       result.prefetch = {
-        stage: safeEnum(value.stage, ["idle", "next_link", "request_page", "parse_page", "request_source_api",
+        stage: safeEnum(value.stage, ["idle", "next_link", "request_page", "parse_page", "request_source_api", "request_source_warmup",
           "parse_source_api", "extract_source", "waiting_source", "dispatch_job", "running", "ready", "completed", "failed", "cancelled"], "idle"),
         failureCode: safeEnum(value.failureCode, ["none", "next_chapter_timeout", "next_chapter_fetch_failed",
           "next_chapter_source_unavailable", "next_chapter_identity_mismatch", "next_chapter_redirect_invalid",
@@ -253,8 +253,10 @@
           initialSourceMarkers: marker(pageDom.initialSourceMarkers), otherRootCount: marker(pageDom.otherRootCount) },
         endpoint: { attempted: endpoint.attempted === true, responseClass: response(endpoint.responseClass),
           redirectState: redirect(endpoint.redirectState), jsonValid: endpoint.jsonValid === true,
+          jsonEnvelope: safeEnum(endpoint.jsonEnvelope, ["clean", "prefixed", "empty", "invalid"], "unknown"),
           payloadCodeOk: endpoint.payloadCodeOk === true, payloadIdentityMatch: endpoint.payloadIdentityMatch === true,
-          dataBytesBucket: bytes(endpoint.dataBytesBucket) },
+          dataBytesBucket: bytes(endpoint.dataBytesBucket), warmupAttempted: endpoint.warmupAttempted === true,
+          warmupResponseClass: safeEnum(endpoint.warmupResponseClass, ["unknown", "2xx", "3xx", "4xx", "5xx", "failed"], "unknown") },
         sourceWait: {
           state: safeEnum(value.sourceWait?.state, ["idle", "waiting", "resolved"], "idle"),
           retryCount: Math.max(0, Math.min(1000, Math.trunc(Number(value.sourceWait?.retryCount) || 0))),

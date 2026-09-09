@@ -77,7 +77,8 @@
       pageFetch: { attempted: false, responseClass: "unknown", redirectState: "unknown", bytesBucket: "0" },
       pageDom: { matchingRoot: false, cidMatches: false, initialSourceMarkers: "0", otherRootCount: "0" },
       endpoint: { attempted: false, responseClass: "unknown", redirectState: "unknown", jsonValid: false,
-        payloadCodeOk: false, payloadIdentityMatch: false, dataBytesBucket: "0" },
+        jsonEnvelope: "unknown", payloadCodeOk: false, payloadIdentityMatch: false, dataBytesBucket: "0",
+        warmupAttempted: false, warmupResponseClass: "unknown" },
       extraction: { attempted: false, state: "idle", errorCode: "none", blockCount: "0", batchCount: 0 }
     };
     const elapsedBucket = () => {
@@ -113,6 +114,47 @@
       const timer = setTimeout(finish, Math.max(0, Number(delayMs) || 0));
       signal.addEventListener('abort', abort, { once: true });
     });
+  }
+
+  function parseReadChapterPayload(value) {
+    const text = String(value || "");
+    const asObject = payload => payload && typeof payload === 'object' && !Array.isArray(payload) ? payload : null;
+    try {
+      const payload = asObject(JSON.parse(text));
+      return { payload, envelope: payload ? "clean" : "invalid" };
+    }
+    catch (_) {
+      // STV's own chapter loader tolerates harmless text before the JSON object.
+      // Mirror that behavior without accepting an arbitrary HTML response.
+      const objectStart = text.indexOf('{"');
+      if (objectStart >= 0) {
+        try {
+          const payload = asObject(JSON.parse(text.slice(objectStart)));
+          if (payload) return { payload, envelope: "prefixed" };
+        }
+        catch (_) { /* handled below */ }
+      }
+      return { payload: null, envelope: text.trim() ? "invalid" : "empty" };
+    }
+  }
+
+  async function wakeChapterSource(options, signal, identity) {
+    const endpoint = new URL('/index.php', identity.url);
+    const body = new URLSearchParams({ sajax: 'readchapter', prefetch: 'true', bookid: identity.bookId,
+      h: identity.host, c: identity.chapterId, sty: '1' }).toString();
+    options.trace?.update({ stage: 'request_source_warmup', endpoint: { warmupAttempted: true } });
+    try {
+      const response = await options.request(endpoint.href, {
+        credentials: 'same-origin', cache: 'no-store', redirect: 'error', signal, method: 'POST', body,
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+      });
+      options.trace?.update({ endpoint: { warmupResponseClass: responseClass(response?.status, response?.ok) } });
+    } catch (_) {
+      if (signal.aborted) throw prefetchError('next_chapter_cancelled');
+      // This is only a hint to make STV prepare its own source. The normal poll
+      // remains authoritative even when the hint itself is rejected.
+      options.trace?.update({ endpoint: { warmupResponseClass: 'failed' } });
+    }
   }
 
   async function fetchChapter(options, signal) {
@@ -159,12 +201,13 @@
     }
     if (root.getAttribute('cid') !== chapterId) throw new Error("next_chapter_identity_mismatch");
     if (!root.querySelector('i[t]:not([t=""])')) {
-      // Observed STV readchapter endpoint. No rescan/prefetch side effects, copied
-      // cookies, dynamic challenge values, or execution of scripts from the page.
+      // Observed STV readchapter endpoints. Never rescan, copy dynamic challenge
+      // values, or execute scripts from the fetched page.
       const endpoint = new URL('/index.php', url);
       endpoint.search = new URLSearchParams({ bookid: bookId, h: host, c: chapterId, ngmar: 'readc', sajax: 'readchapter', sty: style, exts: '' }).toString();
       trace?.update({ stage: "request_source_api", endpoint: { attempted: true } });
       let payload;
+      let warmupSent = false;
       const retryDelays = (Array.isArray(options.sourceRetryDelaysMs)
         ? options.sourceRetryDelaysMs : [1_000, 2_000])
         .slice(0, 2).map(value => Math.min(5_000, Math.max(0, Number(value) || 0)));
@@ -179,10 +222,11 @@
           redirectState: !dataResponse?.url || dataResponse.url === endpoint.href ? "same_url" : "changed" } });
         if (!dataResponse?.ok) throw prefetchError('next_chapter_fetch_failed', true);
         if (dataResponse.url && dataResponse.url !== endpoint.href) throw new Error('next_chapter_redirect_invalid');
-        try {
-          payload = JSON.parse(await dataResponse.text());
-          trace?.update({ stage: "parse_source_api", endpoint: { jsonValid: true, dataBytesBucket: bytesBucket(payload?.data) } });
-        } catch (_) { throw prefetchError('next_chapter_source_unavailable', true); }
+        const parsed = parseReadChapterPayload(await dataResponse.text());
+        payload = parsed.payload;
+        trace?.update({ stage: "parse_source_api", endpoint: { jsonValid: Boolean(payload), jsonEnvelope: parsed.envelope,
+          dataBytesBucket: bytesBucket(payload?.data) } });
+        if (!payload && parsed.envelope !== 'empty') throw prefetchError('next_chapter_source_unavailable');
         if (signal.aborted) throw new Error('next_chapter_cancelled');
         const payloadCodeOk = [0, '0'].includes(payload?.code) && typeof payload.data === 'string' && Boolean(payload.data.trim());
         const payloadIdentityMatch = String(payload?.bookid) === bookId && payload?.bookhost === host;
@@ -198,6 +242,10 @@
         }
         if (!payloadSourceEmpty || attempt >= retryDelays.length) {
           throw prefetchError('next_chapter_source_unavailable', payloadSourceEmpty);
+        }
+        if (!warmupSent) {
+          await wakeChapterSource(options, signal, { url, bookId, host, chapterId, style });
+          warmupSent = true;
         }
         await waitForSourceRetry(retryDelays[attempt], signal);
         trace?.update({ stage: "request_source_api" });
