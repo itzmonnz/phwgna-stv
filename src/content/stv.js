@@ -400,6 +400,7 @@
       fallbackCount: 0,
       completedBatches: 0,
       completedBatchIndexes: new Set(),
+      batchAssignments: new Map(),
       totalBatches: 1,
       prefetchCompleted: 0,
       prefetchTotal: 0,
@@ -655,6 +656,79 @@
     function reportListening(message) {
       updateToolbar();
       ui.announceToolbar?.(toolbar, message);
+    }
+
+    function recordAttachmentEvidence(stateName, reason, message, itemCount = 0) {
+      if (!diagnosticState || typeof diagnosticState !== "object") return;
+      diagnosticState.attachment = {
+        state: stateName,
+        reason,
+        messageType: MESSAGE_TYPES.batch.has(message?.type) ? "batch"
+          : MESSAGE_TYPES.complete.has(message?.type) ? "complete" : "other",
+        batchIndex: Number.isInteger(Number(message?.batchIndex)) ? Math.max(0, Number(message.batchIndex)) : 0,
+        itemCount: Math.max(0, Number(itemCount) || 0)
+      };
+    }
+
+    function sourceAttachmentEvidence() {
+      if (typeof extractor.validateChapterEvidence === "function") {
+        return extractor.validateChapterEvidence(document, chapter, location.href);
+      }
+      return chapter?.container?.isConnected
+        ? { ok: true, reason: "confirmed" }
+        : { ok: false, reason: "source_container_detached" };
+    }
+
+    function validateTranslationItems(message, { completion = false } = {}) {
+      const sourceEvidence = sourceAttachmentEvidence();
+      if (!sourceEvidence.ok) return sourceEvidence;
+      const items = Array.isArray(message?.items) ? message.items : [];
+      if (!completion && !items.length) return { ok: false, reason: "items_empty" };
+      const sourceOrder = new Map(chapter.translatableBlocks.map((block, index) => [String(block.id), index]));
+      const seen = new Set();
+      let previousIndex = -1;
+      for (const item of items) {
+        const id = typeof item?.id === "string" ? item.id : "";
+        const text = typeof item?.text === "string" ? item.text.trim() : "";
+        if (!id || !text) return { ok: false, reason: "item_invalid" };
+        if (!sourceOrder.has(id)) return { ok: false, reason: "item_unknown" };
+        if (seen.has(id)) return { ok: false, reason: "item_duplicate" };
+        const index = sourceOrder.get(id);
+        if (index <= previousIndex) return { ok: false, reason: "items_out_of_order" };
+        previousIndex = index;
+        seen.add(id);
+        const existing = typeof state.translations[id] === "string" ? state.translations[id].trim() : "";
+        if (existing && existing !== text) return { ok: false, reason: "item_conflict" };
+      }
+      if (!completion) {
+        const batchIndex = Number(message.batchIndex);
+        const totalBatches = Number(message.totalBatches);
+        if (!Number.isInteger(batchIndex) || batchIndex < 0 || !Number.isInteger(totalBatches)
+          || totalBatches < 1 || batchIndex >= totalBatches) {
+          return { ok: false, reason: "batch_identity_invalid" };
+        }
+        for (const id of seen) {
+          const assigned = state.batchAssignments.get(id);
+          if (assigned !== undefined && assigned !== batchIndex) {
+            return { ok: false, reason: "block_batch_conflict" };
+          }
+        }
+      } else {
+        const translatedIds = new Set(Object.entries(state.translations)
+          .filter(([, value]) => typeof value === "string" && value.trim())
+          .map(([id]) => id));
+        for (const id of seen) translatedIds.add(id);
+        if (!chapter.translatableBlocks.every(block => translatedIds.has(String(block.id)))) {
+          return { ok: false, reason: "completion_incomplete" };
+        }
+      }
+      return { ok: true, reason: "confirmed", items, ids: seen };
+    }
+
+    function rejectAttachment(message, evidence) {
+      recordAttachmentEvidence("rejected", evidence.reason, message, message?.items?.length);
+      updateToolbar("Đã chặn dữ liệu dịch không khớp nội dung gốc; tiến độ cũ được giữ lại.");
+      return true;
     }
 
     function installNativeListenGestureGuard() {
@@ -963,6 +1037,7 @@
       state.status = "waiting-provider";
       state.completedBatches = 0;
       state.completedBatchIndexes = new Set();
+      state.batchAssignments = new Map();
       state.totalBatches = 1;
       state.translations = Object.create(null);
       state.translationOrigins = Object.create(null);
@@ -1216,6 +1291,8 @@
       if (["cancelled", "completed"].includes(state.status)) return false;
 
       if (MESSAGE_TYPES.batch.has(message.type)) {
+        const attachment = validateTranslationItems(message);
+        if (!attachment.ok) return rejectAttachment(message, attachment);
         const merged = mergeItems(message.items);
         const batchRendered = Array.isArray(message.items) && message.items.length > 0
           && merged === message.items.length;
@@ -1227,6 +1304,7 @@
         state.totalBatches = Math.max(1, Number(message.totalBatches) || state.totalBatches);
         const completedIndex = Number(message.batchIndex);
         if (batchRendered && Number.isInteger(completedIndex) && completedIndex >= 0 && completedIndex < state.totalBatches) {
+          for (const id of attachment.ids) state.batchAssignments.set(id, completedIndex);
           state.completedBatchIndexes.add(completedIndex);
           const batchIsAi = Array.isArray(message.items) && message.items.length > 0
             && message.items.every((item) => item?.origin !== "convert"
@@ -1237,6 +1315,7 @@
         state.completedBatches = state.completedBatchIndexes.size;
         state.status = "running";
         updateToolbar(`Đã dịch ${state.completedBatches}/${state.totalBatches} batch`);
+        recordAttachmentEvidence("attached", "confirmed", message, message.items.length);
         resumeListeningAfterBatch();
         return true;
       }
@@ -1291,6 +1370,8 @@
       }
 
       if (MESSAGE_TYPES.complete.has(message.type)) {
+        const attachment = validateTranslationItems(message, { completion: true });
+        if (!attachment.ok) return rejectAttachment(message, attachment);
         mergeItems(message.items);
         state.fallbackCount = Math.max(
           Number(message.fallbackCount) || 0,
@@ -1311,6 +1392,7 @@
         updateToolbar(state.fallbackCount
           ? `Có ${state.fallbackCount} câu dùng Convert — chương này không được lưu cache`
           : message.cached ? "Đã tải bản dịch từ bộ nhớ đệm." : "Đã dịch xong chương.");
+        recordAttachmentEvidence("attached", "confirmed", message, message.items?.length);
         resumeListeningAfterBatch();
         enqueue(() => prefetchNextChapter());
         return true;

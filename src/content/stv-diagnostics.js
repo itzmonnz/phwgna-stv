@@ -227,6 +227,24 @@
         reason: reasonCodes.includes(batch.reason) ? batch.reason : 'other'
       };
     }
+    if (input.attachment && typeof input.attachment === "object") {
+      const attachment = input.attachment;
+      const reasons = [
+        "confirmed", "source_container_detached", "chapter_url_changed", "chapter_id_changed",
+        "source_block_map_invalid", "source_token_detached", "source_token_changed", "source_context_detached",
+        "source_context_changed", "items_empty",
+        "item_invalid", "item_unknown", "item_duplicate", "items_out_of_order", "item_conflict",
+        "batch_identity_invalid", "block_batch_conflict", "completion_incomplete"
+      ];
+      result.attachment = {
+        state: ["attached", "rejected"].includes(attachment.state) ? attachment.state : "rejected",
+        reason: reasons.includes(attachment.reason) ? attachment.reason : "other",
+        messageType: ["batch", "complete", "other"].includes(attachment.messageType)
+          ? attachment.messageType : "other",
+        batchIndex: Math.max(0, Math.min(10_000, Math.trunc(Number(attachment.batchIndex) || 0))),
+        itemCount: markerBucket(attachment.itemCount)
+      };
+    }
     if (input.prefetch && typeof input.prefetch === "object") {
       const value = input.prefetch;
       const safeEnum = (candidate, allowed, fallback) => allowed.includes(candidate) ? candidate : fallback;

@@ -355,6 +355,47 @@
     return results.map(compactReference);
   }
 
+  function normalizedChapterUrl(value) {
+    try {
+      const url = new URL(String(value || ""));
+      url.hash = "";
+      return url.href;
+    } catch (_error) {
+      return String(value || "").split("#", 1)[0];
+    }
+  }
+
+  function validateChapterEvidence(document, chapter, currentUrl) {
+    if (!chapter?.container?.isConnected) return { ok: false, reason: "source_container_detached" };
+    const capturedUrl = normalizedChapterUrl(chapter.capturedUrl);
+    const liveUrl = normalizedChapterUrl(currentUrl || document?.URL);
+    if (capturedUrl && liveUrl && capturedUrl !== liveUrl) return { ok: false, reason: "chapter_url_changed" };
+    const capturedChapterId = String(chapter.chapterId || "");
+    const liveChapterId = String(chapter.container.getAttribute("cid") || "");
+    if (capturedChapterId && liveChapterId !== capturedChapterId) return { ok: false, reason: "chapter_id_changed" };
+    const blockIds = (chapter.translatableBlocks || []).map(block => String(block?.id || ""));
+    if (!blockIds.length || blockIds.some(id => !id) || new Set(blockIds).size !== blockIds.length) {
+      return { ok: false, reason: "source_block_map_invalid" };
+    }
+    for (const evidence of chapter.sourceTokenEvidence || []) {
+      if (!evidence?.node?.isConnected || !chapter.container.contains(evidence.node)) {
+        return { ok: false, reason: "source_token_detached" };
+      }
+      if (String(evidence.node.getAttribute("t") || "").trim() !== evidence.source) {
+        return { ok: false, reason: "source_token_changed" };
+      }
+    }
+    for (const evidence of chapter.sourceContextEvidence || []) {
+      if (!evidence?.node?.isConnected || !chapter.container.contains(evidence.node)) {
+        return { ok: false, reason: "source_context_detached" };
+      }
+      if (evidence.kind === "text" && String(evidence.node.nodeValue || "") !== evidence.value) {
+        return { ok: false, reason: "source_context_changed" };
+      }
+    }
+    return { ok: true, reason: "confirmed" };
+  }
+
   function extractChapter(document, options) {
     const config = options || {};
     const container = sites.chapterRoot(document, config.url || document.URL);
@@ -368,6 +409,8 @@
     const blocks = [];
     const nameReferencesByBlock = Object.create(null);
     const sourceNodeBlockIds = new WeakMap();
+    const sourceTokenEvidence = [];
+    const sourceContextEvidence = [];
     let paragraphIndex = 0;
     let paragraphGroupIndex = 0;
     let nativeIndex = 0;
@@ -381,7 +424,10 @@
     }
 
     function appendText(value, node) {
-      if (started) mergeContext(pendingReferenceItems, String(value || ""), node);
+      if (started) {
+        sourceContextEvidence.push({ kind: "text", node, value: String(node?.nodeValue || "") });
+        mergeContext(pendingReferenceItems, String(value || ""), node);
+      }
     }
 
     function flushText(final = false) {
@@ -433,6 +479,7 @@
       if (tagName === "I" && element.hasAttribute("t")) {
         started = true;
         const source = String(element.getAttribute("t") || "").trim();
+        sourceTokenEvidence.push({ node: element, source });
         const selectable = Boolean(source);
         pendingReferenceItems.push({
           kind: "token",
@@ -461,6 +508,7 @@
         return;
       }
       if (tagName === "BR") {
+        sourceContextEvidence.push({ kind: "break", node: element });
         mergeContext(pendingReferenceItems, "\n", element);
         return;
       }
@@ -505,11 +553,14 @@
 
     return {
       container,
+      capturedUrl: normalizedChapterUrl(config.url || document.URL),
       chapterId: container.getAttribute("cid") || "",
       blocks,
       translatableBlocks,
       nameReferencesByBlock,
       sourceNodeBlockIds,
+      sourceTokenEvidence,
+      sourceContextEvidence,
       sourceText,
       cjkRatio: ratio
     };
@@ -522,6 +573,7 @@
     normalizeSourceParagraph,
     cjkRatio,
     splitLongParagraph,
+    validateChapterEvidence,
     extractChapter
   });
 });
