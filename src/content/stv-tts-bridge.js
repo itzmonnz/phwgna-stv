@@ -12,7 +12,7 @@
   const RESULT_EVENT = "stvai:tts-result";
   const STATUS_EVENT = "stvai:tts-status";
   const NATIVE_ACTION_EVENT = "stvai:native-action";
-  const ACTIONS = new Set(["arm", "open", "watch", "complete", "pause", "resume", "stop", "release", "pronunciation-open", "pronunciation-close", "preview"]);
+  const ACTIONS = new Set(["arm", "inspect", "open", "watch", "complete", "pause", "resume", "stop", "release", "pronunciation-open", "pronunciation-close", "preview"]);
   const AUTO_FOLLOW_IDLE_MS = 3000;
   const SCROLL_KEYS = new Set(["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " "]);
   const TOOL_SURFACE_SELECTOR = [
@@ -727,6 +727,25 @@
       emitStatus("chapter_changed");
     }
 
+    function inspectListening(requestId) {
+      if (!owned || !guardedReader?.isConnected || chapterChanged()) {
+        return { ok: true, requestId, code: "inspected", listeningState: "absent" };
+      }
+      const player = playerForPage();
+      if (!player) return { ok: true, requestId, code: "inspected", listeningState: "absent" };
+      let listeningState = "ready";
+      if (menuPaused) listeningState = "menu_paused";
+      else if (player.isPlaying === true) listeningState = "playing";
+      else if (documentComplete && completionNotified) listeningState = "completed";
+      else if (player.isUserStopped === true) listeningState = "user_paused";
+      else if (Boolean(player.watchInterval)
+        || (Array.isArray(player.tokenizedSentences)
+          && Number(player.currentSentenceIndex) >= player.tokenizedSentences.length)) {
+        listeningState = "waiting_batch";
+      }
+      return { ok: true, requestId, code: "inspected", listeningState };
+    }
+
     const onPageHide = () => { if (owned) holdForChapter(); };
     const onHistory = () => { if (chapterChanged()) holdForChapter(); };
     const onOverlayInput = event => {
@@ -916,6 +935,7 @@
         return { ok: true, requestId: command.requestId, code: "stopped" };
       }
       if (chapterChanged()) holdForChapter();
+      if (command.action === "inspect") return inspectListening(command.requestId);
       if (command.action === "open") {
         setArmed(true);
         try { return internally(() => open(command.requestId, command.pronunciations)); }

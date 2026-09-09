@@ -658,6 +658,21 @@
       ui.announceToolbar?.(toolbar, message);
     }
 
+    const ttsListeningStates = new Set([
+      "absent", "ready", "playing", "user_paused", "menu_paused", "waiting_batch", "completed"
+    ]);
+
+    function setTtsDiagnostic(patch = {}) {
+      if (!diagnosticState || typeof diagnosticState !== "object") return;
+      diagnosticState.tts = {
+        ...(diagnosticState.tts || {}),
+        controllerActive: state.ttsActive === true,
+        pending: state.ttsPending === true,
+        opening: ttsOpening === true,
+        ...patch
+      };
+    }
+
     function recordAttachmentEvidence(stateName, reason, message, itemCount = 0) {
       if (!diagnosticState || typeof diagnosticState !== "object") return;
       diagnosticState.attachment = {
@@ -777,10 +792,53 @@
       return ttsClient.request(document, action, options);
     }
 
+    async function inspectListening() {
+      setTtsDiagnostic({ stage: "inspecting", lastAction: "inspect", outcome: "none" });
+      const result = await sendTts("inspect").catch(() => null);
+      const listeningState = ttsListeningStates.has(result?.listeningState)
+        ? result.listeningState : "unknown";
+      setTtsDiagnostic({
+        stage: listeningState === "unknown" ? "degraded" : "inspected",
+        listeningState,
+        lastAction: "inspect",
+        outcome: listeningState === "unknown" ? "failed" : "ok"
+      });
+      return listeningState;
+    }
+
+    async function reconcileListening({ adopt = false } = {}) {
+      const listeningState = await inspectListening();
+      if (listeningState === "unknown") return { known: false, active: state.ttsActive, listeningState };
+      const bridgeActive = listeningState !== "absent";
+      if (state.ttsActive && !bridgeActive) {
+        state.ttsActive = false;
+        ttsCompleted = false;
+        ttsOverlayDrag?.setEnabled?.(false);
+        updateToolbar();
+      } else if (adopt && !state.ttsActive && Boolean(ttsSessionId) && bridgeActive) {
+        state.ttsActive = true;
+        state.ttsPending = false;
+        ttsCompleted = listeningState === "completed";
+        ttsOverlayDrag?.setEnabled?.(true);
+        ttsOverlayDrag?.refresh?.();
+        updateToolbar();
+      }
+      setTtsDiagnostic({
+        stage: bridgeActive ? "active" : "ready",
+        listeningState,
+        outcome: "ok"
+      });
+      return { known: true, active: bridgeActive, listeningState };
+    }
+
     async function rearmListening() {
       if (!active || !state.ttsActive) return false;
       const result = await sendTts("resume").catch(() => null);
-      if (result?.ok) return true;
+      if (result?.ok) {
+        setTtsDiagnostic({ stage: "active", lastAction: "resume", outcome: "ok" });
+        return true;
+      }
+      setTtsDiagnostic({ stage: "degraded", lastAction: "resume", outcome: "failed" });
       reportListening("Nghe sách chưa tự chạy lại — hãy mở player STV để tiếp tục.");
       return false;
     }
@@ -804,6 +862,7 @@
         hadPlayer || hadSession ? sendTts("stop").catch(() => undefined) : undefined,
         hadSession ? sendRuntime(runtime, { type: "STVAI_TTS_SESSION_CLEAR", sessionId }).catch(() => undefined) : undefined
       ]);
+      setTtsDiagnostic({ stage: "stopped", listeningState: "absent", lastAction: "stop", outcome: "ok" });
     }
 
     async function startListening() {
@@ -835,9 +894,11 @@
         ttsOverlayDrag?.setEnabled?.(true);
         ttsOverlayDrag?.refresh?.();
         updateToolbar();
+        setTtsDiagnostic({ stage: "active", listeningState: "ready", lastAction: "open", outcome: "ok" });
         if (continuingSession) await rearmListening();
         await completeListening();
       } catch (error) {
+        setTtsDiagnostic({ stage: "degraded", listeningState: "unknown", lastAction: "open", outcome: "failed" });
         if (generation === ttsGeneration && active) {
           await stopListening(error?.message || "Không tìm thấy module Nghe sách của STV.");
         }
@@ -847,9 +908,22 @@
     }
 
     async function completeListening() {
-      if (!active || !state.ttsActive || state.status !== "completed" || ttsCompleted) return;
-      ttsCompleted = true;
-      await sendTts("complete").catch(() => undefined);
+      if (!active || !state.ttsActive || state.status !== "completed" || ttsCompleted) return false;
+      const result = await sendTts("complete").catch(() => null);
+      if (result?.ok) {
+        ttsCompleted = true;
+        setTtsDiagnostic({ stage: "completed", listeningState: "completed", lastAction: "complete", outcome: "ok" });
+        return true;
+      }
+      const listeningState = await inspectListening();
+      if (listeningState === "completed") {
+        ttsCompleted = true;
+        setTtsDiagnostic({ stage: "completed", listeningState, lastAction: "complete", outcome: "ok" });
+        return true;
+      }
+      setTtsDiagnostic({ stage: "degraded", listeningState, lastAction: "complete", outcome: "deferred" });
+      reportListening("Nghe sách chưa nhận trạng thái hoàn tất — tool sẽ kiểm tra lại khi player cập nhật.");
+      return false;
     }
 
     function resumeListeningAfterBatch() {
@@ -857,7 +931,17 @@
       enqueue(async () => {
         if (!active || generation !== ttsGeneration) return;
         if (state.ttsPending && state.firstBatchReady) await startListening();
-        else if (state.ttsActive && state.status !== "completed") await sendTts("watch").catch(() => undefined);
+        else if (state.ttsActive && state.status !== "completed") {
+          const evidence = await reconcileListening();
+          if (!evidence.known || evidence.active) {
+            const result = await sendTts("watch").catch(() => null);
+            setTtsDiagnostic({
+              stage: result?.ok ? "active" : "degraded",
+              lastAction: "watch",
+              outcome: result?.ok ? "ok" : "deferred"
+            });
+          }
+        }
         await completeListening();
       });
     }
@@ -892,23 +976,29 @@
       }, { once: true });
     }
 
-    function requestListening(source = "tool") {
-      if (source === "native" && (state.ttsActive || state.ttsPending || ttsOpening)) {
-        updateToolbar();
-        return Promise.resolve();
+    async function requestListening(source = "tool") {
+      const controllerHadIntent = state.ttsActive || state.ttsPending || ttsOpening;
+      let evidence = null;
+      if (state.ttsActive || (source === "native" && Boolean(ttsSessionId))) {
+        evidence = await reconcileListening({ adopt: source === "native" });
       }
+      if (source === "native" && (state.ttsActive || state.ttsPending || ttsOpening || evidence?.active)) {
+        updateToolbar();
+        return;
+      }
+      if (source === "tool" && controllerHadIntent) return stopListening("Đã dừng nghe sách.");
       if (state.ttsActive || state.ttsPending || ttsOpening) return stopListening("Đã dừng nghe sách.");
       if (["paused", "error", "cancelled"].includes(state.status)) {
         reportListening("Bản dịch đang tạm dừng — chưa thể Nghe sách.");
-        return Promise.resolve();
+        return;
       }
       if (!state.firstBatchReady && !listeningCanQueue()) {
         reportListening("Chưa có bản AI — hãy bấm Dịch AI trước.");
-        return Promise.resolve();
+        return;
       }
       if (!ttsConsent) {
         showTtsConsent();
-        return Promise.resolve();
+        return;
       }
       return startOrQueueListening();
     }
@@ -1709,12 +1799,15 @@
         if (code === "reader_opened") {
           ttsOverlayDrag?.setEnabled?.(true);
           ttsOverlayDrag?.refresh?.();
+          setTtsDiagnostic({ stage: "active", listeningState: "ready", lastAction: "status", outcome: "ok" });
+          if (state.status === "completed" && state.ttsActive && !ttsCompleted) enqueue(completeListening);
         }
         if (code === "player_stopped") void stopListening("Đã dừng nghe sách.");
         if (code === "chapter_changed") {
           ttsOverlayDrag?.setEnabled?.(false);
           state.ttsActive = false;
           ++ttsGeneration;
+          setTtsDiagnostic({ stage: "chapter_changed", listeningState: "absent", lastAction: "status", outcome: "ok" });
           // The next controller claims the session using its own URL. Do not
           // update it from the departed document after navigation.
         }

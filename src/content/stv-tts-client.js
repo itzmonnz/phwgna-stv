@@ -9,7 +9,8 @@
   const COMMAND_EVENT = "stvai:tts-command";
   const RESULT_EVENT = "stvai:tts-result";
   const STATUS_EVENT = "stvai:tts-status";
-  const ACTIONS = new Set(["arm", "open", "watch", "complete", "pause", "resume", "stop", "release", "pronunciation-open", "pronunciation-close", "preview"]);
+  const ACTIONS = new Set(["arm", "inspect", "open", "watch", "complete", "pause", "resume", "stop", "release", "pronunciation-open", "pronunciation-close", "preview"]);
+  const LISTENING_STATES = new Set(["absent", "ready", "playing", "user_paused", "menu_paused", "waiting_batch", "completed"]);
   const STATUS_CODES = new Set(["chapter_changed", "player_stopped", "reader_opened", "native_listen_requested"]);
 
   function createRequestId() {
@@ -47,7 +48,10 @@
           const value = JSON.parse(String(event.detail || ""));
           if (value?.requestId !== requestId) return;
           if (!value.ok) finish(undefined, new Error(String(value.code || "STV TTS không khả dụng.")));
-          else finish({ ok: true, requestId, code: String(value.code || "ok") });
+          else if (action === "inspect") {
+            if (value.code !== "inspected" || !LISTENING_STATES.has(value.listeningState)) return;
+            finish({ ok: true, requestId, code: "inspected", listeningState: value.listeningState });
+          } else finish({ ok: true, requestId, code: String(value.code || "ok") });
         } catch (_error) {
           // Ignore malformed events from the host page and keep waiting for the matching response.
         }

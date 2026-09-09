@@ -245,6 +245,19 @@
         itemCount: markerBucket(attachment.itemCount)
       };
     }
+    if (input.tts && typeof input.tts === "object") {
+      const tts = input.tts;
+      const safe = (candidate, allowed, fallback) => allowed.includes(candidate) ? candidate : fallback;
+      result.tts = {
+        stage: safe(tts.stage, ["idle", "inspecting", "inspected", "ready", "active", "degraded", "completed", "stopped", "chapter_changed"], "idle"),
+        listeningState: safe(tts.listeningState, ["unknown", "absent", "ready", "playing", "user_paused", "menu_paused", "waiting_batch", "completed"], "unknown"),
+        controllerActive: tts.controllerActive === true,
+        pending: tts.pending === true,
+        opening: tts.opening === true,
+        lastAction: safe(tts.lastAction, ["none", "inspect", "open", "watch", "complete", "resume", "stop", "status"], "none"),
+        outcome: safe(tts.outcome, ["none", "ok", "failed", "deferred"], "none")
+      };
+    }
     if (input.prefetch && typeof input.prefetch === "object") {
       const value = input.prefetch;
       const safeEnum = (candidate, allowed, fallback) => allowed.includes(candidate) ? candidate : fallback;
