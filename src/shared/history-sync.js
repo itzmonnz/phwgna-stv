@@ -293,7 +293,16 @@
           state.entries[key] = { record: codec.portable(reading), kind: 'read', rank: codec.PRIORITY.indexOf(url.origin),
             epoch: sessions.epoch, order: doc.order };
           state.revision++;
-          state.order = [key, ...state.order.filter(value => value !== key)];
+          if (!state.order.includes(key)) state.order.push(key);
+          // Different chapter tabs can finish loading out of order. Sort every
+          // proven read from this browser session by navigation order, not by
+          // whichever response happened to reach the worker last.
+          const currentReads = state.order.filter(value => {
+            const entry = state.entries[value];
+            return entry?.kind === 'read' && entry.epoch === sessions.epoch;
+          }).sort((left, right) => state.entries[right].order - state.entries[left].order);
+          const currentSet = new Set(currentReads);
+          state.order = [...currentReads, ...state.order.filter(value => !currentSet.has(value))];
         }
         // Persist data first; replay of the same order cannot change its winner.
         const trustedRaw = codec.removeKeys(message.raw, blockedKeys);
