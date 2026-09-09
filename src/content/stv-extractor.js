@@ -228,7 +228,7 @@
       if (item.kind !== "context" || !item.text.includes("\n")) {
         if (item.kind === "context" && !item.text.trim() && lineBreaks > 0) continue;
         lineBreaks = 0;
-        if (item.kind === "context") mergeContext(current, item.text);
+        if (item.kind === "context") mergeContext(current, item.text, item.node);
         else current.push(item);
         continue;
       }
@@ -238,10 +238,10 @@
         if (part === "\n") {
           lineBreaks += 1;
           if (lineBreaks >= 2) finish();
-          else mergeContext(current, "\n");
+          else mergeContext(current, "\n", item.node);
         } else if (part.trim()) {
           lineBreaks = 0;
-          mergeContext(current, part);
+          mergeContext(current, part, item.node);
         }
       }
     }
@@ -411,6 +411,8 @@
     const sourceNodeBlockIds = new WeakMap();
     const sourceTokenEvidence = [];
     const sourceContextEvidence = [];
+    const evidencedTokens = new WeakSet();
+    const evidencedContext = new WeakSet();
     let paragraphIndex = 0;
     let paragraphGroupIndex = 0;
     let nativeIndex = 0;
@@ -425,8 +427,22 @@
 
     function appendText(value, node) {
       if (started) {
-        sourceContextEvidence.push({ kind: "text", node, value: String(node?.nodeValue || "") });
         mergeContext(pendingReferenceItems, String(value || ""), node);
+      }
+    }
+
+    function retainSourceEvidence(items) {
+      for (const item of items) {
+        const node = item?.node;
+        if (item.kind === "token" && node?.nodeType === 1 && !evidencedTokens.has(node)) {
+          evidencedTokens.add(node);
+          sourceTokenEvidence.push({ node, source: String(node.getAttribute("t") || "").trim() });
+        } else if (item.kind === "context" && node && !evidencedContext.has(node)) {
+          evidencedContext.add(node);
+          sourceContextEvidence.push(node.nodeType === 3
+            ? { kind: "text", node, value: String(node.nodeValue || "") }
+            : { kind: "break", node });
+        }
       }
     }
 
@@ -439,6 +455,7 @@
         if (isStvFilenameArtifact(referenceItems)) continue;
         const text = normalizeSourceParagraph(referenceSource(referenceItems).replace(/\r/g, ""));
         if (!text) continue;
+        retainSourceEvidence(referenceItems);
         paragraphGroupIndex += 1;
         const paragraphGroup = `G${String(paragraphGroupIndex).padStart(4, "0")}`;
         const pieces = splitLongParagraph(text, paragraphSplitLimit(text));
@@ -479,7 +496,6 @@
       if (tagName === "I" && element.hasAttribute("t")) {
         started = true;
         const source = String(element.getAttribute("t") || "").trim();
-        sourceTokenEvidence.push({ node: element, source });
         const selectable = Boolean(source);
         pendingReferenceItems.push({
           kind: "token",
@@ -508,7 +524,6 @@
         return;
       }
       if (tagName === "BR") {
-        sourceContextEvidence.push({ kind: "break", node: element });
         mergeContext(pendingReferenceItems, "\n", element);
         return;
       }
