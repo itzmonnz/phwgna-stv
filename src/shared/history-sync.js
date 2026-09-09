@@ -215,7 +215,15 @@
       // Its durable intent still identifies the resulting snapshot as an echo.
       const echo = origin.pending?.after === message.raw;
       if (echo) { origin.lastRaw = message.raw; delete origin.pending; }
-      if (origin.pending) return fail(origin.pending.expires > now() ? 'history_write_busy' : 'history_write_uncertain');
+      if (origin.pending) {
+        if (origin.pending.expires > now()) return fail('history_write_busy');
+        // The writer disappeared. The live snapshot is now the authority for
+        // deciding whether the compare-and-set landed: `before` means it did
+        // not, while any third value is a later native/user change. In both
+        // cases discard only the expired intent and continue through normal
+        // merge rules; never leave this origin permanently locked.
+        delete origin.pending;
+      }
       const changed = !origin.observed || message.raw !== origin.lastRaw;
       if (changed) {
         const basedOnCurrent = origin.syncedRevision === state.revision;

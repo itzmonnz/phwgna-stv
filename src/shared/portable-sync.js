@@ -213,8 +213,21 @@
             origin.last[itemId] = current;
             delete origin.pending[itemId];
             changed = true;
-          } else if (current !== pending.before || pending.expires <= now()) return fail('portable_write_uncertain');
-          continue;
+            continue;
+          } else if (current === pending.before && pending.expires > now()) {
+            // The authorized writer has not applied its compare-and-set yet.
+            // Return the same durable intent below; do not mint a second one.
+            continue;
+          } else if (pending.expires > now()) {
+            return fail('portable_write_busy');
+          } else {
+            // Resolve an orphaned compare-and-set from the current native
+            // value instead of retaining an expired lock forever. Normal
+            // two-observation conflict handling below decides whether a third
+            // value is a genuine edit.
+            delete origin.pending[itemId];
+            changed = true;
+          }
         }
         if (!origin.initialized) continue;
         if (Object.hasOwn(origin.last, itemId) && origin.last[itemId] !== current) {
