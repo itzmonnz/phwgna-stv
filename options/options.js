@@ -459,12 +459,36 @@
     setStatus(document, "Đã tải cài đặt.");
 
     const portableStatus = document.getElementById("portableStatus");
+    const historyDomainStatus = document.getElementById("historyDomainStatus");
     const portableCandidates = document.getElementById("portableCandidates");
     const portableItemsNode = document.getElementById("portableItems");
     const portableStart = document.getElementById("portableLearnStart");
     const portableFinish = document.getElementById("portableLearnFinish");
     const portableApprove = document.getElementById("portableApprove");
     let portableSessionId = "", portableItems = [];
+    const historyStateLabel = Object.freeze({ synced: "Đã đồng bộ", pending: "Đang đồng bộ", unseen: "Chưa mở", error: "Lỗi" });
+    function renderHistoryDomains(response) {
+      if (!historyDomainStatus) return;
+      historyDomainStatus.replaceChildren();
+      for (const item of response?.origins || []) {
+        const row = document.createElement("div"); row.className = "history-domain-row";
+        row.dataset.state = Object.hasOwn(historyStateLabel, item?.status) ? item.status : "error";
+        const title = document.createElement("strong");
+        title.textContent = String(item.origin || "").replace(/^https:\/\/sangtacviet\./, ".");
+        const detail = document.createElement("span"); detail.className = "field-help";
+        const seen = Number(item.lastSeenAt) > 0
+          ? ` · ${new Date(item.lastSeenAt).toLocaleString("vi-VN")}` : "";
+        detail.textContent = `${historyStateLabel[row.dataset.state]} · ${Number(item.recordCount) || 0} truyện${seen}`;
+        row.append(title, detail); historyDomainStatus.append(row);
+      }
+    }
+    async function refreshHistoryDomains() {
+      if (typeof chromeApi.runtime?.sendMessage !== "function") return;
+      try {
+        const response = await runtimeCall(chromeApi, { type: "STVAI_HISTORY_STATUS" });
+        if (response?.ok) renderHistoryDomains(response);
+      } catch (_) { renderHistoryDomains({ origins: [] }); }
+    }
     const portableLabel = category => category === "nativeNames" ? "Bộ Name STV" : "Cài đặt STV";
     function portableItemIdentity(item) {
       const inferredKey = String(item.storageKey || String(item.itemId || "").replace(/^[^:]+:/, ""));
@@ -550,6 +574,7 @@
     }
     if (typeof chromeApi.runtime?.sendMessage === "function") {
       try {
+        await refreshHistoryDomains();
         const response = await runtimeCall(chromeApi, { type: "STVAI_PORTABLE_STATUS" });
         if (response?.ok) {
           renderPortableItems(response.items);
@@ -558,6 +583,9 @@
         }
       } catch (_) { setPortableStatus("Chưa kết nối được dịch vụ đồng bộ STV.", "error"); }
     }
+    chromeApi.storage?.onChanged?.addListener?.((changes, areaName) => {
+      if (areaName === "local" && Object.hasOwn(changes || {}, HISTORY_KEY)) void refreshHistoryDomains();
+    });
     portableStart.addEventListener("click", async () => {
       portableStart.disabled = true;
       try {

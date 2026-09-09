@@ -32,9 +32,26 @@
     .map(({ rank }) => rank));
   const fail = code => ({ ok: false, code });
   const positions = raw => Object.fromEntries(codec.parse(raw).records.map(r => [codec.key(r), r.current]));
+  const SECURE_ORIGINS = sites.ORIGINS.filter(origin => origin.startsWith('https://'));
 
   function createHistorySync({ storage, tabs, now = Date.now, createId = () => crypto.randomUUID() }) {
     let serial = Promise.resolve();
+    let notifyRevision = -1, notifyQueued = false;
+    function notifyOpenPages(revision) {
+      if (typeof tabs?.query !== 'function' || typeof tabs?.sendMessage !== 'function') return;
+      notifyRevision = Math.max(notifyRevision, revision);
+      if (notifyQueued) return;
+      notifyQueued = true;
+      Promise.resolve().then(async () => {
+        notifyQueued = false;
+        const announced = notifyRevision;
+        try {
+          const open = await tabs.query({ url: SECURE_ORIGINS.map(origin => `${origin}/*`) });
+          await Promise.allSettled((open || []).filter(tab => Number.isInteger(tab?.id))
+            .map(tab => tabs.sendMessage(tab.id, { type: 'STVAI_HISTORY_CANONICAL_CHANGED', revision: announced })));
+        } catch (_) { /* The one-second observer remains the safe fallback. */ }
+      });
+    }
     // Serialise all origins, not merely each tab. No dependency on translation jobs.
     function handle(message, sender) {
       const result = serial.then(() => exchange(message, sender)).catch(() => fail('history_storage_unavailable'));
@@ -60,7 +77,10 @@
         if (!pending || pending.tabId !== sender.tab.id || pending.documentId !== sender.documentId
           || pending.documentToken !== message.documentToken || pending.ticket !== message.ticket
           || pending.token !== message.token || pending.after !== message.raw) return fail('history_stale_snapshot');
-        if (message.action === 'applied') target.lastRaw = pending.after;
+        if (message.action === 'applied') {
+          target.lastRaw = pending.after;
+          target.lastSeenAt = now();
+        }
         delete target.pending;
         await storage.local.set({ [STATE_KEY]: saved });
         return { ok: true, revision: saved.revision };
@@ -90,10 +110,13 @@
       }
       if (!doc || doc.documentId !== sender.documentId || doc.url !== url.href || doc.ticket !== message.ticket
         || doc.chapterId !== message.chapterId) return fail('history_stale_document');
-      const state = (await storage.local.get(STATE_KEY))[STATE_KEY] || { schema: 1, revision: 0, entries: {}, tombstones: {}, origins: {} };
+      const state = (await storage.local.get(STATE_KEY))[STATE_KEY] || { schema: 1, revision: 0, entries: {}, order: [], tombstones: {}, origins: {} };
       if (state.schema !== 1 || !state.entries || !state.origins) return fail('history_invalid_data');
-      if (!state.tombstones || typeof state.tombstones !== 'object' || Array.isArray(state.tombstones)) state.tombstones = {};
       const previous = JSON.stringify(state);
+      if (!state.tombstones || typeof state.tombstones !== 'object' || Array.isArray(state.tombstones)) state.tombstones = {};
+      if (!Array.isArray(state.order)) state.order = [];
+      state.order = [...new Set(state.order.filter(key => typeof key === 'string' && Object.hasOwn(state.entries, key)))];
+      for (const key of Object.keys(state.entries)) if (!state.order.includes(key)) state.order.push(key);
       const insecureKeys = new Set(Array.isArray(state.insecureKeys)
         ? state.insecureKeys.filter(key => typeof key === 'string').slice(0, codec.MAX_RECORDS)
         : []);
@@ -101,6 +124,7 @@
       for (const [key, value] of Object.entries(state.entries)) {
         if (!INSECURE_RANKS.has(value?.rank)) continue;
         delete state.entries[key];
+        state.order = state.order.filter(value => value !== key);
         insecureKeys.add(key);
         removedInsecureHistory = true;
       }
@@ -110,8 +134,9 @@
       }
       const origin = state.origins[url.origin] || { observed: false, lastRaw: null, suppressed: [] };
       state.origins[url.origin] = origin;
-      const allowedRecords = () => Object.entries(state.entries)
-        .filter(([key]) => !origin.suppressed.includes(key)).map(([, value]) => value.record);
+      const allowedRecords = () => state.order
+        .filter(key => Object.hasOwn(state.entries, key) && !origin.suppressed.includes(key))
+        .map(key => state.entries[key].record);
       const needsCleanup = () => {
         const live = codec.parse(probe.raw);
         return live.ok && live.records.some(record => insecureKeys.has(codec.key(record))
@@ -123,6 +148,7 @@
         if (JSON.stringify(state) === previous) return;
         if (Object.keys(state.entries).length > codec.MAX_RECORDS || JSON.stringify(state).length > 8_000_000) throw new Error('size');
         await storage.local.set({ [STATE_KEY]: state });
+        notifyOpenPages(state.revision);
       }
       if (message.action === 'poll') {
         await persist();
@@ -162,26 +188,38 @@
         for (const key of Object.keys(old)) {
           if (!Object.hasOwn(fresh, key)) {
             delete state.entries[key];
+            state.order = state.order.filter(value => value !== key);
             state.tombstones[key] = { revision: state.revision + 1 };
             if (!origin.suppressed.includes(key)) origin.suppressed.push(key);
           }
         }
-        const rank = codec.PRIORITY.indexOf(url.origin);
+        const imported = [];
         for (const record of parsed.records) {
           const key = codec.key(record);
           if (insecureKeys.has(key) || Object.hasOwn(state.tombstones, key)
             || codec.current(record.current).chapterId === '0') continue; // Native unread bookmark, not a reading position.
           if (origin.suppressed.includes(key) || (origin.observed && old[key] === record.current)) continue;
           const existing = state.entries[key];
-          // Changed native data after a browser/extension session gap has unknown
-          // age, so compare legacy priorities instead of inventing a timestamp.
+          // The first snapshot from a newly seen origin only fills missing
+          // books. Once observed, a stable native change is newer by definition
+          // because every origin is serialized through this controller.
           const protectedRead = existing?.kind === 'read' && (existing.epoch === sessions.epoch || !origin.observed);
-          if (!existing || (!protectedRead && rank <= existing.rank)) {
-            state.entries[key] = { record: codec.portable(record), kind: 'legacy', rank, order: 0, epoch: sessions.epoch };
+          if (!existing || (origin.observed && !protectedRead)) {
+            state.entries[key] = { record: codec.portable(record), kind: 'native', revision: state.revision + 1,
+              rank: codec.PRIORITY.indexOf(url.origin), order: 0, epoch: sessions.epoch };
+            imported.push(key);
           }
+        }
+        const freshOrder = parsed.records.map(codec.key).filter(key => Object.hasOwn(state.entries, key));
+        if (!origin.observed && !state.order.length) state.order = [...freshOrder];
+        else if (origin.observed && (imported.length || freshOrder.some((key, index) => state.order[index] !== key))) {
+          state.order = [...freshOrder, ...state.order.filter(key => !freshOrder.includes(key))];
+        } else {
+          for (const key of freshOrder) if (!state.order.includes(key)) state.order.push(key);
         }
         origin.lastRaw = message.raw;
         origin.observed = true;
+        origin.lastSeenAt = now();
         delete origin.pending;
         state.revision++;
       }
@@ -196,11 +234,16 @@
           delete state.tombstones[key];
           state.revision++;
         }
-        origin.suppressed = origin.suppressed.filter(value => value !== key);
+        for (const originState of Object.values(state.origins)) {
+          if (Array.isArray(originState?.suppressed)) {
+            originState.suppressed = originState.suppressed.filter(value => value !== key);
+          }
+        }
         if (!existing || existing.kind !== 'read' || existing.epoch !== sessions.epoch || doc.order > existing.order) {
           state.entries[key] = { record: codec.portable(reading), kind: 'read', rank: codec.PRIORITY.indexOf(url.origin),
             epoch: sessions.epoch, order: doc.order };
           state.revision++;
+          state.order = [key, ...state.order.filter(value => value !== key)];
         }
         // Persist data first; replay of the same order cannot change its winner.
         await persist();
@@ -217,7 +260,40 @@
       serial = result;
       return result;
     }
-    return Object.freeze({ handle, forgetTab });
+    function status() {
+      const result = serial.then(async () => {
+        const state = (await storage.local.get(STATE_KEY))[STATE_KEY];
+        if (!state || state.schema !== 1 || !state.entries || !state.origins) {
+          return { ok: true, revision: 0, recordCount: 0, origins: SECURE_ORIGINS.map(origin => ({ origin, status: 'unseen', recordCount: 0, lastSeenAt: 0 })) };
+        }
+        const canonicalOrder = Array.isArray(state.order)
+          ? state.order.filter(key => Object.hasOwn(state.entries, key)) : Object.keys(state.entries);
+        const origins = SECURE_ORIGINS.map(originName => {
+          const origin = state.origins[originName];
+          if (!origin?.observed) return { origin: originName, status: 'unseen', recordCount: 0, lastSeenAt: 0 };
+          const parsed = codec.parse(origin.lastRaw);
+          if (!parsed.ok) return { origin: originName, status: 'error', recordCount: 0, lastSeenAt: Number(origin.lastSeenAt) || 0 };
+          const suppressed = new Set(Array.isArray(origin.suppressed) ? origin.suppressed : []);
+          const desired = canonicalOrder.filter(key => !suppressed.has(key));
+          const local = parsed.records.filter(record => {
+            const key = codec.key(record), position = codec.current(record.current);
+            return position?.chapterId !== '0' && Object.hasOwn(state.entries, key)
+              && !Object.hasOwn(state.tombstones || {}, key);
+          }).map(codec.key);
+          const positionsMatch = desired.length === local.length && desired.every((key, index) => {
+            const localRecord = parsed.records.find(record => codec.key(record) === key);
+            return local[index] === key && localRecord?.current === state.entries[key]?.record?.current;
+          });
+          return { origin: originName, status: positionsMatch ? 'synced' : 'pending',
+            recordCount: parsed.records.length, lastSeenAt: Number(origin.lastSeenAt) || 0 };
+        });
+        return { ok: true, revision: Math.max(0, Number(state.revision) || 0),
+          recordCount: canonicalOrder.length, origins };
+      }).catch(() => fail('history_storage_unavailable'));
+      serial = result.then(() => undefined);
+      return result;
+    }
+    return Object.freeze({ handle, forgetTab, status });
   }
   return Object.freeze({ createHistorySync, STATE_KEY, SESSION_KEY });
 });

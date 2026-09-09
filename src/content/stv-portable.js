@@ -84,7 +84,7 @@
       return { ok: true, candidates, descriptors };
     }
     async function tick() {
-      if (running || stopped || !secure() || window.document?.visibilityState === 'hidden') return;
+      if (running || stopped || !secure()) return;
       running = true;
       try {
         const sharedName = readSharedName(window);
@@ -116,7 +116,10 @@
     function onStorage() { void tick(); }
     function onMessage(message, sender, reply) {
       if (sender.id !== window.chrome?.runtime?.id || sender.tab) return false;
-      if (message?.type === 'STVAI_PORTABLE_LEARN_START') reply(startLearning(message.sessionId));
+      if (message?.type === 'STVAI_PORTABLE_CANONICAL_CHANGED') {
+        void tick();
+        reply?.({ ok: true });
+      } else if (message?.type === 'STVAI_PORTABLE_LEARN_START') reply(startLearning(message.sessionId));
       else if (message?.type === 'STVAI_PORTABLE_LEARN_FINISH') reply(finishLearning(message.sessionId));
       else return false;
       return false;

@@ -4659,6 +4659,13 @@ if (typeof importScripts === "function") {
           return restorePageZoom(message, sender);
         case 'STVAI_HISTORY_SYNC':
           return historySync.handle(message, sender);
+        case 'STVAI_HISTORY_STATUS': {
+          const senderUrl = String(sender?.url || '');
+          if (!senderUrl.startsWith('chrome-extension://') || !senderUrl.includes('/options/options.html')) {
+            return { ok: false, reason: 'unauthorized-sender' };
+          }
+          return historySync.status();
+        }
         case 'STVAI_PORTABLE_SYNC':
           return portableSync.handle(message, sender);
         case 'STVAI_PORTABLE_STATUS':

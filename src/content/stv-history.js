@@ -129,7 +129,7 @@
       return true;
     }
     async function tick() {
-      if (running || stopped || document.visibilityState === 'hidden') return;
+      if (running || stopped) return;
       running = true;
       try {
         const nextRoute = routeKey();
@@ -209,8 +209,13 @@
       }
     }
     function onProbe(request, sender, reply) {
-      if (request?.type !== 'STVAI_HISTORY_DOCUMENT_PROBE') return false;
       if (sender.id !== window.chrome?.runtime?.id || sender.tab) return false;
+      if (request?.type === 'STVAI_HISTORY_CANONICAL_CHANGED') {
+        void tick();
+        reply?.({ ok: true });
+        return false;
+      }
+      if (request?.type !== 'STVAI_HISTORY_DOCUMENT_PROBE') return false;
       try {
         const raw = window.localStorage.getItem('tusach');
         reply({ documentToken, url: window.location.href, raw, chapterId: currentChapter(document)?.chapterId || '',

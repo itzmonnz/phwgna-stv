@@ -10,10 +10,15 @@
   const fail = code => ({ ok: false, code });
 
   function safeShelf(input) {
-    const shelf = { schema: 1, revision: Math.max(0, Number(input?.revision) || 0), entries: {}, tombstones: {} };
-    for (const [key, value] of Object.entries(input?.entries || {})) {
+    const shelf = { schema: 1, revision: Math.max(0, Number(input?.revision) || 0), entries: {}, order: [], tombstones: {} };
+    const entries = input?.entries || {};
+    const orderedKeys = [...new Set([...(Array.isArray(input?.order) ? input.order : []), ...Object.keys(entries)])]
+      .filter(key => typeof key === 'string' && Object.hasOwn(entries, key));
+    for (const key of orderedKeys) {
+      const value = entries[key];
       if (value?.record) shelf.entries[key] = { record: structuredClone(value.record) };
     }
+    shelf.order = orderedKeys.filter(key => Object.hasOwn(shelf.entries, key));
     for (const [key, value] of Object.entries(input?.tombstones || {})) {
       shelf.tombstones[key] = { revision: Math.max(0, Number(value?.revision) || 0) };
     }
@@ -55,19 +60,22 @@
 
   function validateShelf(input, history) {
     if (!input || input.schema !== 1 || !input.entries || !input.tombstones) return null;
-    const result = { schema: 1, revision: Math.max(0, Number(input.revision) || 0), entries: {}, tombstones: {}, origins: {} };
+    const result = { schema: 1, revision: Math.max(0, Number(input.revision) || 0), entries: {}, order: [], tombstones: {}, origins: {} };
     for (const [key, value] of Object.entries(input.entries)) {
       let safe;
       try { safe = history.portable(value?.record); } catch (_) { return null; }
       if (history.key(safe) !== key) return null;
       result.entries[key] = { record: safe, kind: 'backup', rank: 0, order: 0, epoch: 'backup' };
     }
+    result.order = [...new Set([...(Array.isArray(input.order) ? input.order : []), ...Object.keys(result.entries)])]
+      .filter(key => typeof key === 'string' && Object.hasOwn(result.entries, key));
     for (const [key, value] of Object.entries(input.tombstones)) {
       let identity;
       try { identity = JSON.parse(key); } catch (_) { return null; }
       if (!Array.isArray(identity) || identity.length !== 2 || !history.id(identity[0]) || !history.id(identity[1])) return null;
       result.tombstones[key] = { revision: Math.max(0, Number(value?.revision) || 0) };
       delete result.entries[key];
+      result.order = result.order.filter(value => value !== key);
     }
     if (Object.keys(result.entries).length + Object.keys(result.tombstones).length > history.MAX_RECORDS) return null;
     return result;
@@ -80,10 +88,12 @@
     }
     const parsed = dependencies.history.parse(payload.tusach ?? '');
     if (!parsed.ok) return fail('backup_history_invalid');
-    const shelfInput = { schema: 1, revision: 0, entries: {}, tombstones: {} };
+    const shelfInput = { schema: 1, revision: 0, entries: {}, order: [], tombstones: {} };
     for (const record of parsed.records) {
       const safe = dependencies.history.portable(record);
-      shelfInput.entries[dependencies.history.key(safe)] = { record: safe };
+      const key = dependencies.history.key(safe);
+      shelfInput.entries[key] = { record: safe };
+      shelfInput.order.push(key);
     }
     const historyState = validateShelf(shelfInput, dependencies.history);
     if (!historyState) return fail('backup_history_invalid');
@@ -174,14 +184,19 @@
   }
 
   function mergeHistory(current, incoming) {
-    const state = current?.schema === 1 ? structuredClone(current) : { schema: 1, revision: 0, entries: {}, tombstones: {}, origins: {} };
-    state.entries ||= {}; state.tombstones ||= {}; state.origins ||= {};
+    const state = current?.schema === 1 ? structuredClone(current) : { schema: 1, revision: 0, entries: {}, order: [], tombstones: {}, origins: {} };
+    state.entries ||= {}; state.order ||= []; state.tombstones ||= {}; state.origins ||= {};
     for (const [key, value] of Object.entries(incoming.entries || {})) {
       state.entries[key] = structuredClone(value); delete state.tombstones[key];
     }
     for (const [key, value] of Object.entries(incoming.tombstones || {})) {
       state.tombstones[key] = structuredClone(value); delete state.entries[key];
+      state.order = state.order.filter(value => value !== key);
     }
+    const incomingOrder = [...new Set([...(Array.isArray(incoming.order) ? incoming.order : []), ...Object.keys(incoming.entries || {})])]
+      .filter(key => Object.hasOwn(state.entries, key));
+    state.order = [...incomingOrder, ...state.order.filter(key => !incomingOrder.includes(key) && Object.hasOwn(state.entries, key))];
+    for (const key of Object.keys(state.entries)) if (!state.order.includes(key)) state.order.push(key);
     state.revision = Math.max(Number(state.revision) || 0, Number(incoming.revision) || 0) + 1;
     return state;
   }

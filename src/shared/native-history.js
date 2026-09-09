@@ -59,14 +59,25 @@
   function mergeRaw(raw, updates) {
     const parsed = parse(raw);
     if (!parsed.ok) throw new Error(parsed.code);
-    const byKey = new Map(updates.map(record => { const safe = portable(record); return [key(safe), safe]; }));
-    const chunks = parsed.records.map((entry, index) => {
-      const update = byKey.get(key(entry));
-      byKey.delete(key(entry));
-      return update && update.current !== entry.current
-        ? JSON.stringify({ ...entry, current: update.current }) : parsed.chunks[index];
-    });
-    const result = [...chunks, ...Array.from(byKey.values(), JSON.stringify)].join('~/~');
+    if (!updates.length) return raw || '';
+    const local = new Map(parsed.records.map((entry, index) => [key(entry), { entry, chunk: parsed.chunks[index] }]));
+    const used = new Set(), chunks = [];
+    // Shared records arrive in canonical recent-reading order. Rebuild that
+    // portion in exactly that order while retaining each origin's safe native
+    // metadata. Origin-only unread bookmarks follow in their original order.
+    for (const record of updates) {
+      const safe = portable(record), identity = key(safe);
+      if (used.has(identity)) continue;
+      used.add(identity);
+      const found = local.get(identity);
+      chunks.push(found
+        ? (safe.current !== found.entry.current ? JSON.stringify({ ...found.entry, current: safe.current }) : found.chunk)
+        : JSON.stringify(safe));
+    }
+    for (let index = 0; index < parsed.records.length; index++) {
+      if (!used.has(key(parsed.records[index]))) chunks.push(parsed.chunks[index]);
+    }
+    const result = chunks.join('~/~');
     if (!parse(result).ok) throw new Error('history_size_limit');
     return result;
   }

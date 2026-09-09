@@ -11,6 +11,22 @@
 
   function createPortableSync({ storage, tabs, now = Date.now, createId = () => crypto.randomUUID() }) {
     let serial = Promise.resolve();
+    let notifyRevision = -1, notifyQueued = false;
+    function notifyOpenPages(revision) {
+      if (typeof tabs?.query !== 'function' || typeof tabs?.sendMessage !== 'function') return;
+      notifyRevision = Math.max(notifyRevision, Number(revision) || 0);
+      if (notifyQueued) return;
+      notifyQueued = true;
+      Promise.resolve().then(async () => {
+        notifyQueued = false;
+        try {
+          const origins = sites.ORIGINS.filter(origin => origin.startsWith('https://'));
+          const open = await tabs.query({ url: origins.map(origin => `${origin}/*`) });
+          await Promise.allSettled((open || []).filter(tab => Number.isInteger(tab?.id))
+            .map(tab => tabs.sendMessage(tab.id, { type: 'STVAI_PORTABLE_CANONICAL_CHANGED', revision: notifyRevision })));
+        } catch (_) { /* Periodic observation remains the fallback. */ }
+      });
+    }
     function handle(message, sender) {
       const result = serial.then(() => exchange(message, sender)).catch(() => fail('portable_storage_unavailable'));
       serial = result.then(() => undefined);
@@ -76,6 +92,7 @@
         state = approved.state;
       }
       await storage.local.set({ [codec.STATE_KEY]: state });
+      notifyOpenPages(state.revision);
       await clearLearning();
       return { ok: true, items: codec.publicDescriptors(state) };
     }
@@ -99,6 +116,7 @@
       }
       state.revision++;
       await storage.local.set({ [codec.STATE_KEY]: state });
+      notifyOpenPages(state.revision);
       return { ok: true, items: codec.publicDescriptors(state) };
     }
 
@@ -151,6 +169,7 @@
         }
         state.revision++;
         await storage.local.set({ [codec.STATE_KEY]: state });
+        notifyOpenPages(state.revision);
         return { ok: true, itemId };
       }
       const mapping = state.mappings[url.origin] || {};
@@ -237,7 +256,10 @@
         writes.push({ itemId, key, raw: desired, token: pending.token });
         changed = true;
       }
-      if (changed) await storage.local.set({ [codec.STATE_KEY]: state });
+      if (changed) {
+        await storage.local.set({ [codec.STATE_KEY]: state });
+        notifyOpenPages(state.revision);
+      }
       return { ok: true, revision: state.revision, writes };
     }
     return Object.freeze({ handle, startLearning, finishLearning, approveLearning, status, disable });
