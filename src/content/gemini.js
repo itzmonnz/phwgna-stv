@@ -506,7 +506,10 @@
       const before = readComposerText(composer);
       submissionDiagnostic.composerState = before ? "filled" : "empty_before_write";
       if (comparableComposerText(before) !== comparablePrompt) {
-        common.setComposerText(composer, prompt);
+        // Gemini can reconcile a background Temporary Chat back to a normal
+        // conversation when extension code synthesizes focus. Input events are
+        // sufficient; do not move focus in a warm/background provider tab.
+        common.setComposerText(composer, prompt, { focus: false });
         submissionDiagnostic.inputEventDispatched = true;
       }
       const after = readComposerText(composer);
@@ -554,9 +557,16 @@
         submissionDiagnostic.composerState = "write_failed";
         throw new common.ProviderError("ui_changed", "Gemini không giữ đủ nội dung trước khi gửi.");
       }
+      if (temporaryRequired && !temporaryPageIsActive()) {
+        common.setComposerText(settledComposer, "", { focus: false });
+        submissionDiagnostic.composerState = "cleared_before_send";
+        throw new common.ProviderError(
+          "temporary_unavailable",
+          "Gemini đã rời Temporary Chat trước khi gửi. Prompt đã được xóa."
+        );
+      }
       submissionDiagnostic.clickAttempted = true;
       submissionDiagnostic.sendButtonState = "clicked";
-      settledButton.focus?.();
       settledButton.click();
       try {
         await common.waitForElement(

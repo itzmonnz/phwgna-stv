@@ -133,8 +133,8 @@
       .some((element) => isVisible(element) && pattern.test(textOf(element))));
   }
 
-  function setComposerText(composer, value) {
-    composer.focus();
+  function setComposerText(composer, value, options = {}) {
+    if (options.focus !== false) composer.focus();
     if (composer instanceof composer.ownerDocument.defaultView.HTMLTextAreaElement
       || composer instanceof composer.ownerDocument.defaultView.HTMLInputElement) {
       composer.value = value;
