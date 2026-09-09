@@ -42,14 +42,18 @@ if (typeof importScripts === "function") {
   const AUTOMATION_CONSENT_VERSION = 2;
   const MIN_POOL_TABS = 2;
   const MAX_POOL_TABS = 5;
-  const READY_TIMEOUT_MS = 10_000;
+  // Background Gemini tabs can be throttled more heavily than the slots
+  // prepared first. Give a confirmed READY send enough time to finish.
+  const READY_TIMEOUT_MS = 30_000;
   const CHATGPT_READY_TIMEOUT_MS = 13_000;
   const READY_SEND_TIMEOUT_MS = 5_000;
   const CHATGPT_READY_SEND_TIMEOUT_MS = 8_000;
   const CHATGPT_SETUP_INACTIVITY_MS = 30_000;
   const CHATGPT_SETUP_HARD_TIMEOUT_MS = 60_000;
   const READY_MARKER_GRACE_MS = 2_000;
-  const MAX_WARM_REPLACEMENTS = 1;
+  // Recovery stays bounded, but one transient replacement failure must not
+  // leave the dedicated prefetch slot permanently dead.
+  const MAX_WARM_REPLACEMENTS = 2;
   const PERFORMANCE_HEARTBEAT_MS = 2_000;
   const AUTHENTICATION_BLOCKERS = new Set([
     "login_required", "login_window_open", "captcha", "security_verification", "login_browser_rejected"
