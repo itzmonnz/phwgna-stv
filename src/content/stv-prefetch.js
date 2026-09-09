@@ -61,6 +61,12 @@
     return "101+";
   }
 
+  function prefetchError(code, retryable = false) {
+    const error = new Error(code);
+    if (retryable) error.retryable = true;
+    return error;
+  }
+
   function createTrace(options) {
     const startedAt = Date.now();
     const trace = {
@@ -115,9 +121,13 @@
     if (!url) throw new TypeError("next_chapter_url_invalid");
     const fetchOptions = { credentials: "same-origin", cache: "no-store", redirect: "error", signal };
     trace?.update({ stage: "request_page", pageFetch: { attempted: true } });
-    const response = await options.request(url, fetchOptions);
+    let response;
+    try { response = await options.request(url, fetchOptions); }
+    catch (_) {
+      throw prefetchError(signal.aborted ? 'next_chapter_cancelled' : 'next_chapter_fetch_failed', !signal.aborted);
+    }
     trace?.update({ pageFetch: { responseClass: responseClass(response?.status, response?.ok) } });
-    if (!response?.ok) throw new Error("next_chapter_fetch_failed");
+    if (!response?.ok) throw prefetchError("next_chapter_fetch_failed", true);
     const finalUrl = safeChapterUrl(response.url || url, url);
     trace?.update({ pageFetch: { redirectState: finalUrl?.replace(/\/$/, '') === url.replace(/\/$/, '') ? "same_url" : "changed" } });
     if (!finalUrl || finalUrl.replace(/\/$/, '') !== url.replace(/\/$/, '')) throw new Error("next_chapter_redirect_invalid");
@@ -159,15 +169,20 @@
         ? options.sourceRetryDelaysMs : [1_000, 2_000])
         .slice(0, 2).map(value => Math.min(5_000, Math.max(0, Number(value) || 0)));
       for (let attempt = 0; ; attempt += 1) {
-        const dataResponse = await options.request(endpoint.href, { ...fetchOptions, method: 'POST', body: '', headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
+        let dataResponse;
+        try {
+          dataResponse = await options.request(endpoint.href, { ...fetchOptions, method: 'POST', body: '', headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
+        } catch (_) {
+          throw prefetchError(signal.aborted ? 'next_chapter_cancelled' : 'next_chapter_fetch_failed', !signal.aborted);
+        }
         trace?.update({ endpoint: { responseClass: responseClass(dataResponse?.status, dataResponse?.ok),
           redirectState: !dataResponse?.url || dataResponse.url === endpoint.href ? "same_url" : "changed" } });
-        if (!dataResponse?.ok) throw new Error('next_chapter_fetch_failed');
+        if (!dataResponse?.ok) throw prefetchError('next_chapter_fetch_failed', true);
         if (dataResponse.url && dataResponse.url !== endpoint.href) throw new Error('next_chapter_redirect_invalid');
         try {
           payload = JSON.parse(await dataResponse.text());
           trace?.update({ stage: "parse_source_api", endpoint: { jsonValid: true, dataBytesBucket: bytesBucket(payload?.data) } });
-        } catch (_) { throw new Error('next_chapter_source_unavailable'); }
+        } catch (_) { throw prefetchError('next_chapter_source_unavailable', true); }
         if (signal.aborted) throw new Error('next_chapter_cancelled');
         const payloadCodeOk = [0, '0'].includes(payload?.code) && typeof payload.data === 'string' && Boolean(payload.data.trim());
         const payloadIdentityMatch = String(payload?.bookid) === bookId && payload?.bookhost === host;
@@ -182,7 +197,7 @@
           break;
         }
         if (!payloadSourceEmpty || attempt >= retryDelays.length) {
-          throw new Error('next_chapter_source_unavailable');
+          throw prefetchError('next_chapter_source_unavailable', payloadSourceEmpty);
         }
         await waitForSourceRetry(retryDelays[attempt], signal);
         trace?.update({ stage: "request_source_api" });
@@ -218,7 +233,7 @@
       onAbort = () => { controller.abort(); trace.fail('next_chapter_cancelled'); reject(new Error('next_chapter_cancelled')); };
       options.signal?.addEventListener('abort', onAbort, { once: true });
       if (options.signal?.aborted) onAbort();
-      timer = setTimeout(() => { controller.abort(); trace.fail('next_chapter_timeout'); reject(new Error('next_chapter_timeout')); }, options.timeoutMs ?? 20000);
+      timer = setTimeout(() => { controller.abort(); trace.fail('next_chapter_timeout'); reject(prefetchError('next_chapter_timeout', true)); }, options.timeoutMs ?? 20000);
     });
     try {
       if (controller.signal.aborted) return await stopped;

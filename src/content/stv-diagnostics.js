@@ -240,7 +240,7 @@
       const extraction = value.extraction && typeof value.extraction === "object" ? value.extraction : {};
       result.prefetch = {
         stage: safeEnum(value.stage, ["idle", "next_link", "request_page", "parse_page", "request_source_api",
-          "parse_source_api", "extract_source", "dispatch_job", "running", "ready", "completed", "failed", "cancelled"], "idle"),
+          "parse_source_api", "extract_source", "waiting_source", "dispatch_job", "running", "ready", "completed", "failed", "cancelled"], "idle"),
         failureCode: safeEnum(value.failureCode, ["none", "next_chapter_timeout", "next_chapter_fetch_failed",
           "next_chapter_source_unavailable", "next_chapter_identity_mismatch", "next_chapter_redirect_invalid",
           "next_chapter_end", "next_chapter_cancelled", "prefetch_not_allowed", "provider_unavailable",
@@ -255,6 +255,11 @@
           redirectState: redirect(endpoint.redirectState), jsonValid: endpoint.jsonValid === true,
           payloadCodeOk: endpoint.payloadCodeOk === true, payloadIdentityMatch: endpoint.payloadIdentityMatch === true,
           dataBytesBucket: bytes(endpoint.dataBytesBucket) },
+        sourceWait: {
+          state: safeEnum(value.sourceWait?.state, ["idle", "waiting", "resolved"], "idle"),
+          retryCount: Math.max(0, Math.min(1000, Math.trunc(Number(value.sourceWait?.retryCount) || 0))),
+          nextDelayBucket: safeEnum(value.sourceWait?.nextDelayBucket, ["none", "5s", "10s", "20s", "30s"], "none")
+        },
         extraction: { attempted: extraction.attempted === true,
           state: safeEnum(extraction.state, ["idle", "running", "ok", "failed"], "idle"),
           errorCode: safeEnum(extraction.errorCode, ["none", "SOURCE_NOT_FOUND", "SOURCE_NOT_CHINESE", "UNEXPECTED"], "UNEXPECTED"),

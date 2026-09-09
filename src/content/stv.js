@@ -57,6 +57,7 @@
   });
   const AUTOMATION_CONSENT_VERSION = 2;
   const POOL_STATES = new Set(["preparing", "ready", "leased", "error", "disabled"]);
+  const PREFETCH_SOURCE_RETRY_DELAYS_MS = Object.freeze([5_000, 10_000, 20_000, 30_000]);
   const SHARED_DOM_UI_SELECTOR = [
     ".stvai-toolbar",
     ".stvai-consent-backdrop",
@@ -71,6 +72,28 @@
     if (event?.isTrusted !== true) return false;
     const activation = view?.navigator?.userActivation;
     return !activation || activation.isActive === true;
+  }
+
+  function waitForPrefetchRetry(delayMs, signal) {
+    if (signal?.aborted) return Promise.resolve(false);
+    return new Promise((resolve) => {
+      const finish = (value) => {
+        clearTimeout(timer);
+        signal?.removeEventListener('abort', aborted);
+        resolve(value);
+      };
+      const aborted = () => finish(false);
+      const timer = setTimeout(() => finish(true), Math.max(0, Number(delayMs) || 0));
+      signal?.addEventListener('abort', aborted, { once: true });
+    });
+  }
+
+  function prefetchRetryDelayBucket(delayMs) {
+    const value = Number(delayMs) || 0;
+    if (value <= 5_000) return '5s';
+    if (value <= 10_000) return '10s';
+    if (value <= 20_000) return '20s';
+    return '30s';
   }
 
   function isTrustedNativeInput(event) {
@@ -362,6 +385,8 @@
       parseHtml,
       diagnosticState,
       signal,
+      prefetchRetryDelaysMs = PREFETCH_SOURCE_RETRY_DELAYS_MS,
+      prefetchRetryWait = waitForPrefetchRetry,
       historyNavigation: navigatedThroughHistory = false,
       sameDocumentNavigation = false,
       createJobId = createDefaultJobId
@@ -841,15 +866,37 @@
       const setupSnapshot = core.stableSettingsPayload(settings);
       reportPrefetch("Đang lấy nguồn chương kế…");
       try {
-        const result = await prefetch.loadNextChapter({
-          url: nextUrl,
-          signal: controller.signal,
-          request: networkRequest,
-          parse: parseHtml,
-          extractor,
-          splitIntoBatches: core.splitIntoBatches,
-          onTrace: setPrefetchDiagnostic
-        });
+        const retryDelays = (Array.isArray(prefetchRetryDelaysMs) && prefetchRetryDelaysMs.length
+          ? prefetchRetryDelaysMs : PREFETCH_SOURCE_RETRY_DELAYS_MS)
+          .map(value => Math.min(30_000, Math.max(0, Number(value) || 0)));
+        let retryCount = 0;
+        let result;
+        for (;;) {
+          try {
+            result = await prefetch.loadNextChapter({
+              url: nextUrl,
+              signal: controller.signal,
+              request: networkRequest,
+              parse: parseHtml,
+              extractor,
+              splitIntoBatches: core.splitIntoBatches,
+              onTrace: setPrefetchDiagnostic
+            });
+            setPrefetchDiagnostic({ sourceWait: { state: retryCount ? 'resolved' : 'idle', retryCount, nextDelayBucket: 'none' } });
+            break;
+          } catch (error) {
+            if (!active || generation !== prefetchGeneration || controller.signal.aborted
+              || state.status !== 'completed' || setupSnapshot !== core.stableSettingsPayload(settings)) return;
+            if (error?.retryable !== true) throw error;
+            const delayMs = retryDelays[Math.min(retryCount, retryDelays.length - 1)];
+            retryCount += 1;
+            const delayBucket = prefetchRetryDelayBucket(delayMs);
+            setPrefetchDiagnostic({ stage: 'waiting_source', failureCode: error?.message,
+              sourceWait: { state: 'waiting', retryCount, nextDelayBucket: delayBucket } });
+            reportPrefetch(`STV chưa có nguồn Trung — tự thử lại sau ${delayBucket.replace('s', ' giây')} (lần ${retryCount})…`);
+            if (!await prefetchRetryWait(delayMs, controller.signal)) return;
+          }
+        }
         if (!active || generation !== prefetchGeneration || state.status !== "completed" || !result.batches.length
           || setupSnapshot !== core.stableSettingsPayload(settings)) return;
         // Send the full source to the trusted background for cache identity.
@@ -867,7 +914,8 @@
         state.prefetchTotal = Math.min(core.PREFETCH_BATCH_LIMIT, Math.max(1, result.batches.length));
         state.prefetchRunning = true;
         state.prefetchCacheable = true;
-        setPrefetchDiagnostic({ stage: "dispatch_job", failureCode: "none" });
+        setPrefetchDiagnostic({ stage: "dispatch_job", failureCode: "none",
+          sourceWait: { state: 'resolved', retryCount, nextDelayBucket: 'none' } });
         reportPrefetch(`Đang dịch trước chương kế 0/${result.batches.length}…`);
         const response = await sendRuntime(runtime, message);
         if (active && generation === prefetchGeneration && state.status === "completed") {
