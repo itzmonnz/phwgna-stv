@@ -428,19 +428,33 @@
         || node.hasAttribute("onclick")
         || node.hasAttribute("onmousedown")
       ) return;
+      const originalTouchAction = node.style.touchAction;
+      let lastRelayAt = 0;
       const relay = event => {
         if (!reader?.contains(node)) return;
         event.preventDefault();
         event.stopImmediatePropagation();
+        const now = Date.now();
+        // Chromium normally emits click after pointerup/touchend. Sunshine and
+        // other remote-touch clients do not always emit that final click, so
+        // accept every completed tap but collapse the synthetic follow-up.
+        if (now - lastRelayAt < 500) return;
+        lastRelayAt = now;
         node.dispatchEvent(new document.defaultView.CustomEvent("stvai:native-action", {
           bubbles: true,
           cancelable: false
         }));
       };
       node.dataset.stvaiNativeActionRelay = "true";
+      node.style.touchAction = "manipulation";
       node.addEventListener("click", relay, true);
+      node.addEventListener("pointerup", relay, true);
+      node.addEventListener("touchend", relay, { capture: true, passive: false });
       nativeActionRelays.set(node, () => {
         node.removeEventListener("click", relay, true);
+        node.removeEventListener("pointerup", relay, true);
+        node.removeEventListener("touchend", relay, true);
+        node.style.touchAction = originalTouchAction;
         delete node.dataset.stvaiNativeActionRelay;
       });
     }
