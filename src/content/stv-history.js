@@ -154,7 +154,9 @@
         const parsed = codec.parse(raw);
         if (!parsed.ok) { invalidRaw = raw; check(parsed); return; }
         count = parsed.records.length;
-        const read = !readSent && readProof(document, raw);
+        // Hidden/restored chapter tabs may contain fully loaded old content.
+        // They still synchronize localStorage, but cannot claim a new read.
+        const read = !readSent && document.visibilityState !== 'hidden' && readProof(document, raw);
         if (raw !== lastRaw && lastRaw !== undefined && !read) {
           if (candidateRaw !== raw) {
             candidateRaw = raw;
@@ -222,7 +224,7 @@
       try {
         const raw = window.localStorage.getItem('tusach');
         reply({ documentToken, url: window.location.href, raw, chapterId: currentChapter(document)?.chapterId || '',
-          readChapterId: readProof(document, raw) ? currentChapter(document).chapterId : '' });
+          readChapterId: document.visibilityState !== 'hidden' && readProof(document, raw) ? currentChapter(document).chapterId : '' });
       }
       catch (_) { reply({ documentToken, url: window.location.href, unavailable: true }); }
       return false;

@@ -87,6 +87,7 @@
         if (message.action === 'applied') {
           target.lastRaw = pending.after;
           target.lastSeenAt = now();
+          target.syncedRevision = Math.max(0, Number(pending.revision) || 0);
         }
         delete target.pending;
         await storage.local.set({ [STATE_KEY]: saved });
@@ -165,6 +166,7 @@
       }
       const origin = state.origins[url.origin] || { observed: false, lastRaw: null, suppressed: [] };
       state.origins[url.origin] = origin;
+      const blockedKeys = new Set([...insecureKeys, ...Object.keys(state.tombstones)]);
       const allowedRecords = () => state.order
         .filter(key => Object.hasOwn(state.entries, key) && !origin.suppressed.includes(key))
         .map(key => state.entries[key].record);
@@ -194,14 +196,13 @@
       if (message.action === 'prepare') {
         if (!origin.observed || origin.lastRaw !== message.raw || state.revision !== message.revision) return fail('history_stale_snapshot');
         if (origin.pending) return fail(origin.pending.expires > now() ? 'history_write_busy' : 'history_write_uncertain');
-        const blockedKeys = new Set([...insecureKeys, ...Object.keys(state.tombstones)]);
         const trustedRaw = codec.removeKeys(message.raw, blockedKeys);
         const merged = codec.mergeRaw(trustedRaw, allowedRecords());
         if (merged === (message.raw || '')) return { ok: true, unchanged: true, revision: state.revision };
         if (!Object.hasOwn(origin, 'backup')) origin.backup = message.raw;
         origin.pending = { token: createId(), ticket: doc.ticket, tabId: sender.tab.id,
           documentId: sender.documentId, documentToken: message.documentToken,
-          before: message.raw, after: merged, expires: now() + 5000 };
+          before: message.raw, after: merged, revision: state.revision, expires: now() + 5000 };
         await persist(); // Backup and write intent durable BEFORE native localStorage is touched.
         return { ok: true, token: origin.pending.token, raw: merged, revision: state.revision };
       }
@@ -217,10 +218,15 @@
       if (origin.pending) return fail(origin.pending.expires > now() ? 'history_write_busy' : 'history_write_uncertain');
       const changed = !origin.observed || message.raw !== origin.lastRaw;
       if (changed) {
+        const basedOnCurrent = origin.syncedRevision === state.revision;
         const old = origin.observed ? positions(origin.lastRaw) : {};
         const fresh = positions(message.raw);
         for (const key of Object.keys(old)) {
           if (!Object.hasOwn(fresh, key)) {
+            // A mirror that missed a newer read is based on an older snapshot.
+            // Its missing record is ambiguous (stale storage vs. user delete),
+            // so restore the canonical record instead of creating a tombstone.
+            if (!basedOnCurrent || state.entries[key]?.record?.current !== old[key]) continue;
             delete state.entries[key];
             delete state.progress[key];
             state.order = state.order.filter(value => value !== key);
@@ -235,21 +241,22 @@
             || codec.current(record.current).chapterId === '0') continue; // Native unread bookmark, not a reading position.
           if (origin.suppressed.includes(key) || (origin.observed && old[key] === record.current)) continue;
           const existing = state.entries[key];
-          // The first snapshot from a newly seen origin only fills missing
-          // books. Once observed, a stable native change is newer by definition
-          // because every origin is serialized through this controller.
-          const protectedRead = existing?.kind === 'read' && (existing.epoch === sessions.epoch || !origin.observed);
-          if (!existing || (origin.observed && !protectedRead)) {
+          // A snapshot without a matching, loaded chapter is not evidence of
+          // when its position changed. It may have returned after being offline.
+          // Only fill missing books here; proven reads below update positions.
+          if (!existing) {
             state.entries[key] = { record: codec.portable(record), kind: 'native', revision: state.revision + 1,
               rank: codec.PRIORITY.indexOf(url.origin), order: 0, epoch: sessions.epoch };
+            const through = numericChapter(codec.current(record.current)?.chapterId);
+            if (through) state.progress[key] = { through };
             imported.push(key);
           }
         }
         const freshOrder = parsed.records.map(codec.key).filter(key => Object.hasOwn(state.entries, key));
         if (!origin.observed && !state.order.length) state.order = [...freshOrder];
-        else if (origin.observed && (imported.length || freshOrder.some((key, index) => state.order[index] !== key))) {
-          state.order = [...freshOrder, ...state.order.filter(key => !freshOrder.includes(key))];
-        } else {
+        else {
+          // Reordering without a proven read is equally ambiguous. Preserve
+          // canonical recency and append only genuinely new books.
           for (const key of freshOrder) if (!state.order.includes(key)) state.order.push(key);
         }
         origin.lastRaw = message.raw;
@@ -289,10 +296,20 @@
           state.order = [key, ...state.order.filter(value => value !== key)];
         }
         // Persist data first; replay of the same order cannot change its winner.
+        const trustedRaw = codec.removeKeys(message.raw, blockedKeys);
+        if (!needsCleanup() && codec.mergeRaw(trustedRaw, allowedRecords()) === (message.raw || '')) {
+          origin.syncedRevision = state.revision;
+        }
         await persist();
         doc.read = true;
         await storage.session.set({ [SESSION_KEY]: sessions });
-      } else await persist();
+      } else {
+        const trustedRaw = codec.removeKeys(message.raw, blockedKeys);
+        if (!needsCleanup() && codec.mergeRaw(trustedRaw, allowedRecords()) === (message.raw || '')) {
+          origin.syncedRevision = state.revision;
+        }
+        await persist();
+      }
       return response();
     }
     async function forgetTab(tabId) {
