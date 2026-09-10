@@ -460,17 +460,19 @@
 
     const portableStatus = document.getElementById("portableStatus");
     const historyDomainStatus = document.getElementById("historyDomainStatus");
+    const historyDomainHint = document.getElementById("historyDomainHint");
     const portableCandidates = document.getElementById("portableCandidates");
     const portableItemsNode = document.getElementById("portableItems");
     const portableStart = document.getElementById("portableLearnStart");
     const portableFinish = document.getElementById("portableLearnFinish");
     const portableApprove = document.getElementById("portableApprove");
     let portableSessionId = "", portableItems = [];
-    const historyStateLabel = Object.freeze({ synced: "Đã đồng bộ", pending: "Đang đồng bộ", unseen: "Chưa mở", error: "Lỗi" });
+    const historyStateLabel = Object.freeze({ synced: "Đã đồng bộ", pending: "Chờ mở trang", unseen: "Chưa từng mở", error: "Lỗi dữ liệu" });
     function renderHistoryDomains(response) {
       if (!historyDomainStatus) return;
       historyDomainStatus.replaceChildren();
-      for (const item of response?.origins || []) {
+      const origins = response?.origins || [];
+      for (const item of origins) {
         const row = document.createElement("div"); row.className = "history-domain-row";
         row.dataset.state = Object.hasOwn(historyStateLabel, item?.status) ? item.status : "error";
         const title = document.createElement("strong");
@@ -480,6 +482,15 @@
           ? ` · ${new Date(item.lastSeenAt).toLocaleString("vi-VN")}` : "";
         detail.textContent = `${historyStateLabel[row.dataset.state]} · ${Number(item.recordCount) || 0} truyện${seen}`;
         row.append(title, detail); historyDomainStatus.append(row);
+      }
+      if (historyDomainHint) {
+        const hasError = origins.some(item => item?.status === "error");
+        const hasPending = origins.some(item => item?.status === "pending");
+        historyDomainHint.textContent = hasError
+          ? "Có dữ liệu lỗi. Hãy tải lại tên miền màu đỏ."
+          : hasPending ? "Mở hoặc tải lại tên miền đang chờ để hoàn tất." : "";
+        historyDomainHint.hidden = !historyDomainHint.textContent;
+        historyDomainHint.dataset.tone = hasError ? "error" : "neutral";
       }
     }
     async function refreshHistoryDomains() {
@@ -545,7 +556,7 @@
         row.append(meta, spacer, disable); portableItemsNode.append(row);
       }
       setPortableStatus(portableItems.length
-        ? `Đang đồng bộ ${portableItems.length} mục dữ liệu STV.`
+        ? `Đã bật ${portableItems.length} mục đồng bộ STV.`
         : "Chưa có dữ liệu STV gốc được đồng bộ.", portableItems.length ? "success" : "neutral");
     }
     function renderPortableCandidates(candidates) {

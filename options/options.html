@@ -187,11 +187,18 @@
         </section>
 
         <section class="settings-card" aria-labelledby="portable-title">
-          <div class="section-heading">
+          <div class="section-heading section-heading--compact-copy">
             <div><h2 id="portable-title">Dữ liệu STV gốc</h2></div>
-            <p>Tool chỉ đồng bộ Bộ Name dùng chung của STV giữa <code>.app</code>, <code>.com</code> và <code>.vip</code>. Bộ Name riêng theo truyện không được theo dõi. Việc này không ghi đè Bộ Name chung của phwgna; khi dịch, tool tự lọc chỉ những Name xuất hiện trong batch. Hai nút dưới chỉ dùng để nhận thêm cài đặt STV khác. Tool không sao chép đăng nhập, cookie, token hoặc API key.</p>
+            <div class="section-copy">
+              <p>Đồng bộ truyện đã đọc và Bộ Name chung giữa <code>.app</code>, <code>.com</code> và <code>.vip</code>.</p>
+              <details class="section-details">
+                <summary>Xem cách hoạt động</summary>
+                <p>Không theo dõi Bộ Name riêng theo truyện và không ghi đè Bộ Name chung của phwgna. Khi dịch, tool tự lọc Name theo phần đang dịch. Không sao chép đăng nhập, cookie, token hoặc API key.</p>
+              </details>
+            </div>
           </div>
           <div id="historyDomainStatus" class="history-domain-list" aria-label="Trạng thái lịch sử đọc trên ba tên miền"></div>
+          <p class="field-help history-domain-hint" id="historyDomainHint" role="status" aria-live="polite" hidden></p>
           <div class="portable-actions">
             <button class="button button--secondary" id="portableLearnStart" type="button">Tìm cài đặt STV khác</button>
             <button class="button button--secondary" id="portableLearnFinish" type="button" disabled>Kiểm tra thay đổi</button>
