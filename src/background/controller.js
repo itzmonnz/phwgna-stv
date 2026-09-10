@@ -418,7 +418,7 @@
         return ["general", "prefetch"];
       }
       if (job?.prefetch === true) return ["prefetch", "general"];
-      return ["general"];
+      return ["general", "prefetch"];
     }
 
     function slotMatchesPurpose(slot, purpose) {
