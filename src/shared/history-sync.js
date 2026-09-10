@@ -137,11 +137,14 @@
         }
       }
       for (const [key, entry] of Object.entries(state.entries)) {
-        if (numericChapter(state.progress[key]?.through)) continue;
-        const through = numericChapter(codec.current(entry?.record?.current)?.chapterId);
+        const storedThrough = numericChapter(state.progress[key]?.through);
+        const currentThrough = numericChapter(codec.current(entry?.record?.current)?.chapterId);
+        const through = laterChapter(storedThrough, currentThrough);
         if (through) {
-          state.progress[key] = { through };
-          progressMigrated = true;
+          if (through !== storedThrough) {
+            state.progress[key] = { through };
+            progressMigrated = true;
+          }
         } else if (state.progress[key]) {
           delete state.progress[key];
           progressMigrated = true;
