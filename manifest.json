@@ -73,6 +73,7 @@
         "src/shared/stv-sites.js",
         "src/shared/native-history.js",
         "src/shared/native-portable.js",
+        "src/content/stv-account.js",
         "src/content/stv-history.js",
         "src/content/stv-portable.js",
         "src/content/stv-diagnostics.js"

@@ -11,7 +11,7 @@
   const previewApi = root.STVAINamePreview || (typeof require === "function" ? require("../shared/name-preview.js") : null);
   const apiProviders = root.STVAIApiProviders || (typeof require === "function" ? require("../shared/api-providers.js") : null);
   const sites = root.STVAISites || (typeof require === 'function' ? require('../shared/stv-sites.js') : null);
-  const historyApi = root.STVAIHistorySync || (typeof require === 'function' ? require('../shared/history-sync.js') : null);
+  const historyApi = root.STVAIAccountHistorySync || (typeof require === 'function' ? require('../shared/account-history-sync.js') : null);
   const portableSyncApi = root.STVAIPortableSync || (typeof require === 'function' ? require('../shared/portable-sync.js') : null);
   const updateApi = root.STVAIUpdateCheck || (typeof require === "function" ? require("../shared/update-check.js") : null);
   const distributionApi = root.STVAIDistribution || (typeof require === "function" ? require("../shared/distribution-channel.js") : null);
@@ -1463,6 +1463,15 @@
             return { ok: false, reason: 'unauthorized-sender' };
           }
           return historySync.status();
+        }
+        case 'STVAI_HISTORY_LEGACY_PREVIEW':
+        case 'STVAI_HISTORY_LEGACY_IMPORT': {
+          const senderUrl = String(sender?.url || '');
+          if (!senderUrl.startsWith('chrome-extension://') || !senderUrl.includes('/options/options.html')) {
+            return { ok: false, reason: 'unauthorized-sender' };
+          }
+          return message.type === 'STVAI_HISTORY_LEGACY_PREVIEW'
+            ? historySync.previewLegacy() : historySync.importLegacy(message);
         }
         case 'STVAI_PORTABLE_SYNC':
           return portableSync.handle(message, sender);

@@ -35,7 +35,8 @@
   const UI_BOOLEAN_KEYS = Object.freeze(["stvaiNavigationExpanded", "stvaiToolbarCollapsed"]);
   const UI_ZOOM_KEYS = Object.freeze(["stvaiZoomGeneralPercent", "stvaiZoomStoryPercent"]);
   const UI_BACKUP_KEYS = Object.freeze([UI_SCALE_KEY, ...UI_BOOLEAN_KEYS, ...UI_POSITION_KEYS, ...UI_ZOOM_KEYS]);
-  const HISTORY_KEY = "stvai-native-history-v1";
+  const HISTORY_KEY = "stvai-native-history-v2";
+  const LEGACY_HISTORY_KEY = "stvai-native-history-v1";
   const PORTABLE_KEY = "stvai-native-portable-v1";
   const ROLLBACK_KEY = "stvai-data-rollback-v1";
   const UI_SCALES = Object.freeze([0.5, 0.75, 1, 1.25, 1.5]);
@@ -467,7 +468,15 @@
     const portableFinish = document.getElementById("portableLearnFinish");
     const portableApprove = document.getElementById("portableApprove");
     let portableSessionId = "", portableItems = [];
-    const historyStateLabel = Object.freeze({ synced: "Đã đồng bộ", pending: "Chờ mở trang", unseen: "Chưa từng mở", error: "Lỗi dữ liệu" });
+    const historyStateLabel = Object.freeze({ account: "Đã nhận tài khoản", guest: "Chưa đăng nhập", pending: "Đang xác định",
+      ambiguous: "Không xác định", unseen: "Chưa từng mở", error: "Lỗi dữ liệu" });
+    const legacyHistoryImport = document.getElementById("legacyHistoryImport");
+    const legacyHistorySummary = document.getElementById("legacyHistorySummary");
+    const legacyHistoryAccount = document.getElementById("legacyHistoryAccount");
+    const legacyHistoryStart = document.getElementById("legacyHistoryStart");
+    const legacyHistoryCancel = document.getElementById("legacyHistoryCancel");
+    const legacyHistoryConfirm = document.getElementById("legacyHistoryConfirm");
+    let legacyNonce = "";
     function renderHistoryDomains(response) {
       if (!historyDomainStatus) return;
       historyDomainStatus.replaceChildren();
@@ -480,12 +489,13 @@
         const detail = document.createElement("span"); detail.className = "field-help";
         const seen = Number(item.lastSeenAt) > 0
           ? ` · ${new Date(item.lastSeenAt).toLocaleString("vi-VN")}` : "";
-        detail.textContent = `${historyStateLabel[row.dataset.state]} · ${Number(item.recordCount) || 0} truyện${seen}`;
+        const account = item.accountLabel ? ` · ${item.accountLabel}` : "";
+        detail.textContent = `${historyStateLabel[row.dataset.state]}${account} · ${Number(item.recordCount) || 0} truyện${seen}`;
         row.append(title, detail); historyDomainStatus.append(row);
       }
       if (historyDomainHint) {
         const hasError = origins.some(item => item?.status === "error");
-        const hasPending = origins.some(item => item?.status === "pending");
+        const hasPending = origins.some(item => ["pending", "ambiguous"].includes(item?.status));
         historyDomainHint.textContent = hasError
           ? "Có dữ liệu lỗi. Hãy tải lại tên miền màu đỏ."
           : hasPending ? "Mở hoặc tải lại tên miền đang chờ để hoàn tất." : "";
@@ -499,6 +509,22 @@
         const response = await runtimeCall(chromeApi, { type: "STVAI_HISTORY_STATUS" });
         if (response?.ok) renderHistoryDomains(response);
       } catch (_) { renderHistoryDomains({ origins: [] }); }
+    }
+    async function refreshLegacyHistory() {
+      if (!legacyHistoryImport || typeof chromeApi.runtime?.sendMessage !== "function") return;
+      try {
+        const response = await runtimeCall(chromeApi, { type: "STVAI_HISTORY_LEGACY_PREVIEW" });
+        legacyHistoryImport.hidden = !response?.available || response?.imported === true;
+        if (legacyHistoryImport.hidden) return;
+        legacyNonce = response.nonce || "";
+        legacyHistorySummary.textContent = `${Number(response.recordCount) || 0} truyện cũ chưa được gán tài khoản.`;
+        legacyHistoryAccount.replaceChildren();
+        for (const account of response.accounts || []) {
+          const option = document.createElement("option"); option.value = account.accountKey; option.textContent = account.label;
+          legacyHistoryAccount.append(option);
+        }
+        legacyHistoryStart.disabled = !legacyHistoryAccount.options.length;
+      } catch (_) { legacyHistoryImport.hidden = true; }
     }
     const portableLabel = category => category === "nativeNames" ? "Bộ Name STV" : "Cài đặt STV";
     function portableItemIdentity(item) {
@@ -586,6 +612,7 @@
     if (typeof chromeApi.runtime?.sendMessage === "function") {
       try {
         await refreshHistoryDomains();
+        await refreshLegacyHistory();
         const response = await runtimeCall(chromeApi, { type: "STVAI_PORTABLE_STATUS" });
         if (response?.ok) {
           renderPortableItems(response.items);
@@ -595,7 +622,9 @@
       } catch (_) { setPortableStatus("Chưa kết nối được dịch vụ đồng bộ STV.", "error"); }
     }
     chromeApi.storage?.onChanged?.addListener?.((changes, areaName) => {
-      if (areaName === "local" && Object.hasOwn(changes || {}, HISTORY_KEY)) void refreshHistoryDomains();
+      if (areaName === "local" && Object.hasOwn(changes || {}, HISTORY_KEY)) {
+        void refreshHistoryDomains(); void refreshLegacyHistory();
+      }
     });
     portableStart.addEventListener("click", async () => {
       portableStart.disabled = true;
@@ -692,7 +721,7 @@
         const validated = dataBackup.validatePayload(payload, { sanitizeSettings, history, portable });
         if (!validated.ok) throw new Error(`Tệp sao lưu không hợp lệ (${validated.code}).`);
         const currentSettings = sanitizeSettings(await storageGet(chromeApi));
-        const currentHistory = await storageGet(chromeApi, HISTORY_KEY);
+        const currentHistory = await storageGet(chromeApi, HISTORY_KEY) || await storageGet(chromeApi, LEGACY_HISTORY_KEY);
         const currentPortable = await storageGet(chromeApi, PORTABLE_KEY);
         const currentUi = await readUi();
         const rollback = dataBackup.createPayload({
@@ -710,7 +739,7 @@
           [ROLLBACK_KEY]: rollback,
           [STORAGE_KEY]: copySettings(settings),
           ...importedUi,
-          [HISTORY_KEY]: dataBackup.mergeHistory(currentHistory, validated.history),
+          [HISTORY_KEY]: dataBackup.mergeHistory(dataBackup.safeHistory(currentHistory), validated.history),
           [PORTABLE_KEY]: dataBackup.mergePortable(currentPortable, validated.portable)
         });
         draftSettings = settings;
@@ -727,7 +756,7 @@
           history, portable, origins: defaultSites.ORIGINS
         });
         if (!validated.ok) throw new Error(`Tệp STV không hợp lệ (${validated.code}).`);
-        const currentHistory = await storageGet(chromeApi, HISTORY_KEY);
+        const currentHistory = await storageGet(chromeApi, HISTORY_KEY) || await storageGet(chromeApi, LEGACY_HISTORY_KEY);
         const currentPortable = await storageGet(chromeApi, PORTABLE_KEY);
         const currentUi = await readUi();
         const rollback = dataBackup.createPayload({
@@ -737,7 +766,7 @@
         rollback.missingUiKeys = UI_BACKUP_KEYS.filter(key => !Object.hasOwn(currentUi, key));
         await storageWrite(chromeApi, {
           [ROLLBACK_KEY]: rollback,
-          [HISTORY_KEY]: dataBackup.mergeHistory(currentHistory, validated.history),
+          [HISTORY_KEY]: dataBackup.mergeHistory(dataBackup.safeHistory(currentHistory), validated.history),
           [PORTABLE_KEY]: dataBackup.mergePortable(currentPortable, validated.portable)
         });
         setStatus(document, "Đã nhập lịch sử và Bộ Name từ STV.", "success");
@@ -748,7 +777,7 @@
       const rollback = dataBackup.createPayload({
         settings: sanitizeSettings(await storageGet(chromeApi)),
         ui: currentUi,
-        history: await storageGet(chromeApi, HISTORY_KEY),
+        history: await storageGet(chromeApi, HISTORY_KEY) || await storageGet(chromeApi, LEGACY_HISTORY_KEY),
         portable: await storageGet(chromeApi, PORTABLE_KEY)
       });
       rollback.missingUiKeys = UI_BACKUP_KEYS.filter(key => !Object.hasOwn(currentUi, key));
@@ -772,7 +801,8 @@
         const created = new Date(validated.generatedAt || Date.now());
         const date = [created.getUTCDate(), created.getUTCMonth() + 1].map(value => String(value).padStart(2, "0"))
           .concat(created.getUTCFullYear()).join("/");
-        const shelfCount = Object.keys(validated.history.entries || {}).length;
+        const shelfCount = Object.values(validated.history.scopes || {}).reduce((total, value) => total + Object.keys(value.shelf?.entries || {}).length, 0)
+          + Object.keys(validated.history.legacy?.shelf?.entries || {}).length;
         const nativeNameCount = Object.values(validated.portable.items || {}).filter(item => item.category === "nativeNames").length;
         const nativePreferenceCount = Object.values(validated.portable.items || {}).filter(item => item.category === "nativePreferences").length;
         summary = `${date}: cài đặt tool, ${shelfCount} mục lịch sử, ${nativeNameCount} Bộ Name STV và ${nativePreferenceCount} cài đặt STV.`;
@@ -837,7 +867,7 @@
       const payload = dataBackup.createPayload({
         settings: readForm(document, draftSettings),
         ui: await readUi(),
-        history: await storageGet(chromeApi, HISTORY_KEY),
+        history: await storageGet(chromeApi, HISTORY_KEY) || await storageGet(chromeApi, LEGACY_HISTORY_KEY),
         portable: await storageGet(chromeApi, PORTABLE_KEY)
       });
       const text = `${JSON.stringify(payload, null, 2)}\n`;
@@ -916,6 +946,27 @@
     document.getElementById("exportButton").addEventListener("click", () => {
       void exportData().catch(error => setStatus(document, error.message, "error"));
     });
+    legacyHistoryStart?.addEventListener("click", () => {
+      if (!legacyHistoryAccount.value) return;
+      legacyHistorySummary.textContent = "Toàn bộ lịch sử cũ sẽ được nhập vào tài khoản đã chọn. Dữ liệu lưu trữ cũ vẫn được giữ lại.";
+      legacyHistoryStart.hidden = true; legacyHistoryCancel.hidden = false; legacyHistoryConfirm.hidden = false;
+    });
+    legacyHistoryCancel?.addEventListener("click", () => {
+      legacyHistoryStart.hidden = false; legacyHistoryCancel.hidden = true; legacyHistoryConfirm.hidden = true;
+      void refreshLegacyHistory();
+    });
+    legacyHistoryConfirm?.addEventListener("click", () => {
+      const accountKey = legacyHistoryAccount.value;
+      legacyHistoryConfirm.disabled = true;
+      void runtimeCall(chromeApi, { type: "STVAI_HISTORY_LEGACY_IMPORT", nonce: legacyNonce, accountKey })
+        .then(response => {
+          if (!response?.ok) throw new Error(response?.code || "Không nhập được lịch sử cũ.");
+          setStatus(document, `Đã nhập lịch sử cũ vào ${response.accountLabel || "tài khoản đã chọn"}.`, "success");
+          legacyHistoryImport.hidden = true;
+          return refreshHistoryDomains();
+        }).catch(error => setStatus(document, error.message, "error"))
+        .finally(() => { legacyHistoryConfirm.disabled = false; });
+    });
     importInput.addEventListener("change", async () => {
       const file = importInput.files?.[0];
       if (!file) return;
@@ -929,7 +980,9 @@
       }
     });
 
-    return Object.freeze({ save, reset, importText, previewImportText, confirmImport, restoreLastImport, exportData, testApi });
+    void refreshLegacyHistory();
+    return Object.freeze({ save, reset, importText, previewImportText, confirmImport, restoreLastImport, exportData, testApi,
+      refreshLegacyHistory });
   }
 
   return Object.freeze({

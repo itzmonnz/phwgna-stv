@@ -5,7 +5,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function createDataBackup() {
   'use strict';
   const FORMAT = 'phwgna-stv-backup';
-  const VERSION = 1;
+  const VERSION = 2;
   const MAX_IMPORT_BYTES = 5 * 1024 * 1024;
   const fail = code => ({ ok: false, code });
 
@@ -28,6 +28,25 @@
       shelf.tombstones[key] = { revision: Math.max(0, Number(value?.revision) || 0) };
     }
     return shelf;
+  }
+
+  function safeHistory(input) {
+    if (input?.schema !== 2 || !input.scopes || typeof input.scopes !== 'object') {
+      return { schema: 2, revision: 0, scopes: {}, legacy: {
+        shelf: safeShelf(input), available: Object.keys(input?.entries || {}).length > 0,
+        importedTo: '', importedAt: 0, migratedAt: 0
+      } };
+    }
+    const result = { schema: 2, revision: Math.max(0, Number(input.revision) || 0), scopes: {}, legacy: {
+      shelf: safeShelf(input.legacy?.shelf), available: input.legacy?.available === true,
+      importedTo: /^account:[a-f0-9]{64}$/.test(String(input.legacy?.importedTo || '')) ? input.legacy.importedTo : '',
+      importedAt: Math.max(0, Number(input.legacy?.importedAt) || 0), migratedAt: Math.max(0, Number(input.legacy?.migratedAt) || 0)
+    } };
+    for (const [scopeKey, value] of Object.entries(input.scopes)) {
+      if (!/^account:[a-f0-9]{64}$/.test(scopeKey) && !/^guest:https:\/\/sangtacviet\.(?:app|com|vip)$/.test(scopeKey)) continue;
+      result.scopes[scopeKey] = { shelf: safeShelf(value?.shelf) };
+    }
+    return result;
   }
 
   function portableCategory(input, category) {
@@ -56,7 +75,7 @@
       format: FORMAT, version: VERSION, generatedAt,
       tool: { settings: structuredClone(data.settings || {}), ui: structuredClone(data.ui || {}) },
       stv: {
-        shelf: safeShelf(data.history),
+        history: safeHistory(data.history),
         nativeNames: portableCategory(data.portable, 'nativeNames'),
         nativePreferences: portableCategory(data.portable, 'nativePreferences')
       }
@@ -88,6 +107,24 @@
       result.order = result.order.filter(value => value !== key);
     }
     if (Object.keys(result.entries).length + Object.keys(result.tombstones).length > history.MAX_RECORDS) return null;
+    return result;
+  }
+
+  function validateHistory(input, history) {
+    if (!input || input.schema !== 2 || !input.scopes || !input.legacy) return null;
+    const legacyShelf = validateShelf(input.legacy.shelf, history);
+    if (!legacyShelf) return null;
+    const result = { schema: 2, revision: Math.max(0, Number(input.revision) || 0), scopes: {}, bindings: {}, legacy: {
+      shelf: legacyShelf, available: input.legacy.available === true,
+      importedTo: /^account:[a-f0-9]{64}$/.test(String(input.legacy.importedTo || '')) ? input.legacy.importedTo : '',
+      importedAt: Math.max(0, Number(input.legacy.importedAt) || 0), migratedAt: Math.max(0, Number(input.legacy.migratedAt) || 0)
+    } };
+    for (const [scopeKey, value] of Object.entries(input.scopes)) {
+      if (!/^account:[a-f0-9]{64}$/.test(scopeKey) && !/^guest:https:\/\/sangtacviet\.(?:app|com|vip)$/.test(scopeKey)) return null;
+      const shelf = validateShelf(value?.shelf, history);
+      if (!shelf) return null;
+      result.scopes[scopeKey] = { shelf };
+    }
     return result;
   }
 
@@ -175,12 +212,17 @@
   }
 
   function validatePayload(payload, dependencies) {
-    if (!payload || payload.format !== FORMAT || payload.version !== VERSION || !payload.tool || !payload.stv) return fail('backup_invalid_format');
+    if (!payload || payload.format !== FORMAT || ![1, VERSION].includes(payload.version) || !payload.tool || !payload.stv) return fail('backup_invalid_format');
     let settings;
     try { settings = dependencies.sanitizeSettings(payload.tool.settings, { strict: true }); }
     catch (_) { return fail('backup_settings_invalid'); }
-    const historyState = validateShelf(payload.stv.shelf, dependencies.history);
-    if (!historyState) return fail('backup_history_invalid');
+    const historyState = payload.version === 1
+      ? { schema: 2, revision: 0, scopes: {}, bindings: {}, legacy: {
+        shelf: validateShelf(payload.stv.shelf, dependencies.history), available: true,
+        importedTo: '', importedAt: 0, migratedAt: 0
+      } }
+      : validateHistory(payload.stv.history, dependencies.history);
+    if (!historyState || !historyState.legacy?.shelf) return fail('backup_history_invalid');
     const portableState = dependencies.portable.emptyState();
     if (!validatePortableCategory(payload.stv.nativeNames, 'nativeNames', dependencies.portable, portableState)
       || !validatePortableCategory(payload.stv.nativePreferences, 'nativePreferences', dependencies.portable, portableState)) {
@@ -194,6 +236,30 @@
   }
 
   function mergeHistory(current, incoming) {
+    if (current?.schema === 2 || incoming?.schema === 2) {
+      const state = current?.schema === 2 ? structuredClone(current) : {
+        schema: 2, revision: 0, scopes: {}, bindings: {}, legacy: {
+          shelf: current?.schema === 1 ? structuredClone(current) : { schema: 1, revision: 0, entries: {}, order: [], progress: {}, tombstones: {}, origins: {} },
+          available: current?.schema === 1 && Object.keys(current.entries || {}).length > 0,
+          importedTo: '', importedAt: 0, migratedAt: 0
+        }
+      };
+      state.scopes ||= {}; state.bindings ||= {};
+      state.legacy ||= { shelf: { schema: 1, revision: 0, entries: {}, order: [], progress: {}, tombstones: {}, origins: {} }, available: false, importedTo: '', importedAt: 0, migratedAt: 0 };
+      if (incoming?.schema === 2) {
+        for (const [scopeKey, value] of Object.entries(incoming.scopes || {})) {
+          state.scopes[scopeKey] ||= { shelf: { schema: 1, revision: 0, entries: {}, order: [], progress: {}, tombstones: {}, origins: {} } };
+          state.scopes[scopeKey].shelf = mergeHistory(state.scopes[scopeKey].shelf, value.shelf);
+        }
+        state.legacy.shelf = mergeHistory(state.legacy.shelf, incoming.legacy?.shelf || {});
+        state.legacy.available = state.legacy.available || incoming.legacy?.available === true;
+      } else if (incoming?.schema === 1) {
+        state.legacy.shelf = mergeHistory(state.legacy.shelf, incoming);
+        state.legacy.available = true;
+      }
+      state.revision = Math.max(Number(state.revision) || 0, Number(incoming?.revision) || 0) + 1;
+      return state;
+    }
     const state = current?.schema === 1 ? structuredClone(current) : { schema: 1, revision: 0, entries: {}, order: [], progress: {}, tombstones: {}, origins: {} };
     state.entries ||= {}; state.order ||= []; state.progress ||= {}; state.tombstones ||= {}; state.origins ||= {};
     for (const [key, value] of Object.entries(incoming.entries || {})) {
@@ -231,6 +297,6 @@
     return state;
   }
 
-  return Object.freeze({ FORMAT, VERSION, MAX_IMPORT_BYTES, createPayload, validatePayload, validateStvExport,
+  return Object.freeze({ FORMAT, VERSION, MAX_IMPORT_BYTES, createPayload, validatePayload, validateStvExport, safeHistory,
     mergeHistory, mergePortable });
 });

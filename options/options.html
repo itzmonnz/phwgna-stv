@@ -199,6 +199,17 @@
           </div>
           <div id="historyDomainStatus" class="history-domain-list" aria-label="Trạng thái lịch sử đọc trên ba tên miền"></div>
           <p class="field-help history-domain-hint" id="historyDomainHint" role="status" aria-live="polite" hidden></p>
+          <div class="import-preview" id="legacyHistoryImport" hidden>
+            <h3>Lịch sử đọc cũ</h3>
+            <p id="legacyHistorySummary"></p>
+            <label for="legacyHistoryAccount">Nhập toàn bộ vào</label>
+            <select id="legacyHistoryAccount"></select>
+            <div class="data-actions">
+              <button class="button button--secondary" id="legacyHistoryStart" type="button">Nhập lịch sử cũ</button>
+              <button class="button button--ghost" id="legacyHistoryCancel" type="button" hidden>Hủy</button>
+              <button class="button button--primary" id="legacyHistoryConfirm" type="button" hidden>Xác nhận nhập tất cả</button>
+            </div>
+          </div>
           <div class="portable-actions">
             <button class="button button--secondary" id="portableLearnStart" type="button">Tìm cài đặt STV khác</button>
             <button class="button button--secondary" id="portableLearnFinish" type="button" disabled>Kiểm tra thay đổi</button>

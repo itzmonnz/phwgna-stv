@@ -10,6 +10,7 @@ if (typeof importScripts === "function") {
     "shared/stv-sites.js",
     "shared/native-history.js",
     "shared/history-sync.js",
+    "shared/account-history-sync.js",
     "shared/native-portable.js",
     "shared/portable-sync.js",
     "shared/core.js",

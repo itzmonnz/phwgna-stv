@@ -27,11 +27,14 @@
   function sanitizeHistorySync(value) {
     const allowedErrors = ['none', 'history_invalid_data', 'history_size_limit', 'history_stale_snapshot',
       'history_write_busy', 'history_write_uncertain', 'history_storage_unavailable', 'history_stale_document', 'history_read_mismatch',
-      'history_unauthorized', 'history_insecure_origin', 'history_unavailable'];
+      'history_unauthorized', 'history_insecure_origin', 'history_account_changed', 'history_account_unresolved',
+      'history_account_ambiguous', 'history_unavailable'];
     const count = number => Number.isSafeInteger(number) ? Math.max(0, Math.min(100000, number)) : 0;
     return {
-      status: ['idle', 'synced', 'error'].includes(value?.status) ? value.status : 'unavailable',
+      status: ['idle', 'pending', 'synced', 'error'].includes(value?.status) ? value.status : 'unavailable',
       errorCode: allowedErrors.includes(value?.errorCode) ? value.errorCode : 'history_unavailable',
+      accountStatus: ['account', 'guest', 'pending', 'unknown', 'ambiguous'].includes(value?.accountStatus)
+        ? value.accountStatus : 'unknown',
       recordCount: count(value?.recordCount), writeCount: count(value?.writeCount),
       toc: ['not_applicable', 'synced', 'history_toc_unrecognized'].includes(value?.toc) ? value.toc : 'not_applicable'
     };

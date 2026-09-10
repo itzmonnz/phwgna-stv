@@ -9,14 +9,16 @@
       || (loadNodeModule ? loadNodeModule('../shared/native-history.js') : null);
     const sites = root.STVAISites
       || (loadNodeModule ? loadNodeModule('../shared/stv-sites.js') : null);
-    if (!codec || !sites) {
+    const accounts = root.STVAIStvAccount
+      || (loadNodeModule ? loadNodeModule('./stv-account.js') : null);
+    if (!codec || !sites || !accounts) {
       if (!retried && typeof root.setTimeout === 'function') {
         retried = true;
         root.setTimeout(attach, 0);
       }
       return null;
     }
-    const api = factory(codec, sites);
+    const api = factory(codec, sites, accounts);
     if (typeof module === 'object' && module.exports) module.exports = api;
     root.STVAIHistoryContent = api;
     if (root.document && root.chrome?.runtime?.sendMessage && !root.STVAIHistoryObserver
@@ -27,7 +29,7 @@
     return api;
   }
   attach();
-})(typeof globalThis !== 'undefined' ? globalThis : this, function (codec, sites) {
+})(typeof globalThis !== 'undefined' ? globalThis : this, function (codec, sites, accounts) {
   'use strict';
   function bookRecord(document, raw) {
     const book = sites.parseChapter(document.URL, { chapterId: '_' });
@@ -106,21 +108,23 @@
     container.style.height = 'auto';
     return 'synced';
   }
-  function createObserver({ window, send = message => window.chrome.runtime.sendMessage(message) }) {
+  function createObserver({ window, send = message => window.chrome.runtime.sendMessage(message), identityResolver }) {
     const document = window.document;
+    const resolveIdentity = identityResolver || accounts.createResolver(document);
     const documentToken = window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
     let ticket = '', url = '', route = '', navigation = 0, lastRaw, candidateRaw, revision = -1, readSent = false, readThrough = '';
     let running = false, stopped = false, interval, observer;
     let status = 'idle', errorCode = 'none', count = 0, writes = 0, toc = 'not_applicable';
-    let invalidRaw;
+    let invalidRaw, accountProof = { status: 'pending' }, accountSignature = 'pending';
     const routeKey = () => `${window.location.href}|${currentChapter(document)?.chapterId || ''}`;
-    const message = (action, fields = {}) => send({ type: 'STVAI_HISTORY_SYNC', action, ticket, documentToken,
+    const message = (action, fields = {}) => send({ type: 'STVAI_HISTORY_SYNC', action, ticket, documentToken, accountProof,
       chapterId: currentChapter(document)?.chapterId || '', ...fields });
     function check(result) {
       if (!result?.ok) {
         // Error codes are fixed by our background; never retain returned text.
         const allowed = ['history_invalid_data', 'history_size_limit', 'history_stale_snapshot', 'history_write_busy', 'history_write_uncertain',
-          'history_storage_unavailable', 'history_stale_document', 'history_read_mismatch', 'history_unauthorized'];
+          'history_storage_unavailable', 'history_stale_document', 'history_read_mismatch', 'history_unauthorized',
+          'history_account_changed', 'history_account_unresolved'];
         allowed.push('history_insecure_origin');
         errorCode = allowed.includes(result?.code) ? result.code : 'history_unavailable';
         status = 'error';
@@ -134,6 +138,19 @@
       if (running || stopped) return;
       running = true;
       try {
+        const identity = resolveIdentity();
+        const identitySignature = identity?.status === 'account' ? `account:${identity.id}` : String(identity?.status || 'unknown');
+        if (identitySignature !== accountSignature) {
+          accountSignature = identitySignature; accountProof = identity;
+          ticket = ''; lastRaw = undefined; candidateRaw = undefined; readSent = false; revision = -1;
+          invalidRaw = undefined; readThrough = '';
+        }
+        if (!['account', 'guest'].includes(accountProof?.status)) {
+          status = accountProof?.status === 'ambiguous' || accountProof?.status === 'unknown' ? 'error' : 'pending';
+          errorCode = accountProof?.status === 'ambiguous' ? 'history_account_ambiguous' : 'history_account_unresolved';
+          try { await message('identity'); } catch (_) { /* Identity status is best effort while sync is paused. */ }
+          return;
+        }
         const nextRoute = routeKey();
         if (route !== nextRoute) {
           route = nextRoute;
@@ -220,10 +237,16 @@
         reply?.({ ok: true });
         return false;
       }
+      if (request?.type === 'STVAI_HISTORY_ACCOUNT_PROBE') {
+        let raw = null;
+        try { raw = window.localStorage.getItem('tusach'); } catch (_) { /* Report identity without native data. */ }
+        reply?.({ accountProof, raw });
+        return false;
+      }
       if (request?.type !== 'STVAI_HISTORY_DOCUMENT_PROBE') return false;
       try {
         const raw = window.localStorage.getItem('tusach');
-        reply({ documentToken, url: window.location.href, raw, chapterId: currentChapter(document)?.chapterId || '',
+        reply({ documentToken, url: window.location.href, raw, accountProof, chapterId: currentChapter(document)?.chapterId || '',
           readChapterId: document.visibilityState !== 'hidden' && readProof(document, raw) ? currentChapter(document).chapterId : '' });
       }
       catch (_) { reply({ documentToken, url: window.location.href, unavailable: true }); }
@@ -247,7 +270,7 @@
       document.removeEventListener('visibilitychange', tick);
       window.chrome?.runtime?.onMessage?.removeListener(onProbe);
     }
-    function snapshot() { return { status, errorCode, recordCount: count, writeCount: writes, toc }; }
+    function snapshot() { return { status, errorCode, accountStatus: accountProof?.status || 'unknown', recordCount: count, writeCount: writes, toc }; }
     return Object.freeze({ start, stop, tick, snapshot });
   }
   return Object.freeze({ createObserver, readProof, paintToc, paintRecent });
