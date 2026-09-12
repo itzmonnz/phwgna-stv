@@ -137,6 +137,20 @@
         restartReason: job.restartReason || "" };
     }
 
+    function cachedBatchSnapshot(job) {
+      const batches = [];
+      for (let index = 0; index < job.batches.length; index += 1) {
+        const items = job.completed.get(batchIdAt(index));
+        if (!items) continue;
+        batches.push({
+          batchId: batchIdAt(index),
+          batchIndex: index,
+          items
+        });
+      }
+      return batches;
+    }
+
     function sameCacheIdentity(left, right) {
       return ["provider", "chapterId", "chapterKey", "batchHash", "sourceHash", "promptHash", "nameHash"]
         .every(key => typeof left?.[key] === "string" && left[key] === right?.[key]);
@@ -1298,6 +1312,10 @@
         if (exactItems(items, batches[index])) job.completed.set(batchId, core.filterTranslationItems(items, batches[index]));
       }
       if (job.completed.size === batches.length) return completeJob(job, true);
+      // A tab can navigate between the first cached push and the following
+      // pushes. Include the cache snapshot in the reply that is bound to the
+      // requesting document so the new reader can reconcile any missed event.
+      const cachedBatches = cachedBatchSnapshot(job);
       for (let index = 0; index < batches.length; index += 1) {
         const batchId = batchIdAt(index);
         const items = job.completed.get(batchId);
@@ -1332,7 +1350,8 @@
           fallbackCount: Array.from(job.completed.values()).flat().filter((item) => item?.origin === "convert").length,
           paused: job.status === "paused",
           reason: job.pauseReason || dispatched?.reason || "",
-          restartReason: job.restartReason || ""
+          restartReason: job.restartReason || "",
+          cachedBatches
         };
       }
 
@@ -1347,7 +1366,8 @@
           fallbackCount: Array.from(job.completed.values()).flat().filter((item) => item?.origin === "convert").length,
           paused: job.status === "paused",
           reason: job.pauseReason || "",
-          restartReason: job.restartReason || ""
+          restartReason: job.restartReason || "",
+          cachedBatches
         };
       }
 
@@ -1371,7 +1391,8 @@
         fallbackCount: Array.from(job.completed.values()).flat().filter((item) => item?.origin === "convert").length,
         paused: job.status === "paused",
         reason: job.pauseReason || "",
-        restartReason: job.restartReason || ""
+        restartReason: job.restartReason || "",
+        cachedBatches
       };
     }
 

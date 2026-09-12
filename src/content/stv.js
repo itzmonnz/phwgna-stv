@@ -1154,6 +1154,19 @@
           reportAction("Áp dụng Bộ Name mới nên phải dịch lại.");
         }
         state.totalBatches = Math.max(1, Number(response.totalBatches) || 1);
+        if (response.status !== "completed" && Array.isArray(response.cachedBatches)) {
+          for (const cachedBatch of response.cachedBatches) {
+            handleMessage({
+              type: "STV_BATCH_COMPLETE",
+              jobId,
+              batchId: cachedBatch?.batchId,
+              batchIndex: cachedBatch?.batchIndex,
+              totalBatches: state.totalBatches,
+              items: cachedBatch?.items,
+              cached: true
+            });
+          }
+        }
         if (response.status === "completed") {
           // The direct reply may arrive before (or without) the completion event.
           // Render its results through the same idempotent path before finishing.
