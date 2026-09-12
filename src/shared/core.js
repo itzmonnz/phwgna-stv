@@ -397,7 +397,7 @@ Chỉ trả kết quả dịch. Cấm giải thích, chú thích, giải nghĩa 
     return `batch_${ordinal}_${token}`;
   }
 
-  function createBatchPrompt({ responseId, requestId, blocks, settings }) {
+  function createBatchPrompt({ responseId, requestId, blocks, settings, retryReason }) {
     const batchMarker = String(responseId || requestId || "");
     const lines = [
       batchMarker,
@@ -406,6 +406,11 @@ Chỉ trả kết quả dịch. Cấm giải thích, chú thích, giải nghĩa 
     ];
     const relevantNameGuide = selectRelevantNameGuide(settings?.nameGuide, blocks);
     if (relevantNameGuide) lines.push("", "Bộ name:", relevantNameGuide, "");
+    if (retryReason === "source_language_unchanged") {
+      lines.push("", "Kết quả trước vẫn còn ký tự tiếng Trung. Hãy dịch lại toàn bộ batch sang tiếng Việt và không chép lại bất kỳ chữ Trung nào.");
+    } else if (retryReason === "incomplete_response") {
+      lines.push("", "Kết quả trước bị cụt nội dung. Hãy dịch lại đầy đủ toàn bộ batch, đặc biệt không bỏ dở phần cuối của bất kỳ câu nào.");
+    }
     lines.push(LABELED_BATCH_INSTRUCTION);
     for (const [index, block] of (blocks || []).entries()) {
       lines.push("", `câu ${index + 1}:`, String(block.text || ""));
@@ -413,8 +418,8 @@ Chỉ trả kết quả dịch. Cấm giải thích, chú thích, giải nghĩa 
     return lines.join("\n").trim();
   }
 
-  function createRepairPrompt({ responseId, requestId, blocks, settings }) {
-    return createBatchPrompt({ responseId, requestId, blocks, settings });
+  function createRepairPrompt({ responseId, requestId, blocks, settings, retryReason }) {
+    return createBatchPrompt({ responseId, requestId, blocks, settings, retryReason });
   }
 
   function createApiMessages({ blocks, settings, retryReason }) {
@@ -443,29 +448,27 @@ Chỉ trả kết quả dịch. Cấm giải thích, chú thích, giải nghĩa 
       .replace(/[\p{P}\p{S}\s]+/gu, "");
   }
 
-  function validateApiTranslationItems(items, sourceBlocks) {
+  function validateTranslationItems(items, sourceBlocks) {
     const sourceById = new Map((sourceBlocks || []).map((block) => [String(block.id), String(block.text || "")]));
-    let hanCount = 0;
-    let characterCount = 0;
     for (const item of items || []) {
       const output = String(item?.text || "");
       const source = sourceById.get(String(item?.id || "")) || "";
       if (normalizedComparableText(source) && normalizedComparableText(source) === normalizedComparableText(output)) {
         return { ok: false, reason: "source_language_unchanged" };
       }
-      const itemHanCount = (output.match(/[\u3400-\u9fff]/g) || []).length;
-      const itemCharacterCount = (output.match(/[\p{L}\p{N}]/gu) || []).length;
-      if (itemHanCount >= 2 && itemCharacterCount > 0 && itemHanCount / itemCharacterCount >= 0.2) {
+      if (/[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]/u.test(output)) {
         return { ok: false, reason: "source_language_unchanged" };
       }
-      hanCount += itemHanCount;
-      characterCount += itemCharacterCount;
-    }
-    if (hanCount >= 2 && characterCount > 0 && hanCount / characterCount >= 0.2) {
-      return { ok: false, reason: "source_language_unchanged" };
+      const sourceEndsSentence = /[。！？!?…][\s"'”’」』】）》）]*$/u.test(source);
+      const outputEndsContinuation = /[,，:：;；、\-–—][\s"'”’]*$/u.test(output);
+      if (sourceEndsSentence && outputEndsContinuation) {
+        return { ok: false, reason: "incomplete_response" };
+      }
     }
     return { ok: true, reason: "ok" };
   }
+
+  const validateApiTranslationItems = validateTranslationItems;
 
   function parseJsonObject(raw) {
     if (raw && typeof raw === "object") return raw;
@@ -767,6 +770,7 @@ Chỉ trả kết quả dịch. Cấm giải thích, chú thích, giải nghĩa 
     createRepairPrompt,
     createApiMessages,
     validateApiTranslationItems,
+    validateTranslationItems,
     splitIntoBatches,
     parseJsonObject,
     validateSetupResponse,

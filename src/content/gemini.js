@@ -12,7 +12,12 @@
   if (root.document && root.chrome?.runtime?.onMessage) {
     common.registerRuntimeListener(api.createGeminiAdapter(root.document, {
       profileStorage: api.createProfileStorage(root.chrome)
-    }), root.chrome, { provider: "gemini", incompleteGraceMs: 3_000, staleStopGraceMs: 3_000 });
+    }), root.chrome, {
+      provider: "gemini",
+      incompleteGraceMs: 3_000,
+      staleStopGraceMs: 3_000,
+      validGraceMs: 1_000
+    });
   }
 })(typeof globalThis !== "undefined" ? globalThis : this, function createGeminiModule(common, resolverModule) {
   "use strict";

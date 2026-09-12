@@ -610,12 +610,12 @@
       };
       const outcomeCode = String(message.outcomeCode || "ok");
       if (validation.ok) {
-        if (core.isApiProvider(job.provider) && core.validateApiTranslationItems) {
-          const languageValidation = core.validateApiTranslationItems(validation.items, expectedBlocks);
-          if (!languageValidation.ok) {
-            job.validationDiagnostic.reason = languageValidation.reason;
-            return recoverBatch(job, languageValidation.reason);
-          }
+        const contentValidation = core.validateTranslationItems?.(validation.items, expectedBlocks)
+          || core.validateApiTranslationItems?.(validation.items, expectedBlocks)
+          || { ok: true, reason: "ok" };
+        if (!contentValidation.ok) {
+          job.validationDiagnostic.reason = contentValidation.reason;
+          return recoverBatch(job, contentValidation.reason);
         }
         const items = core.filterTranslationItems(
           validation.items.map((item) => ({ ...item, origin: "ai" })), expectedBlocks
@@ -706,7 +706,8 @@
           batchIndex: job.batchIndex,
           totalBatches: job.batches.length,
           blocks,
-          settings: job.settings
+          settings: job.settings,
+          retryReason: job.batchAttempts > 1 ? job.lastBatchError : ""
         });
       const message = {
         type: "STVAI_PROVIDER_SEND",
@@ -1309,7 +1310,12 @@
       for (let index = 0; index < batches.length; index += 1) {
         const batchId = batchIdAt(index);
         const items = saved?.batches?.[batchId]?.items || compatible?.batches?.[batchId]?.items;
-        if (exactItems(items, batches[index])) job.completed.set(batchId, core.filterTranslationItems(items, batches[index]));
+        const contentValidation = exactItems(items, batches[index])
+          ? (core.validateTranslationItems?.(items, batches[index])
+            || core.validateApiTranslationItems?.(items, batches[index])
+            || { ok: true })
+          : { ok: false };
+        if (contentValidation.ok) job.completed.set(batchId, core.filterTranslationItems(items, batches[index]));
       }
       if (job.completed.size === batches.length) return completeJob(job, true);
       // A tab can navigate between the first cached push and the following

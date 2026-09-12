@@ -314,6 +314,9 @@
     const timeoutMs = options.timeoutMs ?? 60_000;
     const intervalMs = options.intervalMs ?? 500;
     const incompleteGraceMs = Math.max(0, Number(options.incompleteGraceMs) || 0);
+    const validGraceMs = message?.phase === "batch"
+      ? Math.max(0, Number(options.validGraceMs) || 0)
+      : 0;
     const staleStopGraceMs = message?.phase === "batch"
       ? Math.max(0, Number(options.staleStopGraceMs) || 0)
       : 0;
@@ -332,6 +335,7 @@
     let matchingPolls = 0;
     let markerFirstSeenAt = null;
     let incompleteStableSince = null;
+    let validStableSince = null;
     let staleStopStableSince = null;
     let staleStopText = "";
     let graceActive = false;
@@ -416,6 +420,7 @@
           previousKey = key;
           matchingPolls = 1;
           incompleteStableSince = terminalOutcome === "incomplete_response" ? currentTime : null;
+          validStableSince = valid ? currentTime : null;
         }
         const requiredPolls = terminalOutcome === "incomplete_response"
           ? Math.max(2, Number(options.incompleteStablePolls ?? 6) || 2)
@@ -425,7 +430,11 @@
           || (incompleteStableSince !== null && currentTime - incompleteStableSince >= incompleteGraceMs);
         const incompleteReachedResponseTimeout = terminalOutcome !== "incomplete_response"
           || currentTime >= primaryDeadline;
-        if (matchingPolls >= requiredPolls && incompleteGraceComplete && incompleteReachedResponseTimeout) {
+        const validGraceComplete = !valid
+          || validGraceMs === 0
+          || (validStableSince !== null && currentTime - validStableSince >= validGraceMs);
+        if (matchingPolls >= requiredPolls && incompleteGraceComplete && incompleteReachedResponseTimeout
+          && validGraceComplete) {
           if (message?.phase === "setup") report("confirmed");
           return {
             response: text,
@@ -444,6 +453,7 @@
         previousKey = "";
         matchingPolls = 0;
         incompleteStableSince = null;
+        validStableSince = null;
       }
       if (!graceActive && currentTime >= primaryDeadline && markerFirstSeenAt !== null && markerGraceMs > 0) {
         graceActive = true;
@@ -456,7 +466,10 @@
       const staleStopDeadline = staleStopStableSince === null
         ? primaryDeadline
         : Math.min(primaryDeadline + staleStopGraceMs, staleStopStableSince + staleStopGraceMs);
-      const deadline = Math.max(markerDeadline, incompleteDeadline, staleStopDeadline);
+      const validDeadline = validStableSince === null || validGraceMs === 0
+        ? primaryDeadline
+        : Math.min(primaryDeadline + validGraceMs, validStableSince + validGraceMs);
+      const deadline = Math.max(markerDeadline, incompleteDeadline, staleStopDeadline, validDeadline);
       if (currentTime >= deadline) {
         if (message?.phase === "setup") report("failed");
         throw new ProviderError("response_timeout", "Đã hết thời gian chờ phản hồi ổn định từ trang AI.");
@@ -807,6 +820,7 @@
             ignoreValue: submission?.alreadySent ? "" : previousResponse,
             markerGraceMs: message.phase === "setup" ? (message.markerGraceMs ?? 2_000) : 0,
             incompleteGraceMs: message.phase === "batch" ? defaults.incompleteGraceMs : 0,
+            validGraceMs: message.phase === "batch" ? defaults.validGraceMs : 0,
             staleStopGraceMs: message.phase === "batch" ? defaults.staleStopGraceMs : 0,
             onStabilityChange: message.phase === "setup" ? updateReadyDiagnostic : undefined
           })

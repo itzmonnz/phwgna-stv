@@ -12,7 +12,7 @@
   if (root.document && root.chrome?.runtime?.onMessage) {
     common.registerRuntimeListener(api.createChatGPTAdapter(root.document, {
       profileStorage: api.createProfileStorage(root.chrome)
-    }), root.chrome, { provider: "chatgpt" });
+    }), root.chrome, { provider: "chatgpt", validGraceMs: 1_000 });
   }
 })(typeof globalThis !== "undefined" ? globalThis : this, function createChatGPTModule(common, resolverModule) {
   "use strict";
