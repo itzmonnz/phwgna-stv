@@ -451,6 +451,8 @@
     let prefetchGeneration = 0;
     let prefetchStatus = "";
     let toolbarStatus = "Sẵn sàng";
+    let sourceRecoveryAttempts = 0;
+    let sourceRecoveryPending = false;
     let captchaRetry = false;
     let poolCaptchaCode = "";
     let originalViewPinned = false;
@@ -694,6 +696,47 @@
         : { ok: false, reason: "source_container_detached" };
     }
 
+    function createNativeSyncForChapter() {
+      return ui.createNativeSync(document, {
+        container: chapter.container,
+        blocks: chapter.blocks,
+        sourceNodeBlockIds: chapter.sourceNodeBlockIds,
+        onTrace: event => document.defaultView?.STVAINativeTrace?.record(event)
+      });
+    }
+
+    async function recoverChangedChapterSource() {
+      const oldJobId = state.activeJobId;
+      renderView("stv");
+      updateToolbar("Nguồn STV vừa thay đổi — đang đọc lại chương…");
+      if (oldJobId) {
+        await sendRuntime(runtime, {
+          type: "STV_CANCEL_JOB",
+          jobId: oldJobId,
+          reason: "chapter_changed"
+        }).catch(() => undefined);
+      }
+      if (!active || signal?.aborted) return;
+      copyrightGuard?.destroy();
+      copyrightGuard = undefined;
+      nameEditorInstance?.bind(null);
+      nativeSync?.destroy();
+      try {
+        chapter = extractor.extractChapter(document);
+        if (prefetch?.prepareChapter) chapter = prefetch.prepareChapter(chapter);
+        nativeSync = createNativeSyncForChapter();
+        state.activeJobId = null;
+        state.status = "idle";
+        originalViewPinned = false;
+        await startJob(true);
+      } catch (error) {
+        state.status = "error";
+        updateToolbar(error?.message || "Không thể đọc lại nguồn STV. Hãy tải lại trang rồi thử lại.");
+      } finally {
+        sourceRecoveryPending = false;
+      }
+    }
+
     function validateTranslationItems(message, { completion = false } = {}) {
       const sourceEvidence = sourceAttachmentEvidence();
       if (!sourceEvidence.ok) return sourceEvidence;
@@ -742,7 +785,20 @@
 
     function rejectAttachment(message, evidence) {
       recordAttachmentEvidence("rejected", evidence.reason, message, message?.items?.length);
-      updateToolbar("Đã chặn dữ liệu dịch không khớp nội dung gốc; tiến độ cũ được giữ lại.");
+      const sourceChanged = [
+        "source_token_detached", "source_token_changed",
+        "source_context_detached", "source_context_changed"
+      ].includes(evidence.reason);
+      if (evidence.reason !== "completion_incomplete") state.status = "error";
+      renderView("stv");
+      if (sourceChanged && sourceRecoveryAttempts < 1 && !sourceRecoveryPending) {
+        sourceRecoveryAttempts += 1;
+        sourceRecoveryPending = true;
+        updateToolbar("Đã chặn dữ liệu cũ vì nguồn STV vừa thay đổi; đang tự đọc lại chương…");
+        void enqueue(recoverChangedChapterSource);
+      } else {
+        updateToolbar("Đã chặn dữ liệu dịch không khớp nội dung gốc; giữ nguyên bản STV hiện tại.");
+      }
       return true;
     }
 
@@ -1278,6 +1334,7 @@
         diagnosticState.pool = { ...state.pool };
       }
       if (state.status === 'completed' && prefetchStatus) return;
+      if (["running", "waiting-provider", "paused", "error", "cancelled"].includes(state.status)) return;
       if (pool.reconfiguring) {
         updateToolbar(`Đang khởi động lại pool AI ${pool.readyCount}/${pool.targetCount}`);
       } else if (pool.state === "preparing") {
@@ -1517,10 +1574,7 @@
       try {
         chapter = extractor.extractChapter(document);
         if (prefetch?.prepareChapter) chapter = prefetch.prepareChapter(chapter);
-        nativeSync = ui.createNativeSync(document, {
-          container: chapter.container, blocks: chapter.blocks, sourceNodeBlockIds: chapter.sourceNodeBlockIds,
-          onTrace: event => document.defaultView?.STVAINativeTrace?.record(event)
-        });
+        nativeSync = createNativeSyncForChapter();
         removeNativeListenGestureGuard = installNativeListenGestureGuard();
       } catch (error) {
         state.status = error?.code || "inactive";
