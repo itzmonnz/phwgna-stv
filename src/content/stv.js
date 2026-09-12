@@ -1150,6 +1150,9 @@
             ? `Không khởi động được tác vụ dịch: ${response.reason}.`
             : "Không khởi động được tác vụ dịch."));
         }
+        if (response.restartReason === "name_guide_changed") {
+          reportAction("Áp dụng Bộ Name mới nên phải dịch lại.");
+        }
         state.totalBatches = Math.max(1, Number(response.totalBatches) || 1);
         if (response.status === "completed") {
           // The direct reply may arrive before (or without) the completion event.

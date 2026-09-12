@@ -30,6 +30,50 @@
       SETUP_PARTS, READY_MARKER_GRACE_MS, REPLACEABLE_WARM_FAILURES,
       batchIdAt, exactItems, isAuthenticationBlocker
     } = contracts;
+    const PREFETCH_NAME_RECEIPT_PREFIX = "stvai-prefetch-name-receipt:";
+
+    function prefetchNameReceiptKey(sourceTabId) {
+      return `${PREFETCH_NAME_RECEIPT_PREFIX}${sourceTabId}`;
+    }
+
+    async function rememberPrefetchNameReceipt(job) {
+      if (!job?.prefetch || job.cacheable === false || !sessionStorage?.set) return;
+      const identity = job.cacheIdentity;
+      const fields = ["provider", "chapterId", "chapterKey", "batchHash", "sourceHash", "promptHash", "nameHash"];
+      if (!fields.every((field) => typeof identity?.[field] === "string" && identity[field])) return;
+      const receipt = {
+        version: 1,
+        sourceTabId: job.sourceTabId,
+        ...Object.fromEntries(fields.map((field) => [field, identity[field]]))
+      };
+      await storageCall(sessionStorage, "set", {
+        [prefetchNameReceiptKey(job.sourceTabId)]: receipt
+      }).catch(() => undefined);
+    }
+
+    async function consumeNameChangeRestartReason(sourceTabId, identity) {
+      if (!sessionStorage?.get || !sessionStorage?.remove) return "";
+      const key = prefetchNameReceiptKey(sourceTabId);
+      const stored = await storageCall(sessionStorage, "get", key).catch(() => ({}));
+      const receipt = stored?.[key];
+      if (receipt?.version !== 1 || receipt.sourceTabId !== sourceTabId
+        || typeof receipt.chapterKey !== "string" || receipt.chapterKey !== identity?.chapterKey) return "";
+
+      // Reaching the prefetched chapter consumes the receipt even when its source
+      // changed. This prevents an old prefetch from explaining a later restart.
+      await storageCall(sessionStorage, "remove", key).catch(() => undefined);
+      const sameTranslationInput = ["provider", "chapterId", "chapterKey", "batchHash", "sourceHash", "promptHash"]
+        .every((field) => typeof identity?.[field] === "string" && receipt[field] === identity[field]);
+      return sameTranslationInput && typeof receipt.nameHash === "string"
+        && receipt.nameHash !== identity.nameHash
+        ? "name_guide_changed"
+        : "";
+    }
+
+    async function clearPrefetchNameReceipt(sourceTabId) {
+      if (!sessionStorage?.remove) return;
+      await storageCall(sessionStorage, "remove", prefetchNameReceiptKey(sourceTabId)).catch(() => undefined);
+    }
 
     function currentBatch(job) {
       return job.batches[job.batchIndex] || null;
@@ -89,7 +133,8 @@
         });
       }
       retainTerminalJob(job);
-      return { ok: true, jobId: job.id, status: "completed", cached: Boolean(cached), items, totalBatches, fallbackCount };
+      return { ok: true, jobId: job.id, status: "completed", cached: Boolean(cached), items, totalBatches, fallbackCount,
+        restartReason: job.restartReason || "" };
     }
 
     function sameCacheIdentity(left, right) {
@@ -262,6 +307,7 @@
       else await cache.putBatch(job.cacheIdentity, id, items, {
         inputHash: await batchInputHash(currentBatch(job) || [])
       });
+      await rememberPrefetchNameReceipt(job);
       job.completed.set(id, items);
       await errorJournal?.append?.(`${job.id}:${completedBatchIndex}`, {
         kind: "batch_recovered",
@@ -1233,6 +1279,9 @@
         return { ok: false, reason: "stale-tts-session" };
       }
       await persistJob(job);
+      if (!job.prefetch) {
+        job.restartReason = await consumeNameChangeRestartReason(job.sourceTabId, identity);
+      }
 
       const saved = await cache.getChapter(identity);
       const inputHashes = Object.fromEntries(await Promise.all(batches.map(async (batch, index) => ([
@@ -1282,7 +1331,8 @@
           totalBatches: batches.length,
           fallbackCount: Array.from(job.completed.values()).flat().filter((item) => item?.origin === "convert").length,
           paused: job.status === "paused",
-          reason: job.pauseReason || dispatched?.reason || ""
+          reason: job.pauseReason || dispatched?.reason || "",
+          restartReason: job.restartReason || ""
         };
       }
 
@@ -1296,7 +1346,8 @@
           totalBatches: batches.length,
           fallbackCount: Array.from(job.completed.values()).flat().filter((item) => item?.origin === "convert").length,
           paused: job.status === "paused",
-          reason: job.pauseReason || ""
+          reason: job.pauseReason || "",
+          restartReason: job.restartReason || ""
         };
       }
 
@@ -1319,7 +1370,8 @@
         totalBatches: batches.length,
         fallbackCount: Array.from(job.completed.values()).flat().filter((item) => item?.origin === "convert").length,
         paused: job.status === "paused",
-        reason: job.pauseReason || ""
+        reason: job.pauseReason || "",
+        restartReason: job.restartReason || ""
       };
     }
 
@@ -1575,6 +1627,7 @@
       providerSetupProgress,
       acquireRecoverySlot,
       cancelPendingPrefetch,
+      clearPrefetchNameReceipt,
       cancelAllPendingPrefetch() {
         for (const admission of pendingPrefetch.values()) admission.cancelled = true;
       }

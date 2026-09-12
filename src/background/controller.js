@@ -1135,6 +1135,9 @@
       const promptPayload = core.stableSettingsPayload
         ? core.stableSettingsPayload({ ...settings, nameGuide: "" })
         : JSON.stringify({ systemPrompt: settings.systemPrompt, userPrompt: settings.userPrompt });
+      const relevantNameGuide = core.selectRelevantNameGuide
+        ? core.selectRelevantNameGuide(settings.nameGuide, blocks)
+        : (core.normalizeNameGuide ? core.normalizeNameGuide(settings.nameGuide) : settings.nameGuide || "");
       return {
         provider: settings.provider,
         webAiTabCount: settings.webAiTabCount,
@@ -1143,7 +1146,9 @@
         batchHash: await core.sha256Hex(JSON.stringify(allBatches.map(batch => batch.map(({ id, text }) => [id, text])))),
         sourceHash: await core.sha256Hex(blocks.map(block => block.text).join('\n\n')),
         promptHash: await core.sha256Hex(promptPayload),
-        nameHash: await core.sha256Hex(core.normalizeNameGuide ? core.normalizeNameGuide(settings.nameGuide) : settings.nameGuide || "")
+        // Only Name mappings that can reach this chapter affect its translation.
+        // Adding an unrelated Name must not invalidate already translated batches.
+        nameHash: await core.sha256Hex(relevantNameGuide)
       };
     }
 
@@ -1956,6 +1961,7 @@
     async function handleTabRemoved(tabId) {
       await historySync.forgetTab(tabId);
       translationJobs.cancelPendingPrefetch(tabId);
+      await translationJobs.clearPrefetchNameReceipt(tabId);
       await clearPrefetchParent(tabId);
       await ttsSession.clear(tabId);
       providerPerformanceLeases.delete(tabId);
