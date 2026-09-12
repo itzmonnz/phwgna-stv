@@ -156,13 +156,14 @@
         .every(key => typeof left?.[key] === "string" && left[key] === right?.[key]);
     }
 
-    async function replayExistingJob(job) {
+    async function replayExistingJob(job, options = {}) {
+      const emit = options.emit !== false;
       const items = [];
       for (let index = 0; index < job.batches.length; index += 1) {
         const batchItems = job.completed.get(batchIdAt(index));
         if (!batchItems) continue;
         items.push(...batchItems);
-        await sendToTab(job.sourceTabId, {
+        if (emit) await sendToTab(job.sourceTabId, {
           type: "STV_BATCH_COMPLETE",
           jobId: job.id,
           batchId: batchIdAt(index),
@@ -173,7 +174,7 @@
         });
       }
       const fallbackCount = items.filter(item => item?.origin === "convert").length;
-      if (job.status === "completed") {
+      if (job.status === "completed" && emit) {
         await sendToTab(job.sourceTabId, {
           type: "STV_JOB_COMPLETE",
           jobId: job.id,
@@ -182,7 +183,7 @@
           fallbackCount,
           totalBatches: job.batches.length
         });
-      } else {
+      } else if (emit) {
         await notifyStatus(job, job.status, job.pauseReason || "");
       }
       return {
@@ -191,6 +192,7 @@
         status: job.status,
         cached: job.status === "completed",
         items,
+        cachedBatches: cachedBatchSnapshot(job),
         totalBatches: job.batches.length,
         fallbackCount,
         reattached: true
@@ -1221,13 +1223,22 @@
       if (!message.prefetch) await clearPrefetchParent(sender.tab.id);
       if (admission.cancelled) return { ok: false, reason: 'user_cancelled' };
       const existing = jobs.get(id);
-      if (existing && existing.status !== "cancelled" && message.ttsSessionId && existing.sourceTabId === sender.tab.id
+      if (existing && existing.status !== "cancelled" && existing.sourceTabId === sender.tab.id
         && existing.prefetch !== true && sameCacheIdentity(existing.cacheIdentity, identity)) {
         return replayExistingJob(existing);
       }
       if (existing && !["cancelled", "completed"].includes(existing.status)) {
         return { ok: false, reason: "job-exists" };
       }
+      const attachable = Array.from(jobs.values()).find((priorJob) => (
+        priorJob.id !== id
+        && priorJob.sourceTabId === sender.tab.id
+        && priorJob.prefetch !== true
+        && message.prefetch !== true
+        && !["cancelled", "completed"].includes(priorJob.status)
+        && sameCacheIdentity(priorJob.cacheIdentity, identity)
+      ));
+      if (attachable) return replayExistingJob(attachable, { emit: false });
       for (const priorJob of jobs.values()) {
         if (
           priorJob.id !== id

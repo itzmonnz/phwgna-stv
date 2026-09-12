@@ -495,7 +495,9 @@
         performanceMode: slot.provider === "chatgpt" ? "stable" : "max",
         outcome: REPLACEABLE_WARM_FAILURES.has(slot.errorCode) ? "still_running" : "failed"
       });
-      slot.retryNotBefore = slot.errorCode === "response_timeout" ? slot.failedAt : slot.failedAt + 8_000;
+      slot.retryNotBefore = ["response_timeout", "send_not_confirmed"].includes(slot.errorCode)
+        ? slot.failedAt
+        : slot.failedAt + 8_000;
       exposeSlotFailureToPool(slot);
       await persistPool();
       await notifyPoolStatus();
@@ -560,6 +562,17 @@
       } catch (_error) {
         return false;
       }
+    }
+
+    async function reconcileUnconfirmedSetupMarker(slot, setupIndex, attempts, current) {
+      const limit = Math.max(1, Math.trunc(Number(attempts) || 1));
+      slot.readyWatchdogState = "rechecking_marker";
+      for (let attempt = 0; attempt < limit; attempt += 1) {
+        if (!current()) return false;
+        if (await recheckSetupMarker(slot, setupIndex)) return true;
+        if (attempt + 1 < limit) await retrySleep(READY_MARKER_GRACE_MS);
+      }
+      return false;
     }
 
     async function prepareWarmSlot(slot, settings, options = {}) {
@@ -767,8 +780,12 @@
             }
             if (!current()) return false;
             if (response?.ok === false) {
-              if (response.error?.code === "response_timeout"
-                && await recheckSetupMarker(slot, setupIndex)) {
+              const responseCode = response.error?.code;
+              const recheckAttempts = responseCode === "send_not_confirmed"
+                ? Math.max(1, Math.ceil((readyTimeoutMs - readySendTimeoutMs) / READY_MARKER_GRACE_MS))
+                : 1;
+              if (["response_timeout", "send_not_confirmed"].includes(responseCode)
+                && await reconcileUnconfirmedSetupMarker(slot, setupIndex, recheckAttempts, current)) {
                 response = {
                   ok: true,
                   response: core.READY_MARKERS[setupPart],
@@ -896,6 +913,7 @@
     async function replaceFailedWarmSlot(failedSlot) {
       let replacement = null;
       let settings = null;
+      let recycledInPlace = false;
       const retryDelay = Math.max(0, Number(failedSlot?.retryNotBefore || 0) - now());
       if (retryDelay) await retrySleep(retryDelay);
       await withPoolLock(async () => {
@@ -911,6 +929,14 @@
         const settingsHash = failedSlot.settingsHash;
         const nextAttempt = (failedSlot.recoveryAttempts || 0) + 1;
         const errorIncidentKey = failedSlot.errorIncidentKey;
+        if (["send_not_confirmed", "response_timeout"].includes(failedSlot.errorCode)) {
+          failedSlot.recoveryAttempts = nextAttempt;
+          recycledInPlace = await recycleOwnedSlot(failedSlot, settings);
+          if (recycledInPlace) {
+            replacement = failedSlot;
+            return;
+          }
+        }
         if (!(await removeOwnedSlot(failedSlot, { errorReason: failedSlot.errorCode }))) return;
         replacement = await createWarmSlot(settings, settingsHash, nextAttempt, failedSlot.purpose || "shared");
         replacement.errorIncidentKey = errorIncidentKey;
@@ -918,6 +944,11 @@
       if (!replacement || !settings) {
         await notifyPoolStatus();
         return false;
+      }
+      if (recycledInPlace) {
+        await notifyPoolStatus();
+        await drainWarmWaiters();
+        return true;
       }
       await prepareWarmSlot(replacement, settings, { deferUnavailable: true });
       await notifyPoolStatus();

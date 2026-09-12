@@ -706,16 +706,8 @@
     }
 
     async function recoverChangedChapterSource() {
-      const oldJobId = state.activeJobId;
       renderView("stv");
       updateToolbar("Nguồn STV vừa thay đổi — đang đọc lại chương…");
-      if (oldJobId) {
-        await sendRuntime(runtime, {
-          type: "STV_CANCEL_JOB",
-          jobId: oldJobId,
-          reason: "chapter_changed"
-        }).catch(() => undefined);
-      }
       if (!active || signal?.aborted) return;
       copyrightGuard?.destroy();
       copyrightGuard = undefined;
@@ -1178,7 +1170,7 @@
         return;
       }
       if (!keepListening) await stopListening();
-      const jobId = resumedJobId || createJobId();
+      let jobId = resumedJobId || createJobId();
       state.activeJobId = jobId;
       state.status = "waiting-provider";
       state.completedBatches = 0;
@@ -1205,6 +1197,10 @@
           throw new Error(response?.error?.message || (response?.reason
             ? `Không khởi động được tác vụ dịch: ${response.reason}.`
             : "Không khởi động được tác vụ dịch."));
+        }
+        if (typeof response.jobId === "string" && response.jobId && response.jobId !== jobId) {
+          state.activeJobId = response.jobId;
+          jobId = response.jobId;
         }
         if (response.restartReason === "name_guide_changed") {
           reportAction("Áp dụng Bộ Name mới nên phải dịch lại.");
