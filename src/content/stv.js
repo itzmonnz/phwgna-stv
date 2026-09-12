@@ -1906,32 +1906,56 @@
     return api;
   }
 
-  function waitForChapterRoot(document, timeoutMs, signal) {
+  function waitForChapterRoot(document, timeoutMs, signal, settleMs = 0) {
     const sourceSelector = "#content-container .contentbox[cid] i[t]";
-    const ready = () => {
-      const token = document.querySelector(sourceSelector);
-      if (!token || signal?.aborted) return false;
+    const readyRoot = () => {
+      if (signal?.aborted) return null;
       const segments = document.location?.pathname.split('/').filter(Boolean) || [];
-      return segments.length !== 5 || token.closest('.contentbox').getAttribute('cid') === segments[4];
+      const expectedCid = segments.length === 5 ? segments[4] : "";
+      for (const token of document.querySelectorAll(sourceSelector)) {
+        const root = token.closest('.contentbox');
+        if (root && (!expectedCid || root.getAttribute('cid') === expectedCid)) return root;
+      }
+      return null;
     };
     if (signal?.aborted) return Promise.resolve(false);
-    if (ready()) return Promise.resolve(true);
+    if (readyRoot() && settleMs <= 0) return Promise.resolve(true);
     const Observer = document.defaultView?.MutationObserver || globalThis.MutationObserver;
-    if (typeof Observer !== "function") return Promise.resolve(false);
+    if (typeof Observer !== "function") return Promise.resolve(Boolean(readyRoot()));
     return new Promise((resolve) => {
+      let settleTimer = null;
+      let candidateRoot = null;
       const finish = value => {
         clearTimeout(timeout);
+        clearTimeout(settleTimer);
         observer.disconnect();
         signal?.removeEventListener("abort", aborted);
         resolve(value);
       };
       const aborted = () => finish(false);
-      const timeout = setTimeout(() => finish(false), timeoutMs);
-      const observer = new Observer(() => {
-        if (ready()) finish(true);
+      const scheduleReady = root => {
+        candidateRoot = root;
+        clearTimeout(settleTimer);
+        settleTimer = setTimeout(() => finish(Boolean(readyRoot())), settleMs);
+      };
+      const timeout = setTimeout(() => finish(Boolean(readyRoot())), timeoutMs);
+      const observer = new Observer((records) => {
+        const root = readyRoot();
+        if (!root) {
+          candidateRoot = null;
+          clearTimeout(settleTimer);
+          settleTimer = null;
+          return;
+        }
+        const rootChanged = root !== candidateRoot;
+        const sourceChanged = records.some(record => record.target === root || root.contains(record.target));
+        if (settleMs <= 0) finish(true);
+        else if (rootChanged || sourceChanged) scheduleReady(root);
       });
       observer.observe(document, { childList: true, subtree: true, attributes: true, attributeFilter: ["cid", "t"] });
       signal?.addEventListener("abort", aborted, { once: true });
+      const root = readyRoot();
+      if (root) scheduleReady(root);
     });
   }
 
@@ -1942,7 +1966,8 @@
       return null;
     }
     setDiagnosticState(dependencies.diagnosticState, "waiting_root");
-    const found = await waitForChapterRoot(dependencies.document, 30_000, dependencies.signal);
+    const found = await waitForChapterRoot(dependencies.document, 30_000, dependencies.signal,
+      dependencies.sameDocumentNavigation ? 250 : 0);
     if (dependencies.signal?.aborted) return null;
     if (!found) {
       setDiagnosticState(dependencies.diagnosticState, "root_timeout", "SOURCE_NOT_FOUND");
