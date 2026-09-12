@@ -26,7 +26,7 @@
     "response_rejected", "retry_scheduled", "tab_retired", "tab_replaced",
     "batch_recovered", "setup_recovered", "job_paused", "provider_fault", "setup_failed",
     "ready_watchdog", "chapter_failed", "prefetch_failed", "tts_handoff_failed",
-    "stale_stop_detected", "stale_stop_cleared", "stale_stop_replaced"
+    "stale_stop_detected", "stale_stop_cleared", "stale_stop_recycled", "stale_stop_replaced"
   ]);
   const ERROR_CODES = new Set([
     "line_count_mismatch", "response_id_mismatch", "invalid_response", "incomplete_response",

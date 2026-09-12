@@ -21,7 +21,7 @@
       markWarmSlotRecovered, notifyPoolStatus, openProvider, persistPool,
       prepareWarmSlot, providerTabMatches, readySendTimeoutFor, readyTimeoutFor,
       registerStvTab, releaseChatGPTSetupPerformanceLease, rememberPrefetchParent,
-      removeOwnedSlot, requestedPurposePriorities, resolveStvSenderChapter,
+      removeOwnedSlot, recycleOwnedSlot, requestedPurposePriorities, resolveStvSenderChapter,
       restoreJobs, restorePoolMetadata, sendProviderMessage, spendJobSlot,
       validateSetupProviderResult, verifiedReadySlotByPriority, verifyPreparedSlot,
       isStvSender, sites, warmTemporaryTimeoutMs, providerDiagnosticTimeoutMs
@@ -276,7 +276,7 @@
       }
 
       await notifyStatus(job, "running", "switching_busy_tab");
-      let closed = false;
+      let released = false;
       const slot = oldSlotId
         ? warmPool.slots.find(candidate => candidate.slotId === oldSlotId && candidate.jobId === job.id)
         : null;
@@ -284,13 +284,14 @@
         await withPoolLock(async () => {
           if (!warmPool.slots.includes(slot) || slot.jobId !== job.id) return;
           job.providerTabId = null;
-          closed = await removeOwnedSlot(slot, { errorReason: "stale_stop_after_accept" });
+          released = await recycleOwnedSlot(slot, warmPool.settings || job.settings);
+          if (!released) released = await removeOwnedSlot(slot, { errorReason: "stale_stop_after_accept" });
         });
       } else if (Number.isInteger(oldTabId)) {
         await closeLegacyProviderTab(job);
-        closed = !Number.isInteger(job.providerTabId);
+        released = !Number.isInteger(job.providerTabId);
       }
-      if (!closed) return pause(job, "provider_tab_close_failed");
+      if (!released) return pause(job, "provider_tab_close_failed");
 
       job.providerTabId = null;
       job.poolSlotId = "";
@@ -299,11 +300,12 @@
       job.activeRequestId = "";
       job.unsentRequestId = "";
       job.workState = "queued";
+      job.recoveryStage = "switching_ready";
       await persistJob(job);
       await errorJournal?.append?.(incidentKey, {
-        kind: "stale_stop_replaced",
+        kind: slot?.state === "opening" ? "stale_stop_recycled" : "stale_stop_replaced",
         errorCode: "stale_stop_after_accept",
-        tabClosed: true,
+        tabClosed: slot?.state !== "opening",
         outcome: "recovered",
         onlyExisting: true
       });

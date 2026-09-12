@@ -1338,7 +1338,7 @@
       providerUrl, providerMatchesUrl, isGeminiVerificationUrl,
       providerTabMatches, findPoolSlotByTab, findPoolSlotByJob,
       ownedDirectProviderForSender, developerKeepsFailedTabs, diagnosticHoldCode,
-      retainDiagnosticTab, removeDiagnosticTab, removeOwnedSlot,
+      retainDiagnosticTab, removeDiagnosticTab, removeOwnedSlot, recycleOwnedSlot,
       restorePoolMetadata, verifyPreparedSlot, verifiedReadySlot,
       verifiedReadySlotByPriority, acquireJapaneseLookupSlot,
       releaseJapaneseLookupSlot, cancelJapaneseLookup, markWarmSlotFailed,
@@ -1361,7 +1361,7 @@
       markWarmSlotRecovered, notifyPoolStatus, openProvider, persistPool,
       prepareWarmSlot, providerTabMatches, readySendTimeoutFor, readyTimeoutFor,
       registerStvTab, releaseChatGPTSetupPerformanceLease, rememberPrefetchParent,
-      removeOwnedSlot, requestedPurposePriorities, resolveStvSenderChapter,
+      removeOwnedSlot, recycleOwnedSlot, requestedPurposePriorities, resolveStvSenderChapter,
       restoreJobs, restorePoolMetadata, sendProviderMessage, spendJobSlot,
       validateSetupProviderResult, verifiedReadySlotByPriority, verifyPreparedSlot,
       isStvSender, sites, warmTemporaryTimeoutMs, providerDiagnosticTimeoutMs

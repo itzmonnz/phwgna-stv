@@ -202,6 +202,56 @@
       return true;
     }
 
+    async function recycleOwnedSlot(slot, settings, options = {}) {
+      if (!slot || !Number.isInteger(slot.providerTabId) || typeof tabs.update !== "function") return false;
+      if (!warmPool.slots.includes(slot)) return false;
+      if (!settings || settings.provider !== slot.provider) return false;
+      if (!options.force && await developerKeepsFailedTabs()) return false;
+
+      const targetUrl = ownedProviderUrl(settings.provider, settings.temporaryChat);
+      const previousState = slot.state;
+      const previousJobId = slot.jobId;
+      const preparationAttemptId = createId("recycle-attempt");
+      await releaseChatGPTSetupPerformanceLease(slot);
+      slot.state = "opening";
+      slot.jobId = "";
+      slot.errorCode = "";
+      slot.documentGeneration = (slot.documentGeneration || 0) + 1;
+      slot.documentLoading = true;
+      slot.documentLoadedAt = 0;
+      slot.lastKnownUrl = targetUrl;
+      slot.preparationAttemptId = preparationAttemptId;
+      slot.preparationRequested = false;
+      slot.preparationPasses = 0;
+      slot.warmSessionId = createId("warm");
+      slot.setupId = createId("setup");
+      slot.setupSessionId = createId("setup-session");
+      slot.warmJobId = createId("warm-job");
+      slot.setupCheckpoint = 0;
+      slot.setupState = "idle";
+      slot.setupStage = "idle";
+      slot.setupStageStartedAt = 0;
+      slot.setupLastProgressAt = 0;
+      slot.setupResumeCount = 0;
+      slot.setupServiceWorkerRestarts = 0;
+      slot.setupResumeAttempts = 0;
+      slot.setupErrorCode = "";
+      slot.firstBatchDispatchedAt = 0;
+      await persistPool();
+      try {
+        await tabs.update(slot.providerTabId, { url: targetUrl });
+        return true;
+      } catch (_error) {
+        if (!warmPool.slots.includes(slot) || slot.preparationAttemptId !== preparationAttemptId) return false;
+        slot.state = previousState;
+        slot.jobId = previousJobId;
+        slot.documentLoading = false;
+        slot.errorCode = "provider_tab_recycle_failed";
+        await persistPool();
+        return false;
+      }
+    }
+
     async function restorePoolMetadata() {
       if (warmPool.restored) return;
       if (warmPool.restorePromise) return warmPool.restorePromise;
@@ -1278,8 +1328,13 @@
             slot.state = "spent";
             slot.jobId = "";
             if (job.status === "completed") {
-              await removeOwnedSlot(slot, { removalReason: "job_completed" });
-              if (warmPool.settings) await fillWarmPool(warmPool.settings, warmPool.settingsHash);
+              const recycled = warmPool.settings
+                ? await recycleOwnedSlot(slot, warmPool.settings)
+                : false;
+              if (!recycled) {
+                await removeOwnedSlot(slot, { removalReason: "job_completed" });
+                if (warmPool.settings) await fillWarmPool(warmPool.settings, warmPool.settingsHash);
+              }
             }
             await persistPool();
           }
@@ -1331,7 +1386,7 @@
       providerUrl, providerMatchesUrl, isGeminiVerificationUrl,
       providerTabMatches, findPoolSlotByTab, findPoolSlotByJob,
       ownedDirectProviderForSender, developerKeepsFailedTabs, diagnosticHoldCode,
-      retainDiagnosticTab, removeDiagnosticTab, removeOwnedSlot,
+      retainDiagnosticTab, removeDiagnosticTab, removeOwnedSlot, recycleOwnedSlot,
       restorePoolMetadata, verifyPreparedSlot, verifiedReadySlot,
       verifiedReadySlotByPriority, acquireJapaneseLookupSlot,
       releaseJapaneseLookupSlot, cancelJapaneseLookup, markWarmSlotFailed,
