@@ -459,9 +459,23 @@
       }
       const requestId = String(sendOptions.requestId || "");
       activeBatchRequestId = /^batch_\d+_\d{4}$/.test(requestId) ? requestId : "";
+      const visibleRequestIsPresent = () => {
+        const root = document.body;
+        if (!root || !/^batch_\d+_\d{4}$/.test(requestId)) return false;
+        const walker = document.createTreeWalker(root, 4);
+        let textNode = walker.nextNode();
+        while (textNode) {
+          const owner = textNode.parentElement;
+          const firstLine = String(textNode.nodeValue || "").split(/\r?\n/, 1)[0]?.trim();
+          if (firstLine === requestId
+            && common.isVisible(owner)
+            && !owner?.closest("model-response, [contenteditable='true']")) return true;
+          textNode = walker.nextNode();
+        }
+        return false;
+      };
       const alreadySent = () => /^batch_\d+_\d{4}$/.test(requestId)
-        && (Array.from(document.querySelectorAll("user-query"))
-          .some(node => common.textOf(node).split(/\r?\n/, 1)[0]?.trim() === requestId)
+        && (visibleRequestIsPresent()
           || responseElements().some(node => common.responseHasRequestId(
             common.textOf(responseContent(node)), requestId
           )));
