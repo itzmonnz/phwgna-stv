@@ -55,8 +55,11 @@
 
   function normalizeProof(value) {
     if (value?.status === 'guest') return { status: 'guest' };
-    if (value?.status === 'account' && /^[1-9]\d{0,39}$/.test(String(value.id || ''))) {
-      return { status: 'account', id: String(value.id) };
+    const id = String(value?.id || '');
+    const numeric = /^[1-9]\d{0,39}$/.test(id);
+    const handle = /^handle:[^\u0000-\u001f\u007f]{3,80}$/u.test(id) && id === id.trim();
+    if (value?.status === 'account' && (numeric || handle)) {
+      return { status: 'account', id };
     }
     return { status: ['pending', 'unknown', 'ambiguous'].includes(value?.status) ? value.status : 'unknown' };
   }
