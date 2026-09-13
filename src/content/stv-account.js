@@ -32,6 +32,11 @@
     return Boolean(content && (node.compareDocumentPosition(content) & 4));
   }
 
+  function hasTrustedLogout(document) {
+    return [...document.querySelectorAll('a,button,[onclick]')]
+      .some(node => accountZone(node) && /\b(dang xuat|logout)\b/.test(normalizeText(node.textContent)));
+  }
+
   function inspect(document) {
     const location = document?.defaultView?.location;
     if (!document || !location) return { profileLinks: 0, trustedProfileLinks: 0, beforeContentProfileLinks: 0,
@@ -61,17 +66,26 @@
   function sample(document) {
     const location = document?.defaultView?.location;
     if (!document || !location) return { status: 'unknown' };
-    const ids = new Set();
+    const ids = new Set(), pageIds = new Set();
     let zero = false;
     for (const anchor of document.querySelectorAll('a[href]')) {
-      if (!accountZone(anchor)) continue;
       const path = safePath(anchor, location);
       const match = ACCOUNT_PATH.exec(path);
+      if (match) pageIds.add(match[1]);
+      if (!accountZone(anchor)) continue;
       if (match) ids.add(match[1]);
       else if (ZERO_PATH.test(path)) zero = true;
     }
     if (ids.size === 1 && !zero) return { status: 'account', id: [...ids][0] };
     if (ids.size > 1 || (ids.size && zero)) return { status: 'ambiguous' };
+    // STV renders the signed-in /@ID link in its footer while the authenticated
+    // control remains in the account navigation. Trust the separated footer ID
+    // only when that navigation independently exposes a logout action, and fail
+    // closed if page content contributes a different profile ID.
+    if (hasTrustedLogout(document)) {
+      if (pageIds.size === 1 && !zero) return { status: 'account', id: [...pageIds][0] };
+      return { status: 'ambiguous' };
+    }
     const login = [...document.querySelectorAll('#loginformdiv,[id*="login" i],a[href*="login" i],button[class*="login" i],[onclick*="openloginmodal" i]')]
       .some(node => accountZone(node));
     if (zero || login) return { status: 'guest' };
