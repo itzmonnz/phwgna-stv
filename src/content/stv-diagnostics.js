@@ -292,7 +292,7 @@
           dataBytesBucket: bytes(endpoint.dataBytesBucket), warmupAttempted: endpoint.warmupAttempted === true,
           warmupResponseClass: safeEnum(endpoint.warmupResponseClass, ["unknown", "2xx", "3xx", "4xx", "5xx", "failed"], "unknown") },
         sourceWait: {
-          state: safeEnum(value.sourceWait?.state, ["idle", "waiting", "resolved"], "idle"),
+          state: safeEnum(value.sourceWait?.state, ["idle", "waiting", "resolved", "exhausted"], "idle"),
           retryCount: Math.max(0, Math.min(1000, Math.trunc(Number(value.sourceWait?.retryCount) || 0))),
           nextDelayBucket: safeEnum(value.sourceWait?.nextDelayBucket, ["none", "5s", "10s", "20s", "30s"], "none")
         },

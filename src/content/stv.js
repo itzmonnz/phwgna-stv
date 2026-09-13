@@ -1100,12 +1100,17 @@
             if (!active || generation !== prefetchGeneration || controller.signal.aborted
               || state.status !== 'completed' || setupSnapshot !== core.stableSettingsPayload(settings)) return;
             if (error?.retryable !== true) throw error;
+            if (retryCount >= retryDelays.length) {
+              setPrefetchDiagnostic({ sourceWait: { state: 'exhausted', retryCount, nextDelayBucket: 'none' } });
+              throw error;
+            }
             const delayMs = retryDelays[Math.min(retryCount, retryDelays.length - 1)];
             retryCount += 1;
             const delayBucket = prefetchRetryDelayBucket(delayMs);
             setPrefetchDiagnostic({ stage: 'waiting_source', failureCode: error?.message,
               sourceWait: { state: 'waiting', retryCount, nextDelayBucket: delayBucket } });
-            reportPrefetch(`STV chưa có nguồn Trung — tự thử lại sau ${delayBucket.replace('s', ' giây')} (lần ${retryCount})…`);
+            const failureLabel = prefetchErrorLabel(error?.message);
+            reportPrefetch(`${failureLabel.charAt(0).toUpperCase()}${failureLabel.slice(1)} — tự thử lại sau ${delayBucket.replace('s', ' giây')} (lần ${retryCount})…`);
             if (!await prefetchRetryWait(delayMs, controller.signal)) return;
           }
         }
