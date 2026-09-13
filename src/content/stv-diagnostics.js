@@ -30,11 +30,18 @@
       'history_unauthorized', 'history_insecure_origin', 'history_account_changed', 'history_account_unresolved',
       'history_account_ambiguous', 'history_unavailable'];
     const count = number => Number.isSafeInteger(number) ? Math.max(0, Math.min(100000, number)) : 0;
+    const probe = value?.accountProbe || {};
     return {
       status: ['idle', 'pending', 'synced', 'error'].includes(value?.status) ? value.status : 'unavailable',
       errorCode: allowedErrors.includes(value?.errorCode) ? value.errorCode : 'history_unavailable',
       accountStatus: ['account', 'guest', 'pending', 'unknown', 'ambiguous'].includes(value?.accountStatus)
         ? value.accountStatus : 'unknown',
+      accountProbe: {
+        profileLinks: count(probe.profileLinks), trustedProfileLinks: count(probe.trustedProfileLinks),
+        beforeContentProfileLinks: count(probe.beforeContentProfileLinks), exactProfileLinks: count(probe.exactProfileLinks),
+        slugProfileLinks: count(probe.slugProfileLinks), accountAttributeSignals: count(probe.accountAttributeSignals),
+        logoutSignals: count(probe.logoutSignals), knownSlotCount: count(probe.knownSlotCount)
+      },
       recordCount: count(value?.recordCount), writeCount: count(value?.writeCount),
       toc: ['not_applicable', 'synced', 'history_toc_unrecognized'].includes(value?.toc) ? value.toc : 'not_applicable'
     };

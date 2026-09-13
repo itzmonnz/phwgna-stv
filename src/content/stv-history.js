@@ -270,7 +270,8 @@
       document.removeEventListener('visibilitychange', tick);
       window.chrome?.runtime?.onMessage?.removeListener(onProbe);
     }
-    function snapshot() { return { status, errorCode, accountStatus: accountProof?.status || 'unknown', recordCount: count, writeCount: writes, toc }; }
+    function snapshot() { return { status, errorCode, accountStatus: accountProof?.status || 'unknown',
+      accountProbe: accounts.inspect?.(document), recordCount: count, writeCount: writes, toc }; }
     return Object.freeze({ start, stop, tick, snapshot });
   }
   return Object.freeze({ createObserver, readProof, paintToc, paintRecent });

@@ -8,7 +8,7 @@
   const ZERO_PATH = /^\/@(?:u_)?0\/?$/;
   const ZONES = 'header,nav,#header,#navbar,.header,.navbar,.topbar,[role="navigation"],#tm-nav-search-top-right,#shownbtnctn';
   const normalizeText = value => String(value || '').normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    .replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/đ/g, 'd');
 
   function safePath(anchor, location) {
     try {
@@ -25,6 +25,37 @@
       if (/\b(account|profile|avatar|user|tai khoan|thong tin ca nhan|dang xuat)\b/.test(semantic)) return true;
     }
     return false;
+  }
+
+  function beforeContent(node, document) {
+    const content = document.getElementById('inner');
+    return Boolean(content && (node.compareDocumentPosition(content) & 4));
+  }
+
+  function inspect(document) {
+    const location = document?.defaultView?.location;
+    if (!document || !location) return { profileLinks: 0, trustedProfileLinks: 0, beforeContentProfileLinks: 0,
+      exactProfileLinks: 0, slugProfileLinks: 0, accountAttributeSignals: 0, logoutSignals: 0, knownSlotCount: 0 };
+    const result = { profileLinks: 0, trustedProfileLinks: 0, beforeContentProfileLinks: 0,
+      exactProfileLinks: 0, slugProfileLinks: 0, accountAttributeSignals: 0, logoutSignals: 0,
+      knownSlotCount: document.querySelectorAll('#tm-nav-search-top-right,#shownbtnctn').length };
+    for (const anchor of document.querySelectorAll('a[href]')) {
+      const path = safePath(anchor, location);
+      if (!/^\/@[^/?#]{1,80}\/?$/.test(path)) continue;
+      result.profileLinks++;
+      if (accountZone(anchor)) result.trustedProfileLinks++;
+      if (beforeContent(anchor, document)) result.beforeContentProfileLinks++;
+      if (ACCOUNT_PATH.test(path) || ZERO_PATH.test(path)) result.exactProfileLinks++;
+      else result.slugProfileLinks++;
+    }
+    const signals = document.querySelectorAll('[data-user-id],[data-userid],[data-uid],[userid],[uid],[onclick]');
+    for (const node of signals) {
+      if (!accountZone(node) && !beforeContent(node, document)) continue;
+      if (node.hasAttribute('data-user-id') || node.hasAttribute('data-userid') || node.hasAttribute('data-uid')
+        || node.hasAttribute('userid') || node.hasAttribute('uid')) result.accountAttributeSignals++;
+      if (/\b(dang xuat|logout)\b/.test(normalizeText(node.textContent))) result.logoutSignals++;
+    }
+    return result;
   }
 
   function sample(document) {
@@ -64,5 +95,5 @@
     return left?.status === right?.status && (left?.status !== 'account' || left.id === right.id);
   }
 
-  return Object.freeze({ sample, createResolver, equal });
+  return Object.freeze({ sample, createResolver, equal, inspect });
 });
