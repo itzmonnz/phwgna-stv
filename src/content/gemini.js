@@ -460,8 +460,11 @@
       const requestId = String(sendOptions.requestId || "");
       activeBatchRequestId = /^batch_\d+_\d{4}$/.test(requestId) ? requestId : "";
       const alreadySent = () => /^batch_\d+_\d{4}$/.test(requestId)
-        && Array.from(document.querySelectorAll("user-query"))
-          .some(node => common.textOf(node).split(/\r?\n/, 1)[0]?.trim() === requestId);
+        && (Array.from(document.querySelectorAll("user-query"))
+          .some(node => common.textOf(node).split(/\r?\n/, 1)[0]?.trim() === requestId)
+          || responseElements().some(node => common.responseHasRequestId(
+            common.textOf(responseContent(node)), requestId
+          )));
       const reconcileExistingRequest = () => {
         if (!alreadySent()) return false;
         submissionDiagnostic.requestAlreadyPresent = true;
