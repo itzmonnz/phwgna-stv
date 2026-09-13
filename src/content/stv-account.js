@@ -6,7 +6,7 @@
   'use strict';
   const ACCOUNT_PATH = /^\/@(?:u_)?([1-9]\d{0,39})\/?$/;
   const ZERO_PATH = /^\/@(?:u_)?0\/?$/;
-  const ZONES = 'header,nav,#header,#navbar,.header,.navbar,.topbar,[role="navigation"]';
+  const ZONES = 'header,nav,#header,#navbar,.header,.navbar,.topbar,[role="navigation"],#tm-nav-search-top-right,#shownbtnctn';
   const normalizeText = value => String(value || '').normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '').toLowerCase();
 
@@ -41,7 +41,8 @@
     }
     if (ids.size === 1 && !zero) return { status: 'account', id: [...ids][0] };
     if (ids.size > 1 || (ids.size && zero)) return { status: 'ambiguous' };
-    const login = document.querySelector('#loginformdiv,[id*="login" i],a[href*="login" i],button[class*="login" i]');
+    const login = [...document.querySelectorAll('#loginformdiv,[id*="login" i],a[href*="login" i],button[class*="login" i],[onclick*="openloginmodal" i]')]
+      .some(node => accountZone(node));
     if (zero || login) return { status: 'guest' };
     return { status: document.readyState === 'loading' ? 'pending' : 'unknown' };
   }
