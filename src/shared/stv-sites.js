@@ -40,7 +40,8 @@
     const current = parseChapter(base);
     const next = parseChapter(value, { base });
     if (!current || !next || current.bookKey !== next.bookKey || current.chapterId === next.chapterId) return '';
-    return new URL(new URL(next.url).pathname, current.origin).href;
+    const pathname = new URL(next.url).pathname;
+    return new URL(pathname.endsWith('/') ? pathname : `${pathname}/`, current.origin).href;
   }
 
   function zoomProfile(value, base) {

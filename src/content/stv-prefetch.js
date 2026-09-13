@@ -166,14 +166,24 @@
     let response;
     try { response = await options.request(url, fetchOptions); }
     catch (_) {
-      throw prefetchError(signal.aborted ? 'next_chapter_cancelled' : 'next_chapter_fetch_failed', !signal.aborted);
+      if (signal.aborted) throw prefetchError('next_chapter_cancelled');
+      // A chapter navigation GET can fail while STV's readchapter endpoint is
+      // still healthy. Continue with an inert empty document so the endpoint
+      // below gets its chance instead of retrying only the broken GET forever.
     }
     trace?.update({ pageFetch: { responseClass: responseClass(response?.status, response?.ok) } });
-    if (!response?.ok) throw prefetchError("next_chapter_fetch_failed", true);
-    const finalUrl = safeChapterUrl(response.url || url, url);
-    trace?.update({ pageFetch: { redirectState: finalUrl?.replace(/\/$/, '') === url.replace(/\/$/, '') ? "same_url" : "changed" } });
-    if (!finalUrl || finalUrl.replace(/\/$/, '') !== url.replace(/\/$/, '')) throw new Error("next_chapter_redirect_invalid");
-    const pageHtml = await response.text();
+    let finalUrl = url;
+    let pageHtml = '';
+    if (response?.ok) {
+      finalUrl = safeChapterUrl(response.url || url, url);
+      trace?.update({ pageFetch: { redirectState: finalUrl?.replace(/\/$/, '') === url.replace(/\/$/, '') ? "same_url" : "changed" } });
+      if (!finalUrl || finalUrl.replace(/\/$/, '') !== url.replace(/\/$/, '')) throw new Error("next_chapter_redirect_invalid");
+      try { pageHtml = await response.text(); }
+      catch (_) {
+        if (signal.aborted) throw prefetchError('next_chapter_cancelled');
+        pageHtml = '';
+      }
+    }
     trace?.update({ stage: "parse_page", pageFetch: { bytesBucket: bytesBucket(pageHtml) } });
     let document = options.parse(pageHtml, finalUrl);
     if (signal.aborted) throw new Error("next_chapter_cancelled");
