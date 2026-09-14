@@ -139,6 +139,47 @@
       return String(value || "").replace(/\s+/gu, " ").trim();
     }
 
+    function composedParent(element) {
+      return element?.parentElement || element?.getRootNode?.()?.host || null;
+    }
+
+    function composedClosest(element, selector) {
+      for (let current = element; current; current = composedParent(current)) {
+        if (current.matches?.(selector)) return current;
+      }
+      return null;
+    }
+
+    function queryComposed(root, selectors) {
+      const selectorList = Array.isArray(selectors) ? selectors : [selectors];
+      for (const selector of selectorList) {
+        const queue = [root];
+        const seen = new Set();
+        while (queue.length) {
+          const current = queue.shift();
+          if (!current || seen.has(current)) continue;
+          seen.add(current);
+          if (current.nodeType === 1 && current.matches?.(selector)) return current;
+          if (current.shadowRoot) queue.push(...Array.from(current.shadowRoot.children || []));
+          queue.push(...Array.from(current.children || []));
+        }
+      }
+      return null;
+    }
+
+    function composedText(element) {
+      if (!element) return "";
+      const read = (node) => {
+        if (node.nodeType === 3) return node.nodeValue || "";
+        if (node.nodeName === "BR") return "\n";
+        const children = node.shadowRoot?.childNodes?.length
+          ? node.shadowRoot.childNodes
+          : node.childNodes;
+        return Array.from(children || []).map(read).join("");
+      };
+      return read(element).replace(/\u00a0/g, " ").trim();
+    }
+
     function updateSendButtonState() {
       if (findStopButton()) {
         submissionDiagnostic.sendButtonState = "stop_visible";
@@ -472,7 +513,13 @@
             && !owner?.closest("model-response, [contenteditable='true']")) return true;
           textNode = walker.nextNode();
         }
-        return false;
+        const shadowHosts = Array.from(document.querySelectorAll("user-query, *"))
+          .filter(element => element.localName === "user-query" || element.shadowRoot);
+        return shadowHosts.some((element) => {
+          if (!common.isVisible(element)
+            || composedClosest(element, "model-response, [contenteditable='true']")) return false;
+          return composedText(element).split(/\r?\n/, 1)[0]?.trim() === requestId;
+        });
       };
       const alreadySent = () => /^batch_\d+_\d{4}$/.test(requestId)
         && (visibleRequestIsPresent()
@@ -640,9 +687,7 @@
     }
 
     function responseContent(element) {
-      return element?.querySelector(".markdown")
-        || element?.querySelector("message-content")
-        || element?.querySelector(".response-content")
+      return queryComposed(element, [".markdown", "message-content", ".response-content"])
         || element;
     }
 

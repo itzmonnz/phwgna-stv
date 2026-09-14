@@ -46,6 +46,13 @@
     return element?.parentElement || element?.getRootNode?.()?.host || null;
   }
 
+  function composedContains(ancestor, element) {
+    for (let current = element; current; current = composedParent(current)) {
+      if (current === ancestor) return true;
+    }
+    return false;
+  }
+
   function collectElements(document, limit = 2_000) {
     const output = [];
     const seen = new Set();
@@ -310,7 +317,7 @@
         if (element.getAttribute("data-message-author-role") === "assistant") score += 90;
         if (element.getAttribute("role") === "article" && /response|assistant/i.test(semantic)) score += 70;
       } else if (role === "completion") {
-        if (!context?.response || !context.response.contains?.(element)) return -100;
+        if (!context?.response || !composedContains(context.response, element)) return -100;
         if (/response-footer|response-actions/.test(safeClassTokens(element).join(" "))) score += 90;
         if (/copy response|sao chép phản hồi/i.test(semantic)) score += 75;
       } else if (role === "temporaryLauncher") {
