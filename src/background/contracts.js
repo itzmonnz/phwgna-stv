@@ -5,7 +5,7 @@
 })(typeof globalThis !== "undefined" ? globalThis : this, function createBackgroundContracts() {
   "use strict";
 
-  const SETUP_PARTS = Object.freeze(["introduction", "system", "names"]);
+  const SETUP_PARTS = Object.freeze(["introduction", "system"]);
   const PROVIDER_URLS = Object.freeze({
     chatgpt: "https://chatgpt.com/",
     gemini: "https://gemini.google.com/app"

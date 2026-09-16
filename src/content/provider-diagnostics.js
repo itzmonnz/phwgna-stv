@@ -254,7 +254,7 @@
           "provider_error", "cancelled", "content_refused", "incomplete_response",
           "recovering_response", "fallback_unavailable"
         ], "none"),
-        readyStep: safeEnum(runtime.readyStep, ["idle", "ready_1", "ready_2", "ready_3"], "idle"),
+        readyStep: safeEnum(runtime.readyStep, ["idle", "ready_1", "ready_2"], "idle"),
         readyState: safeEnum(runtime.readyState, [
           "idle", "waiting_marker", "marker_seen", "grace", "confirmed", "failed"
         ], "idle"),

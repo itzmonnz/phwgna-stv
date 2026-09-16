@@ -557,7 +557,7 @@
         warmSessionId: slot.warmSessionId,
         settingsHash: slot.settingsHash,
         setupSessionId: slot.setupSessionId || "",
-        setupCheckpoint: Math.max(0, Math.min(3, Number(slot.setupCheckpoint) || 0)),
+        setupCheckpoint: Math.max(0, Math.min(SETUP_PARTS.length, Number(slot.setupCheckpoint) || 0)),
         setupState: slot.setupState || "idle",
         setupLastProgressAt: Math.max(0, Number(slot.setupLastProgressAt) || 0),
         setupResumeCount: Math.max(0, Number(slot.setupResumeCount) || 0),
@@ -768,13 +768,13 @@
             validationReason: String(slot.readyValidationReason || "none")
           },
           setup: {
-            checkpoint: Math.max(0, Math.min(3, Number(slot.setupCheckpoint) || 0)),
+            checkpoint: Math.max(0, Math.min(SETUP_PARTS.length, Number(slot.setupCheckpoint) || 0)),
             state: String(slot.setupState || "idle"),
             stage: String(slot.setupStage || "idle"),
             lastProgressAt: Math.max(0, Number(slot.setupLastProgressAt) || 0),
             resumeCount: Math.max(0, Number(slot.setupResumeCount) || 0),
             serviceWorkerRestarts: Math.max(0, Number(slot.setupServiceWorkerRestarts) || 0),
-            ready3Persisted: Number(slot.setupCheckpoint) >= 3,
+            ready3Persisted: Number(slot.setupCheckpoint) >= SETUP_PARTS.length,
             leased: slot.state === "leased",
             firstBatchDispatched: Number(slot.firstBatchDispatchedAt) > 0,
             errorCode: String(slot.setupErrorCode || "none")
@@ -829,7 +829,7 @@
           setupId: slot.setupId || "",
           setupSessionId: slot.setupSessionId || "",
           warmJobId: slot.warmJobId || "",
-          setupCheckpoint: Math.max(0, Math.min(3, Number(slot.setupCheckpoint) || 0)),
+          setupCheckpoint: Math.max(0, Math.min(SETUP_PARTS.length, Number(slot.setupCheckpoint) || 0)),
           setupState: slot.setupState || "idle",
           setupLastProgressAt: Math.max(0, Number(slot.setupLastProgressAt) || 0),
           setupResumeCount: Math.max(0, Number(slot.setupResumeCount) || 0),

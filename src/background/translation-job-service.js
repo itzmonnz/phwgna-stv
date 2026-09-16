@@ -483,7 +483,7 @@
         labelsOutOfOrder: job.validationDiagnostic?.labelsOutOfOrder === true,
         responseIdState: job.validationDiagnostic?.responseIdState || "unknown",
         ready3Persisted: Boolean(failedSlot)
-          && (job.provider !== "chatgpt" || Number(failedSlot.setupCheckpoint) >= 3),
+          && (job.provider !== "chatgpt" || Number(failedSlot.setupCheckpoint) >= SETUP_PARTS.length),
         slotLeased: failedSlot?.state === "leased",
         firstBatchDispatched: Number(failedSlot?.firstBatchDispatchedAt) > 0,
         ...providerMetadata,
@@ -1609,7 +1609,7 @@
       if (!slot.setupSessionId || String(message.setupSessionId || "") !== slot.setupSessionId) {
         return { ok: false, reason: "stale-setup-session" };
       }
-      const checkpoint = Math.max(0, Math.min(3, Number(message.checkpoint) || 0));
+      const checkpoint = Math.max(0, Math.min(SETUP_PARTS.length, Number(message.checkpoint) || 0));
       slot.setupCheckpoint = Math.max(Number(slot.setupCheckpoint) || 0, checkpoint);
       slot.setupState = ["running", "completed", "failed"].includes(message.state) ? message.state : "running";
       slot.setupStage = ["waiting_composer", "sending", "waiting_marker", "confirmed", "resuming", "completed", "failed"]
@@ -1617,12 +1617,12 @@
       slot.setupLastProgressAt = Math.max(0, Number(message.lastProgressAt) || now());
       slot.setupResumeCount = Math.max(0, Number(message.resumeCount) || 0);
       slot.setupErrorCode = typeof message.errorCode === "string" ? message.errorCode : "";
-      slot.readyWatchdogStep = slot.setupCheckpoint >= 3 ? "ready_3" : `ready_${slot.setupCheckpoint + 1}`;
+      slot.readyWatchdogStep = slot.setupCheckpoint >= SETUP_PARTS.length ? `ready_${SETUP_PARTS.length}` : `ready_${slot.setupCheckpoint + 1}`;
       slot.readyWatchdogState = slot.setupStage === "confirmed" || slot.setupStage === "completed"
         ? "confirmed"
         : slot.setupStage;
       await persistPool();
-      if (slot.setupState === "completed" && slot.setupCheckpoint === 3) {
+      if (slot.setupState === "completed" && slot.setupCheckpoint === SETUP_PARTS.length) {
         await releaseChatGPTSetupPerformanceLease(slot);
         if (!(await verifyPreparedSlot(slot))) {
           await markWarmSlotFailed(slot, "warm_evidence_missing");

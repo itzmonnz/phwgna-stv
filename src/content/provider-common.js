@@ -585,7 +585,7 @@
         }) === expectedMarker;
         const markerFound = adapter.hasResponseMarker?.(expectedMarker) === true || latestMatches;
         const confirmed = markerFound && !generating;
-        if (confirmed && part === "names" && message?.warmSessionId && message?.settingsHash) {
+        if (confirmed && part === "system" && message?.warmSessionId && message?.settingsHash) {
           preparedEvidence = {
             warmSessionId: String(message.warmSessionId),
             settingsHash: String(message.settingsHash)
@@ -927,6 +927,7 @@
   }
 
   function createProviderSetupCoordinator(adapter, handler, chromeApi, defaults = {}) {
+    const expectedSetupParts = ["introduction", "system"];
     let setupTask = null;
     let setupState = null;
     let resumeMessage = null;
@@ -942,7 +943,9 @@
         ...extra
       };
       try {
-        await chromeApi.runtime.sendMessage({
+        // Progress is telemetry only. Never let a sleeping/stalled service
+        // worker prevent the next setup prompt from being sent.
+        const pending = chromeApi.runtime.sendMessage({
           type: "STVAI_PROVIDER_SETUP_PROGRESS",
           provider: defaults.provider,
           setupSessionId: setupState.setupSessionId,
@@ -953,6 +956,7 @@
           resumeCount: setupState.resumeCount,
           errorCode: setupState.errorCode
         });
+        pending?.catch?.(() => undefined);
       } catch (_error) {
         // The tab owns the state machine; a sleeping service worker can query the checkpoint later.
       }
@@ -1024,7 +1028,13 @@
 
     function start(message) {
       const steps = Array.isArray(message?.steps) ? message.steps : [];
-      if (!message?.setupSessionId || steps.length !== 3) {
+      const validSteps = steps.length === expectedSetupParts.length
+        && steps.every((step, index) => (
+          Number(step?.setupIndex) === index
+          && String(step?.setupPart || "") === expectedSetupParts[index]
+          && String(step?.responseMarker || "") === String(core?.READY_MARKERS?.[expectedSetupParts[index]] || "")
+        ));
+      if (!message?.setupSessionId || !validSteps) {
         return { ok: false, error: { code: "invalid_message" } };
       }
       if (setupTask) {

@@ -111,11 +111,11 @@
     },
     {
       "path": "src/background/contracts.js",
-      "sha256": "571bd6f5520dc31b65b0802d52e311862b574ddfe19e5b02aedd3bf503ed32ed"
+      "sha256": "758e04b95b8bfa8a8ee89a56d0fe256a6e5371255d4c5737883eb74d77ebe1ac"
     },
     {
       "path": "src/background/controller.js",
-      "sha256": "e51693feba0483ffca5b7d9c78fac38ab29dcc8a8502208f3b17bb2a2f55ccca"
+      "sha256": "b2e64b44a459e256a86590c323acadb43330e3a8a516abd9925822ccb242f64a"
     },
     {
       "path": "src/background/message-router.js",
@@ -123,11 +123,11 @@
     },
     {
       "path": "src/background/provider-pool-service.js",
-      "sha256": "d04ab009257638884c41238403af8e13131065e657e0a769e523821f020fbb38"
+      "sha256": "00e643257a1bbc113b23feddf974eae746a03df73f490c34482d54b58cbbbb5a"
     },
     {
       "path": "src/background/translation-job-service.js",
-      "sha256": "43e29a4bc4121aa895943fbec890b45c3ac1a704f6e0f42bf99292d862aa49d0"
+      "sha256": "35257c2fc886873d696223ff6e66d754a1ee5e1602814e97b2a7df29d0b480e8"
     },
     {
       "path": "src/background/tts-session-service.js",
@@ -143,7 +143,7 @@
     },
     {
       "path": "src/content/chatgpt.js",
-      "sha256": "5e8c7a5a59ac9145f33c18b61e519ee222db9b2d145fbf61dd474f3738d17a7b"
+      "sha256": "ca2622c6fdaba25c6ff162507c88eb1b49bc7d45b50213d8d4fa973a02c4dcde"
     },
     {
       "path": "src/content/gemini-dom-resolver.js",
@@ -151,15 +151,15 @@
     },
     {
       "path": "src/content/gemini.js",
-      "sha256": "b97cd43001d7e53105a7e310e798b10a424c77a2220c5f2c9fba8cf26083dbeb"
+      "sha256": "35d5f44d08f3625df3194ce8f841375e640a35fa0de2f82f56aaa5615aaa09b8"
     },
     {
       "path": "src/content/provider-common.js",
-      "sha256": "bfa94eb00ae96dc33de6dfd65d6987b2fd72d1910a7b6a99996dc92b344cca1b"
+      "sha256": "b9e2a15d0cc8028c980d9ffc6a6d77495dad40562e39613300442b9652fa66c5"
     },
     {
       "path": "src/content/provider-diagnostics.js",
-      "sha256": "e75cece8d2efab6bacb07a907be87d8255f533e2e9a830ae0ff4c5cf8a2da275"
+      "sha256": "69ad0ce779422ddea7a74d6c6c06a33913a1de8b51dbad522795fa0fa67ba950"
     },
     {
       "path": "src/content/stv-account.js",
@@ -239,7 +239,7 @@
     },
     {
       "path": "src/shared/core.js",
-      "sha256": "ec77df113330c79d4377696598a6763dbc9a48464d5f52b509f0937ab25b35a0"
+      "sha256": "be393c8ccb8c03626f1fd93cd93c186d4135396f0ba0d1c32aebbe6217c2e70b"
     },
     {
       "path": "src/shared/data-backup.js",
@@ -327,7 +327,7 @@
     }
   ],
   "product": "Phwgna Stv",
-  "sourceCommit": "289b579011e6de3971560991e84c92fce33d5d7b",
+  "sourceCommit": "25e952cb22a90afc3a6447108df394d6288fa016",
   "officialRepository": "https://github.com/itzmonnz/phwgna-stv",
   "officialReleaseUrl": "https://github.com/itzmonnz/phwgna-stv/releases/tag/v0.2.8",
   "publicKeyFingerprint": "85ac74c199d0a6028bce843d6f68d7632317912b460aad1a7431193767ec9871"

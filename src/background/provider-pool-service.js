@@ -319,7 +319,7 @@
             setupId: String(slot?.setupId || ""),
             setupSessionId: String(slot?.setupSessionId || ""),
             warmJobId: String(slot?.warmJobId || ""),
-            setupCheckpoint: Math.max(0, Math.min(3, Number(slot?.setupCheckpoint) || 0)),
+            setupCheckpoint: Math.max(0, Math.min(SETUP_PARTS.length, Number(slot?.setupCheckpoint) || 0)),
             setupState: String(slot?.setupState || "idle"),
             setupLastProgressAt: Math.max(0, Number(slot?.setupLastProgressAt) || 0),
             setupResumeCount: Math.max(0, Number(slot?.setupResumeCount) || 0),
@@ -489,7 +489,7 @@
         serviceWorkerRestarts: slot.setupServiceWorkerRestarts || 0,
         watchdogTimeoutMs: slot.readyWatchdogTimeoutMs || 0,
         watchdogGraceMs: slot.readyWatchdogGraceMs || 0,
-        ready3Persisted: Number(slot.setupCheckpoint) >= 3,
+        ready3Persisted: Number(slot.setupCheckpoint) >= SETUP_PARTS.length,
         slotLeased: wasLeased,
         firstBatchDispatched: Number(slot.firstBatchDispatchedAt) > 0,
         performanceMode: slot.provider === "chatgpt" ? "stable" : "max",
@@ -603,7 +603,7 @@
             const restoredStatus = await tabs.sendMessage(slot.providerTabId, { type: "STVAI_PROVIDER_STATUS" });
             const setup = restoredStatus?.state?.setup;
             if (setup?.setupSessionId === slot.setupSessionId) {
-              slot.setupCheckpoint = Math.max(slot.setupCheckpoint || 0, Math.min(3, Number(setup.checkpoint) || 0));
+              slot.setupCheckpoint = Math.max(slot.setupCheckpoint || 0, Math.min(SETUP_PARTS.length, Number(setup.checkpoint) || 0));
               slot.setupState = String(setup.state || "running");
               slot.setupLastProgressAt = Math.max(0, Number(setup.lastProgressAt) || 0);
               slot.setupResumeCount = Math.max(0, Number(setup.resumeCount) || 0);
@@ -697,7 +697,7 @@
           responseMarker: core.READY_MARKERS[SETUP_PARTS[setupIndex]],
           prompt
         }));
-        slot.readyWatchdogStep = `ready_${Math.min(3, (slot.setupCheckpoint || 0) + 1)}`;
+        slot.readyWatchdogStep = `ready_${Math.min(SETUP_PARTS.length, (slot.setupCheckpoint || 0) + 1)}`;
         slot.readyWatchdogState = "waiting_marker";
         slot.readyWatchdogTimeoutMs = CHATGPT_SETUP_HARD_TIMEOUT_MS;
         slot.readyWatchdogGraceMs = READY_MARKER_GRACE_MS;
@@ -732,12 +732,12 @@
         }
         slot.setupCheckpoint = Math.max(
           Number(slot.setupCheckpoint) || 0,
-          Math.max(0, Math.min(3, Number(response.checkpoint) || 0))
+          Math.max(0, Math.min(SETUP_PARTS.length, Number(response.checkpoint) || 0))
         );
         slot.setupState = String(response.state || "running");
         slot.setupLastProgressAt ||= now();
         await persistPool();
-        setupComplete = response.state === "completed" && slot.setupCheckpoint === 3;
+        setupComplete = response.state === "completed" && slot.setupCheckpoint === SETUP_PARTS.length;
       } else setupComplete = await withProviderPerformanceLease(
         slot.provider,
         slot.providerTabId,

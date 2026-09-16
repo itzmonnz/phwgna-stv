@@ -790,10 +790,10 @@
     async function onAccepted(message) {
       if (message?.phase === "setup") {
         const setupIndex = Number(message.setupIndex);
-        if (Number.isInteger(setupIndex) && setupIndex >= 0 && setupIndex <= 2) verifiedReadySteps.add(setupIndex);
+        if (Number.isInteger(setupIndex) && setupIndex >= 0 && setupIndex < 2) verifiedReadySteps.add(setupIndex);
         return;
       }
-      if (message?.phase !== "batch" || verifiedReadySteps.size !== 3 || learnedCurrentDocument) return;
+      if (message?.phase !== "batch" || verifiedReadySteps.size < 2 || learnedCurrentDocument) return;
       learnedCurrentDocument = await domResolver.learnVerified();
     }
 
