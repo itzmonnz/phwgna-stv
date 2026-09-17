@@ -232,6 +232,7 @@
       slot.setupStage = "idle";
       slot.setupStageStartedAt = 0;
       slot.setupLastProgressAt = 0;
+      slot.setupLastFailureProgressAt = 0;
       slot.setupResumeCount = 0;
       slot.setupServiceWorkerRestarts = 0;
       slot.setupResumeAttempts = 0;
@@ -708,6 +709,7 @@
             type: "STVAI_PROVIDER_SETUP_START",
             provider: "chatgpt",
             setupSessionId: slot.setupSessionId,
+            checkpoint: Math.max(0, Math.min(SETUP_PARTS.length, Number(slot.setupCheckpoint) || 0)),
             setupId: slot.setupId,
             warmSessionId: slot.warmSessionId,
             settingsHash: slot.settingsHash,
@@ -875,6 +877,7 @@
         setupState: "idle",
         setupStage: "idle",
         setupLastProgressAt: 0,
+        setupLastFailureProgressAt: 0,
         setupResumeCount: 0,
         setupServiceWorkerRestarts: 0,
         setupResumeAttempts: 0,

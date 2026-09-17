@@ -1609,12 +1609,23 @@
       if (!slot.setupSessionId || String(message.setupSessionId || "") !== slot.setupSessionId) {
         return { ok: false, reason: "stale-setup-session" };
       }
+      const incomingState = ["running", "completed", "failed"].includes(message.state) ? message.state : "running";
+      if (slot.setupState === "completed" && incomingState !== "completed") {
+        return { ok: true, ready: slot.state === "ready", ignored: "setup-already-completed" };
+      }
+      const incomingProgressAt = Math.max(0, Number(message.lastProgressAt) || 0);
+      if (incomingState === "failed"
+        && incomingProgressAt > 0
+        && incomingProgressAt === Math.max(0, Number(slot.setupLastFailureProgressAt) || 0)) {
+        return { ok: true, ignored: "setup-failure-already-processed" };
+      }
+      if (incomingState === "failed") slot.setupLastFailureProgressAt = incomingProgressAt || now();
       const checkpoint = Math.max(0, Math.min(SETUP_PARTS.length, Number(message.checkpoint) || 0));
       slot.setupCheckpoint = Math.max(Number(slot.setupCheckpoint) || 0, checkpoint);
-      slot.setupState = ["running", "completed", "failed"].includes(message.state) ? message.state : "running";
+      slot.setupState = incomingState;
       slot.setupStage = ["waiting_composer", "sending", "waiting_marker", "confirmed", "resuming", "completed", "failed"]
         .includes(message.stage) ? message.stage : "waiting_marker";
-      slot.setupLastProgressAt = Math.max(0, Number(message.lastProgressAt) || now());
+      slot.setupLastProgressAt = incomingProgressAt || now();
       slot.setupResumeCount = Math.max(0, Number(message.resumeCount) || 0);
       slot.setupErrorCode = typeof message.errorCode === "string" ? message.errorCode : "";
       slot.readyWatchdogStep = slot.setupCheckpoint >= SETUP_PARTS.length ? `ready_${SETUP_PARTS.length}` : `ready_${slot.setupCheckpoint + 1}`;

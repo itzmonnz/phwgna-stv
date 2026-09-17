@@ -931,8 +931,37 @@
     let setupTask = null;
     let setupState = null;
     let resumeMessage = null;
+    const progressAckTimeoutMs = Math.max(1, Number(defaults.progressAckTimeoutMs) || 1_000);
+    const progressRetryDelayMs = Math.max(0, Number(defaults.progressRetryDelayMs) || 100);
+    const progressMaxAttempts = Math.max(1, Number(defaults.progressMaxAttempts) || 3);
 
-    const snapshot = () => setupState ? { ...setupState } : null;
+    const snapshot = () => {
+      if (!setupState) return null;
+      const { allowExistingMarkers: _allowExistingMarkers, ...publicState } = setupState;
+      return publicState;
+    };
+    const sendProgress = async (payload, reliable) => {
+      const attempts = reliable ? progressMaxAttempts : 1;
+      for (let attempt = 0; attempt < attempts; attempt += 1) {
+        try {
+          const delivery = Promise.resolve(chromeApi.runtime.sendMessage(payload));
+          if (!reliable) {
+            delivery.catch(() => undefined);
+            return;
+          }
+          const acknowledged = await Promise.race([
+            delivery.then(response => response?.ok !== false, () => false),
+            new Promise(resolve => setTimeout(() => resolve(false), progressAckTimeoutMs))
+          ]);
+          if (acknowledged) return;
+        } catch (_error) {
+          // A terminal checkpoint is retried below with the same session and state.
+        }
+        if (attempt + 1 < attempts && progressRetryDelayMs) {
+          await new Promise(resolve => setTimeout(resolve, progressRetryDelayMs));
+        }
+      }
+    };
     const progress = async (stage, extra = {}) => {
       if (!setupState) return;
       setupState = {
@@ -943,9 +972,7 @@
         ...extra
       };
       try {
-        // Progress is telemetry only. Never let a sleeping/stalled service
-        // worker prevent the next setup prompt from being sent.
-        const pending = chromeApi.runtime.sendMessage({
+        const payload = {
           type: "STVAI_PROVIDER_SETUP_PROGRESS",
           provider: defaults.provider,
           setupSessionId: setupState.setupSessionId,
@@ -955,8 +982,16 @@
           lastProgressAt: setupState.lastProgressAt,
           resumeCount: setupState.resumeCount,
           errorCode: setupState.errorCode
-        });
-        pending?.catch?.(() => undefined);
+        };
+        const terminal = stage === "completed" || stage === "failed";
+        if (terminal) {
+          // Intermediate telemetry must never block READY 2. The terminal
+          // checkpoint is different: background needs it to lease this tab,
+          // so retry it within a short bounded window if MV3 is waking up.
+          await sendProgress(payload, true);
+        } else {
+          void sendProgress(payload, false);
+        }
       } catch (_error) {
         // The tab owns the state machine; a sleeping service worker can query the checkpoint later.
       }
@@ -966,6 +1001,7 @@
       const hardTimeoutMs = Math.max(1, Number(message.hardTimeoutMs) || 60_000);
       const inactivityTimeoutMs = Math.max(1, Number(message.inactivityTimeoutMs) || 30_000);
       const startedAt = Date.now();
+      let needsEvidenceRebind = setupState.checkpoint === message.steps.length;
       try {
         if (typeof adapter.prepareSession === "function") {
           await adapter.prepareSession({
@@ -981,8 +1017,10 @@
           const step = message.steps[index];
           await progress("waiting_composer", { checkpoint: index, errorCode: "" });
           const existing = typeof adapter.readLatestResponse === "function" ? adapter.readLatestResponse() : "";
-          const alreadyConfirmed = adapter.hasResponseMarker?.(step.responseMarker) === true
-            || responseMatchesMessage(existing, { ...step, phase: "setup" });
+          const alreadyConfirmed = setupState.allowExistingMarkers === true && (
+            adapter.hasResponseMarker?.(step.responseMarker) === true
+              || responseMatchesMessage(existing, { ...step, phase: "setup" })
+          );
           if (!alreadyConfirmed) {
             await progress("sending", { checkpoint: index });
             await progress("waiting_marker", { checkpoint: index });
@@ -1003,14 +1041,18 @@
             });
             if (!result?.ok) throw new ProviderError(result?.error?.code || "provider_error");
           } else if (index === message.steps.length - 1) {
-            await handler({
-              type: "STVAI_PROVIDER_SETUP_EVIDENCE",
-              warmSessionId: message.warmSessionId,
-              settingsHash: message.settingsHash
-            });
+            needsEvidenceRebind = true;
           }
           setupState.checkpoint = index + 1;
           await progress("confirmed", { checkpoint: setupState.checkpoint });
+        }
+        if (needsEvidenceRebind && setupState.checkpoint === message.steps.length
+          && message.warmSessionId && message.settingsHash) {
+          await handler({
+            type: "STVAI_PROVIDER_SETUP_EVIDENCE",
+            warmSessionId: message.warmSessionId,
+            settingsHash: message.settingsHash
+          });
         }
         await progress("completed", { checkpoint: message.steps.length, errorCode: "" });
       } catch (error) {
@@ -1046,14 +1088,19 @@
         return { ok: true, accepted: true, checkpoint: setupState.checkpoint, state: "running" };
       }
       const sameSession = setupState?.setupSessionId === message.setupSessionId;
+      const restoredCheckpoint = Math.max(0, Math.min(
+        expectedSetupParts.length,
+        Number(message.checkpoint) || 0
+      ));
       setupState = {
         schemaVersion: 1,
         setupSessionId: message.setupSessionId,
-        checkpoint: sameSession ? setupState.checkpoint : 0,
+        checkpoint: sameSession ? Math.max(setupState.checkpoint, restoredCheckpoint) : restoredCheckpoint,
         state: "running",
         stage: sameSession ? "resuming" : "waiting_composer",
         lastProgressAt: Date.now(),
         resumeCount: sameSession ? setupState.resumeCount + 1 : 0,
+        allowExistingMarkers: sameSession,
         errorCode: ""
       };
       setupTask = run(message);
