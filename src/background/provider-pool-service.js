@@ -233,6 +233,8 @@
       slot.setupStageStartedAt = 0;
       slot.setupLastProgressAt = 0;
       slot.setupLastFailureProgressAt = 0;
+      slot.setupProgressRevision = 0;
+      slot.setupLastFailureRevision = 0;
       slot.setupResumeCount = 0;
       slot.setupServiceWorkerRestarts = 0;
       slot.setupResumeAttempts = 0;
@@ -323,6 +325,8 @@
             setupCheckpoint: Math.max(0, Math.min(SETUP_PARTS.length, Number(slot?.setupCheckpoint) || 0)),
             setupState: String(slot?.setupState || "idle"),
             setupLastProgressAt: Math.max(0, Number(slot?.setupLastProgressAt) || 0),
+            setupProgressRevision: Math.max(0, Number(slot?.setupProgressRevision) || 0),
+            setupLastFailureRevision: Math.max(0, Number(slot?.setupLastFailureRevision) || 0),
             setupResumeCount: Math.max(0, Number(slot?.setupResumeCount) || 0),
             setupServiceWorkerRestarts: Math.max(0, Number(slot?.setupServiceWorkerRestarts) || 0) + 1,
             setupResumeAttempts: Math.max(0, Number(slot?.setupResumeAttempts) || 0),
@@ -691,6 +695,7 @@
       let setupComplete = false;
       if (slot.provider === "chatgpt") {
         await holdChatGPTSetupPerformanceLease(slot);
+        const acknowledgedProgressRevision = Math.max(0, Number(slot.setupProgressRevision) || 0);
         const steps = prompts.map((prompt, setupIndex) => ({
           jobId: slot.warmJobId,
           setupIndex,
@@ -710,6 +715,7 @@
             provider: "chatgpt",
             setupSessionId: slot.setupSessionId,
             checkpoint: Math.max(0, Math.min(SETUP_PARTS.length, Number(slot.setupCheckpoint) || 0)),
+            progressRevision: Math.max(0, Number(slot.setupProgressRevision) || 0),
             setupId: slot.setupId,
             warmSessionId: slot.warmSessionId,
             settingsHash: slot.settingsHash,
@@ -736,10 +742,17 @@
           Number(slot.setupCheckpoint) || 0,
           Math.max(0, Math.min(SETUP_PARTS.length, Number(response.checkpoint) || 0))
         );
-        slot.setupState = String(response.state || "running");
+        // SETUP_START acknowledges the state that existed when the content
+        // script received the request. READY progress can overtake that reply,
+        // so never let the older acknowledgement roll a newer checkpoint back.
+        const progressAdvanced = Math.max(0, Number(slot.setupProgressRevision) || 0)
+          > acknowledgedProgressRevision;
+        if (!progressAdvanced && slot.setupState !== "completed") {
+          slot.setupState = String(response.state || "running");
+        }
         slot.setupLastProgressAt ||= now();
         await persistPool();
-        setupComplete = response.state === "completed" && slot.setupCheckpoint === SETUP_PARTS.length;
+        setupComplete = slot.setupState === "completed" && slot.setupCheckpoint === SETUP_PARTS.length;
       } else setupComplete = await withProviderPerformanceLease(
         slot.provider,
         slot.providerTabId,
@@ -845,6 +858,15 @@
         await markWarmSlotFailed(slot, "warm_evidence_missing");
         return false;
       }
+      // A concurrent READY progress handler may already have exposed and
+      // leased this slot while verification was in flight. That lease belongs
+      // to the active batch and must never be converted back to READY here.
+      if (["ready", "leased"].includes(slot.state)) {
+        await markWarmSlotRecovered(slot);
+        await persistPool();
+        return true;
+      }
+      if (slot.state !== "preparing") return false;
       slot.state = "ready";
       slot.preparationRequested = false;
       slot.preparationPasses = 0;
@@ -878,6 +900,8 @@
         setupStage: "idle",
         setupLastProgressAt: 0,
         setupLastFailureProgressAt: 0,
+        setupProgressRevision: 0,
+        setupLastFailureRevision: 0,
         setupResumeCount: 0,
         setupServiceWorkerRestarts: 0,
         setupResumeAttempts: 0,

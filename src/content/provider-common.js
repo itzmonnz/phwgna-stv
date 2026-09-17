@@ -937,7 +937,11 @@
 
     const snapshot = () => {
       if (!setupState) return null;
-      const { allowExistingMarkers: _allowExistingMarkers, ...publicState } = setupState;
+      const {
+        allowExistingMarkers: _allowExistingMarkers,
+        progressRevision: _progressRevision,
+        ...publicState
+      } = setupState;
       return publicState;
     };
     const sendProgress = async (payload, reliable) => {
@@ -966,6 +970,7 @@
       if (!setupState) return;
       setupState = {
         ...setupState,
+        progressRevision: Math.max(0, Number(setupState.progressRevision) || 0) + 1,
         stage,
         state: stage === "completed" ? "completed" : stage === "failed" ? "failed" : "running",
         lastProgressAt: Date.now(),
@@ -981,7 +986,8 @@
           stage: setupState.stage,
           lastProgressAt: setupState.lastProgressAt,
           resumeCount: setupState.resumeCount,
-          errorCode: setupState.errorCode
+          errorCode: setupState.errorCode,
+          progressRevision: setupState.progressRevision
         };
         const terminal = stage === "completed" || stage === "failed";
         if (terminal) {
@@ -1092,6 +1098,7 @@
         expectedSetupParts.length,
         Number(message.checkpoint) || 0
       ));
+      const restoredProgressRevision = Math.max(0, Number(message.progressRevision) || 0);
       setupState = {
         schemaVersion: 1,
         setupSessionId: message.setupSessionId,
@@ -1100,6 +1107,9 @@
         stage: sameSession ? "resuming" : "waiting_composer",
         lastProgressAt: Date.now(),
         resumeCount: sameSession ? setupState.resumeCount + 1 : 0,
+        progressRevision: sameSession
+          ? Math.max(Number(setupState.progressRevision) || 0, restoredProgressRevision)
+          : restoredProgressRevision,
         allowExistingMarkers: sameSession,
         errorCode: ""
       };

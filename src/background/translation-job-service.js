@@ -1614,12 +1614,23 @@
         return { ok: true, ready: slot.state === "ready", ignored: "setup-already-completed" };
       }
       const incomingProgressAt = Math.max(0, Number(message.lastProgressAt) || 0);
+      const incomingRevision = Math.max(0, Number(message.progressRevision) || 0);
+      const currentRevision = Math.max(0, Number(slot.setupProgressRevision) || 0);
+      if (incomingRevision > 0 && currentRevision > 0 && incomingRevision < currentRevision) {
+        return { ok: true, ignored: "stale-setup-revision" };
+      }
       if (incomingState === "failed"
-        && incomingProgressAt > 0
-        && incomingProgressAt === Math.max(0, Number(slot.setupLastFailureProgressAt) || 0)) {
+        && ((incomingRevision > 0
+          && incomingRevision === Math.max(0, Number(slot.setupLastFailureRevision) || 0))
+          || (incomingRevision === 0 && incomingProgressAt > 0
+            && incomingProgressAt === Math.max(0, Number(slot.setupLastFailureProgressAt) || 0)))) {
         return { ok: true, ignored: "setup-failure-already-processed" };
       }
-      if (incomingState === "failed") slot.setupLastFailureProgressAt = incomingProgressAt || now();
+      if (incomingState === "failed") {
+        slot.setupLastFailureProgressAt = incomingProgressAt || now();
+        slot.setupLastFailureRevision = incomingRevision;
+      }
+      slot.setupProgressRevision = Math.max(currentRevision, incomingRevision);
       const checkpoint = Math.max(0, Math.min(SETUP_PARTS.length, Number(message.checkpoint) || 0));
       slot.setupCheckpoint = Math.max(Number(slot.setupCheckpoint) || 0, checkpoint);
       slot.setupState = incomingState;
