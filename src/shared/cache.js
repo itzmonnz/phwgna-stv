@@ -266,10 +266,12 @@
       const requested = Object.entries(inputHashes).map(([batchId, value]) => ({
         batchId,
         inputHash: typeof value === "string" ? value : value?.inputHash,
-        presentationHash: typeof value === "object" ? value?.presentationHash : ""
-      })).filter(({ batchId, inputHash, presentationHash }) => (
+        presentationHash: typeof value === "object" ? value?.presentationHash : "",
+        sourceHashes: Array.isArray(value?.sourceHashes)
+          ? value.sourceHashes.filter(validInputHash).map(hash => hash.toLowerCase()) : []
+      })).filter(({ batchId, inputHash, presentationHash, sourceHashes }) => (
         typeof batchId === "string" && batchId
-        && (validInputHash(inputHash) || validInputHash(presentationHash))
+        && (validInputHash(inputHash) || validInputHash(presentationHash) || sourceHashes.length)
       ));
       if (!requested.length) return null;
       const matches = {};
@@ -290,6 +292,50 @@
           const presentationOnly = validInputHash(presentationHash)
             && batch?.presentationHash === presentationHash;
           if ((exact || presentationOnly) && hasAiItems(batch.items)) matches[batchId] = clone(batch);
+        }
+        const sequences = [];
+        let sequence = [];
+        let previousOrdinal = 0;
+        for (const [storedBatchId, batch] of Object.entries(record.batches || {})
+          .sort(([left], [right]) => left.localeCompare(right))) {
+          const ordinal = Number(/^B(\d+)$/.exec(storedBatchId)?.[1]) || 0;
+          const usable = ordinal > 0
+            && hasAiItems(batch?.items)
+            && Array.isArray(batch.sourceHashes)
+            && batch.sourceHashes.length === batch.items.length
+            && batch.sourceHashes.every(validInputHash);
+          if (!usable || (previousOrdinal && ordinal !== previousOrdinal + 1)) {
+            if (sequence.length) sequences.push(sequence);
+            sequence = [];
+          }
+          if (!usable) {
+            previousOrdinal = 0;
+            continue;
+          }
+          sequence.push(...batch.items.map((item, index) => ({
+            hash: batch.sourceHashes[index].toLowerCase(), item
+          })));
+          previousOrdinal = ordinal;
+        }
+        if (sequence.length) sequences.push(sequence);
+        for (const { batchId, sourceHashes } of requested) {
+          if (matches[batchId] || !sourceHashes.length) continue;
+          const candidates = [];
+          for (const stored of sequences) {
+            for (let start = 0; start <= stored.length - sourceHashes.length; start += 1) {
+              if (sourceHashes.every((hash, offset) => stored[start + offset].hash === hash)) {
+                candidates.push(stored.slice(start, start + sourceHashes.length));
+              }
+            }
+          }
+          // Repeated identical ranges are context-ambiguous. Fail closed instead
+          // of borrowing a translation from the wrong occurrence.
+          if (candidates.length !== 1) continue;
+          matches[batchId] = {
+            items: clone(candidates[0].map(entry => entry.item)),
+            sourceHashes: clone(sourceHashes),
+            sourceSequenceMatch: true
+          };
         }
       }
       return Object.keys(matches).length ? { batches: matches } : null;
@@ -325,7 +371,11 @@
           savedAt: timestamp,
           ...(validInputHash(metadata.inputHash) ? { inputHash: metadata.inputHash.toLowerCase() } : {}),
           ...(validInputHash(metadata.presentationHash)
-            ? { presentationHash: metadata.presentationHash.toLowerCase() } : {})
+            ? { presentationHash: metadata.presentationHash.toLowerCase() } : {}),
+          ...(Array.isArray(metadata.sourceHashes)
+            && metadata.sourceHashes.length === items.length
+            && metadata.sourceHashes.every(validInputHash)
+            ? { sourceHashes: metadata.sourceHashes.map(hash => hash.toLowerCase()) } : {})
         };
         record.updatedAt = timestamp;
         record.accessedAt = timestamp;

@@ -12,7 +12,7 @@
       core, cache, apiClient, retryDelayMs, retrySleep, now, tabs, storage,
       sessionStorage, createId, jobs, warmPool, ttsSession, errorJournal,
       retainTerminalJob, withPoolLock, storageCall, loadSettings, loadApiKey,
-      apiModel, hashSettings, cacheIdentity, batchInputHash, batchPresentationHash, ensureJob, sendToTab,
+      apiModel, hashSettings, cacheIdentity, batchInputHash, batchPresentationHash, batchSourceHashes, ensureJob, sendToTab,
       notifyStatus, notifyPrefetch, pause, persistJob, removePersistedJob,
       readAutomationConfig, acquireWarmSlot, assignWarmSlot, cleanupWarmPool,
       clearPrefetchParent, closeLegacyProviderTab, diagnosticPhase, drainWarmWaiters,
@@ -332,7 +332,8 @@
       if (job.cacheable === false) await cache.deleteChapter(job.cacheIdentity);
       else await cache.putBatch(job.cacheIdentity, id, items, {
         inputHash: await batchInputHash(currentBatch(job) || []),
-        presentationHash: await batchPresentationHash(currentBatch(job) || [])
+        presentationHash: await batchPresentationHash(currentBatch(job) || []),
+        sourceHashes: await batchSourceHashes(currentBatch(job) || [])
       });
       await rememberPrefetchNameReceipt(job);
       job.completed.set(id, items);
@@ -1326,7 +1327,8 @@
         batchIdAt(index),
         {
           inputHash: await batchInputHash(batch),
-          presentationHash: await batchPresentationHash(batch)
+          presentationHash: await batchPresentationHash(batch),
+          sourceHashes: await batchSourceHashes(batch)
         }
       ]))));
       const compatible = typeof cache.getCompatibleBatches === "function"
@@ -1335,7 +1337,12 @@
       if (admission.cancelled || job.status === 'cancelled') return { ok: false, reason: 'user_cancelled' };
       for (let index = 0; index < batches.length; index += 1) {
         const batchId = batchIdAt(index);
-        const items = saved?.batches?.[batchId]?.items || compatible?.batches?.[batchId]?.items;
+        const compatibleBatch = compatible?.batches?.[batchId];
+        let items = saved?.batches?.[batchId]?.items || compatibleBatch?.items;
+        if (compatibleBatch?.sourceSequenceMatch === true
+          && Array.isArray(items) && items.length === batches[index].length) {
+          items = items.map((item, itemIndex) => ({ ...item, id: batches[index][itemIndex].id }));
+        }
         const contentValidation = exactItems(items, batches[index])
           ? (core.validateTranslationItems?.(items, batches[index])
             || core.validateApiTranslationItems?.(items, batches[index])

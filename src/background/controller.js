@@ -1166,6 +1166,14 @@
       ])));
     }
 
+    function batchSourceHashes(batch) {
+      return Promise.all(batch.map(({ text }) => core.sha256Hex(
+        typeof core.normalizeCacheSourceText === "function"
+          ? core.normalizeCacheSourceText(text)
+          : String(text || "")
+      )));
+    }
+
     let restorePromise;
     let jobsRestoredSuccessfully = false;
 
@@ -1363,7 +1371,7 @@
       core, cache, apiClient, retryDelayMs, retrySleep, now, tabs, storage,
       sessionStorage, createId, jobs, warmPool, ttsSession, errorJournal,
       retainTerminalJob, withPoolLock, storageCall, loadSettings, loadApiKey,
-      apiModel, hashSettings, cacheIdentity, batchInputHash, batchPresentationHash, ensureJob, sendToTab,
+      apiModel, hashSettings, cacheIdentity, batchInputHash, batchPresentationHash, batchSourceHashes, ensureJob, sendToTab,
       notifyStatus, notifyPrefetch, pause, persistJob, removePersistedJob,
       readAutomationConfig, acquireWarmSlot, assignWarmSlot, cleanupWarmPool,
       clearPrefetchParent, closeLegacyProviderTab, diagnosticPhase, drainWarmWaiters,
