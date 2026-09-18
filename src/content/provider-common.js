@@ -1030,6 +1030,9 @@
           if (!alreadyConfirmed) {
             await progress("sending", { checkpoint: index });
             await progress("waiting_marker", { checkpoint: index });
+            const prompt = step.setupPart === "system" && typeof core?.ensureSystemReadyInstruction === "function"
+              ? core.ensureSystemReadyInstruction(step.prompt)
+              : step.prompt;
             const result = await handler({
               type: "STVAI_PROVIDER_SEND",
               phase: "setup",
@@ -1043,7 +1046,8 @@
                 warmSessionId: message.warmSessionId,
                 settingsHash: message.settingsHash
               } : {}),
-              ...step
+              ...step,
+              prompt
             });
             if (!result?.ok) throw new ProviderError(result?.error?.code || "provider_error");
           } else if (index === message.steps.length - 1) {

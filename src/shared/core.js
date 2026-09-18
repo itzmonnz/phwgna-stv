@@ -18,6 +18,7 @@
   });
   const READY_MARKER = READY_MARKERS.system;
   const READY_INSTRUCTION = "Nếu đã đọc và hiểu nội dung trên, chỉ phản hồi đúng một dòng dưới đây, không thêm nội dung khác:";
+  const SYSTEM_READY_INSTRUCTION = "Nếu đã đọc và hiểu System Prompt, chỉ trả đúng một dòng:";
   const LABELED_BATCH_INSTRUCTION = "QUY TẮC PHẢN HỒI BATCH: Với mỗi mục \"câu N:\" trong đầu vào, trả đúng một mục tương ứng bắt đầu bằng chính nhãn \"câu N:\". Mỗi mục nằm trên một dòng riêng; không gộp, tách, bỏ, thêm hoặc đảo thứ tự câu.";
   const INTRODUCTION_PROMPT = `Nhiệm vụ của bạn là dịch truyện chữ tiểu thuyết tiếng trung sang tiếng việt. tuân thủ định dạng và hướng dẫn dịch
 
@@ -348,7 +349,10 @@ Chỉ trả kết quả dịch. Cấm giải thích, chú thích, giải nghĩa 
       .replaceAll(marker, "")
       .replaceAll(`phwgna\\_stv\\_ready\\_2`, "")
       .trimEnd();
-    return `${value}\n\nNếu đã đọc và hiểu System Prompt, chỉ trả đúng một dòng:\n\n${marker}`.trim();
+    while (value.endsWith(SYSTEM_READY_INSTRUCTION)) {
+      value = value.slice(0, -SYSTEM_READY_INSTRUCTION.length).trimEnd();
+    }
+    return `${value}\n\n${SYSTEM_READY_INSTRUCTION}\n\n${marker}`.trim();
   }
 
   function setupReadyEnvelope({ setupId, jobId, part }) {
@@ -775,6 +779,7 @@ Chỉ trả kết quả dịch. Cấm giải thích, chú thích, giải nghĩa 
     importStvSharedName,
     selectRelevantNameGuide,
     renderTemplate,
+    ensureSystemReadyInstruction,
     createSetupMessages,
     createBatchResponseId,
     createBatchPrompt,

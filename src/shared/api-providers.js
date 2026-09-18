@@ -99,6 +99,30 @@
     return typeof content === "string" ? content.trim() : "";
   }
 
+  function assertCompleteOutput(provider, payload) {
+    if (provider === "gemini_api") {
+      const finish = String(payload?.candidates?.[0]?.finishReason || "").toUpperCase();
+      if (["MAX_TOKENS", "RECITATION", "MALFORMED_FUNCTION_CALL"].includes(finish)) {
+        throw new ApiProviderError("incomplete_response", finish);
+      }
+      return;
+    }
+    if (provider === "openai_api") {
+      if (String(payload?.status || "").toLowerCase() === "incomplete" || payload?.incomplete_details) {
+        throw new ApiProviderError("incomplete_response", payload?.incomplete_details?.reason || "incomplete");
+      }
+      if ((payload?.output || []).some(item => (item?.content || []).some(content => content?.type === "refusal"))) {
+        throw new ApiProviderError("content_refused", "refusal");
+      }
+      return;
+    }
+    const finish = String(payload?.choices?.[0]?.finish_reason || "").toLowerCase();
+    if (finish === "content_filter") throw new ApiProviderError("content_refused", "content_filter");
+    if (finish === "length") {
+      throw new ApiProviderError("incomplete_response", "length");
+    }
+  }
+
   function temperatureUnsupported(status, payload) {
     if (Number(status) !== 400) return false;
     const error = payload?.error;
@@ -151,6 +175,7 @@
           payload = await readPayload(response);
         }
         if (!response?.ok) throw new ApiProviderError(httpCode(Number(response?.status) || 0, input), response?.status);
+        assertCompleteOutput(input.provider, payload);
         const text = outputText(input.provider, payload);
         if (!text) throw new ApiProviderError("empty_response");
         return { ok: true, text, outcomeCode: "ok", providerCode: "", model: String(payload?.model || spec.model),
