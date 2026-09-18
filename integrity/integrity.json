@@ -115,7 +115,7 @@
     },
     {
       "path": "src/background/controller.js",
-      "sha256": "8c56a83d46587559f682cfa53de26f1badccf3faf32cb27f58ae2d332ac2d76c"
+      "sha256": "d2856f0d0361b241341f165e98b3131ecfe1cc4ca221edd3a07de6a9501e3c7d"
     },
     {
       "path": "src/background/message-router.js",
@@ -127,7 +127,7 @@
     },
     {
       "path": "src/background/translation-job-service.js",
-      "sha256": "9e355aaaca6f8c3886ae51e19a864651c48e079445e5e3d04d94695c15b28aa1"
+      "sha256": "08ede822a4df27fb5f9da4d39aa9f6a9e8e57e9ce65b3f6f585c768bae6b4e74"
     },
     {
       "path": "src/background/tts-session-service.js",
@@ -219,7 +219,7 @@
     },
     {
       "path": "src/content/stv.js",
-      "sha256": "005396d305d27b4a83dbc29af62eb3cc1cbf146375dbfe18b6b1755d999e6e23"
+      "sha256": "75b3abf76016b2e1b8d1002793ad6cb5bdbe4a775a753cd680dd490e7096594f"
     },
     {
       "path": "src/shared/account-history-sync.js",
@@ -327,7 +327,7 @@
     }
   ],
   "product": "Phwgna Stv",
-  "sourceCommit": "396b9f1d620a6a16582cd1f52f226080d7b7caf7",
+  "sourceCommit": "c6bad2900540ec2168dfbd5357f7b6ef54b529da",
   "officialRepository": "https://github.com/itzmonnz/phwgna-stv",
   "officialReleaseUrl": "https://github.com/itzmonnz/phwgna-stv/releases/tag/v0.2.8",
   "publicKeyFingerprint": "85ac74c199d0a6028bce843d6f68d7632317912b460aad1a7431193767ec9871"

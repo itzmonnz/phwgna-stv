@@ -199,6 +199,14 @@
       };
     }
 
+    async function replayJob(message, sender) {
+      if (!isStvSender(sender)) return { ok: false, reason: "unauthorized-sender" };
+      const job = await ensureJob(String(message?.jobId || ""));
+      if (!job || job.prefetch === true) return { ok: false, reason: "stale-job" };
+      if (job.sourceTabId !== sender?.tab?.id) return { ok: false, reason: "wrong-source-tab" };
+      return replayExistingJob(job, { emit: false });
+    }
+
     async function advance(job, options = {}) {
       while (job.batchIndex < job.batches.length && job.completed.has(batchIdAt(job.batchIndex))) {
         job.batchIndex += 1;
@@ -1261,6 +1269,7 @@
       const setupId = `setup-${id}`;
       const job = {
         id,
+        createdAt: now(),
         prefetch: message.prefetch === true,
         workflow: admissionPhase,
         cacheable: true,
@@ -1686,6 +1695,7 @@
       dispatchCurrent,
       probeProvider,
       startJob,
+      replayJob,
       cancelJob,
       resumeJob,
       providerResult,

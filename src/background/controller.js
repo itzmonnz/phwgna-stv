@@ -870,6 +870,7 @@
       return {
         version: JOB_RECORD_VERSION,
         id: job.id,
+        createdAt: Math.max(0, Number(job.createdAt) || 0),
         prefetch: job.prefetch === true,
         workflow: ["chapter", "prefetch", "tts"].includes(job.workflow) ? job.workflow : "chapter",
         cacheable: job.cacheable !== false,
@@ -1228,6 +1229,7 @@
         : "";
       const job = {
         id: record.id,
+        createdAt: Math.max(0, Number(record.createdAt) || now()),
         prefetch: record.prefetch === true,
         workflow: ["chapter", "prefetch", "tts"].includes(record.workflow)
           ? record.workflow : record.prefetch === true ? "prefetch" : "chapter",
@@ -1378,7 +1380,7 @@
     acquireRecoverySlotPort = translationJobs.acquireRecoverySlot;
     const {
       currentBatch, completeJob, advance, dispatchCurrent, probeProvider,
-      startJob, cancelJob, resumeJob, providerResult, providerStatus,
+      startJob, replayJob, cancelJob, resumeJob, providerResult, providerStatus,
       providerSetupProgress
     } = translationJobs;
     async function handleLegacyMessage(message, sender = {}) {
@@ -1738,6 +1740,8 @@
         case "STV_START_JOB":
         case "STVAI_START_JOB":
           return startJob(message, sender);
+        case "STVAI_REPLAY_JOB":
+          return replayJob(message, sender);
         case "STVAI_CLEAR_CHAPTER_CACHE": {
           if (!isStvSender(sender) || typeof message.chapterId !== "string"
             || typeof message.sourceHash !== "string" || !message.sourceHash) {
@@ -1826,6 +1830,7 @@
         STVAI_TTS_SESSION_UPDATE: (message, sender) => ttsSession.handle(message, sender),
         STVAI_TTS_SESSION_CLEAR: (message, sender) => ttsSession.handle(message, sender),
         STVAI_START_JOB: (message, sender) => startJob(message, sender),
+        STVAI_REPLAY_JOB: (message, sender) => replayJob(message, sender),
         STVAI_CANCEL_JOB: (message, sender) => cancelJob(message, sender),
         STVAI_RESUME_JOB: (message, sender) => resumeJob(message, sender),
         STVAI_PROVIDER_RESULT: (message, sender) => providerResult(message, sender),

@@ -453,6 +453,7 @@
     let toolbarStatus = "Sẵn sàng";
     let sourceRecoveryAttempts = 0;
     let sourceRecoveryPending = false;
+    let batchReplayPending = false;
     let captchaRetry = false;
     let poolCaptchaCode = "";
     let originalViewPinned = false;
@@ -1267,6 +1268,39 @@
       }
     }
 
+    async function reconcileMissingBatches() {
+      if (!active || destroyed || batchReplayPending || !state.activeJobId) return;
+      const completed = [...state.completedBatchIndexes].filter(Number.isInteger);
+      if (!completed.length) return;
+      const highest = Math.max(...completed);
+      if (!Array.from({ length: highest + 1 }, (_, index) => index)
+        .some(index => !state.completedBatchIndexes.has(index))) return;
+      const jobId = state.activeJobId;
+      batchReplayPending = true;
+      try {
+        const response = await sendRuntime(runtime, { type: "STVAI_REPLAY_JOB", jobId });
+        if (!active || destroyed || state.activeJobId !== jobId || response?.ok === false) return;
+        for (const cachedBatch of Array.isArray(response?.cachedBatches) ? response.cachedBatches : []) {
+          handleMessage({
+            type: "STV_BATCH_COMPLETE",
+            jobId,
+            batchId: cachedBatch?.batchId,
+            batchIndex: cachedBatch?.batchIndex,
+            totalBatches: response.totalBatches,
+            items: cachedBatch?.items,
+            cached: true
+          });
+        }
+        if (response?.status === "completed" && Array.isArray(response.items)) {
+          handleMessage({ ...response, type: "STV_JOB_COMPLETE", jobId });
+        }
+      } catch (_error) {
+        // The live job continues normally; a later out-of-order batch can retry.
+      } finally {
+        batchReplayPending = false;
+      }
+    }
+
     function showConsent() {
       if (document.querySelector(".stvai-consent-backdrop")) return;
       const dialog = ui.createConsentPanel(document, settings.provider);
@@ -1502,6 +1536,7 @@
           : `Đã dịch ${state.completedBatches}/${state.totalBatches} batch`);
         recordAttachmentEvidence("attached", "confirmed", message, message.items.length);
         resumeListeningAfterBatch();
+        void reconcileMissingBatches();
         return true;
       }
 
