@@ -404,6 +404,17 @@ Chỉ trả kết quả dịch. Cấm giải thích, chú thích, giải nghĩa 
     return batches;
   }
 
+  // STV may render the same source with a line break or ordinary spacing in a
+  // different place than its readchapter response. Cache matching may ignore
+  // only that presentation drift; real characters and punctuation stay exact.
+  function normalizeCacheSourceText(value) {
+    return String(value || "")
+      .replace(/\s+/gu, " ")
+      .replace(/([\p{Script=Han}，。！？；：、【】“”‘’（）《》~]) +/gu, "$1")
+      .replace(/ +(?=[\p{Script=Han}，。！？；：、【】“”‘’（）《》~])/gu, "")
+      .trim();
+  }
+
   function createBatchResponseId(batchIndex, randomDigits) {
     const ordinal = String(Number(batchIndex) + 1).padStart(2, "0");
     const token = /^\d{4}$/.test(String(randomDigits || ""))
@@ -781,6 +792,7 @@ Chỉ trả kết quả dịch. Cấm giải thích, chú thích, giải nghĩa 
     renderTemplate,
     ensureSystemReadyInstruction,
     createSetupMessages,
+    normalizeCacheSourceText,
     createBatchResponseId,
     createBatchPrompt,
     createRepairPrompt,

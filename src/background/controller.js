@@ -1156,6 +1156,15 @@
       return core.sha256Hex(JSON.stringify(batch.map(({ id, text }) => [id, text])));
     }
 
+    function batchPresentationHash(batch) {
+      return core.sha256Hex(JSON.stringify(batch.map(({ id, text }) => [
+        id,
+        typeof core.normalizeCacheSourceText === "function"
+          ? core.normalizeCacheSourceText(text)
+          : String(text || "")
+      ])));
+    }
+
     let restorePromise;
     let jobsRestoredSuccessfully = false;
 
@@ -1352,7 +1361,7 @@
       core, cache, apiClient, retryDelayMs, retrySleep, now, tabs, storage,
       sessionStorage, createId, jobs, warmPool, ttsSession, errorJournal,
       retainTerminalJob, withPoolLock, storageCall, loadSettings, loadApiKey,
-      apiModel, hashSettings, cacheIdentity, batchInputHash, ensureJob, sendToTab,
+      apiModel, hashSettings, cacheIdentity, batchInputHash, batchPresentationHash, ensureJob, sendToTab,
       notifyStatus, notifyPrefetch, pause, persistJob, removePersistedJob,
       readAutomationConfig, acquireWarmSlot, assignWarmSlot, cleanupWarmPool,
       clearPrefetchParent, closeLegacyProviderTab, diagnosticPhase, drainWarmWaiters,

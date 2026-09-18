@@ -12,7 +12,7 @@
       core, cache, apiClient, retryDelayMs, retrySleep, now, tabs, storage,
       sessionStorage, createId, jobs, warmPool, ttsSession, errorJournal,
       retainTerminalJob, withPoolLock, storageCall, loadSettings, loadApiKey,
-      apiModel, hashSettings, cacheIdentity, batchInputHash, ensureJob, sendToTab,
+      apiModel, hashSettings, cacheIdentity, batchInputHash, batchPresentationHash, ensureJob, sendToTab,
       notifyStatus, notifyPrefetch, pause, persistJob, removePersistedJob,
       readAutomationConfig, acquireWarmSlot, assignWarmSlot, cleanupWarmPool,
       clearPrefetchParent, closeLegacyProviderTab, diagnosticPhase, drainWarmWaiters,
@@ -323,7 +323,8 @@
       if (items.some((item) => item.origin === "convert")) job.cacheable = false;
       if (job.cacheable === false) await cache.deleteChapter(job.cacheIdentity);
       else await cache.putBatch(job.cacheIdentity, id, items, {
-        inputHash: await batchInputHash(currentBatch(job) || [])
+        inputHash: await batchInputHash(currentBatch(job) || []),
+        presentationHash: await batchPresentationHash(currentBatch(job) || [])
       });
       await rememberPrefetchNameReceipt(job);
       job.completed.set(id, items);
@@ -1314,7 +1315,10 @@
       const saved = await cache.getChapter(identity);
       const inputHashes = Object.fromEntries(await Promise.all(batches.map(async (batch, index) => ([
         batchIdAt(index),
-        await batchInputHash(batch)
+        {
+          inputHash: await batchInputHash(batch),
+          presentationHash: await batchPresentationHash(batch)
+        }
       ]))));
       const compatible = typeof cache.getCompatibleBatches === "function"
         ? await cache.getCompatibleBatches(identity, inputHashes)

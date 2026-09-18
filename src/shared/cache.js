@@ -263,8 +263,14 @@
         || typeof inputHashes !== "object"
         || Array.isArray(inputHashes)
       ) return null;
-      const requested = Object.entries(inputHashes)
-        .filter(([batchId, inputHash]) => typeof batchId === "string" && batchId && validInputHash(inputHash));
+      const requested = Object.entries(inputHashes).map(([batchId, value]) => ({
+        batchId,
+        inputHash: typeof value === "string" ? value : value?.inputHash,
+        presentationHash: typeof value === "object" ? value?.presentationHash : ""
+      })).filter(({ batchId, inputHash, presentationHash }) => (
+        typeof batchId === "string" && batchId
+        && (validInputHash(inputHash) || validInputHash(presentationHash))
+      ));
       if (!requested.length) return null;
       const matches = {};
       const records = (await driver.getAll()).sort((left, right) => (
@@ -277,10 +283,13 @@
         if (!["provider", "chapterId", "promptHash", "nameHash"].every(field => (
           typeof identity[field] === "string" && record[field] === identity[field]
         ))) continue;
-        for (const [batchId, inputHash] of requested) {
+        for (const { batchId, inputHash, presentationHash } of requested) {
           if (matches[batchId]) continue;
           const batch = record.batches?.[batchId];
-          if (batch?.inputHash === inputHash && hasAiItems(batch.items)) matches[batchId] = clone(batch);
+          const exact = validInputHash(inputHash) && batch?.inputHash === inputHash;
+          const presentationOnly = validInputHash(presentationHash)
+            && batch?.presentationHash === presentationHash;
+          if ((exact || presentationOnly) && hasAiItems(batch.items)) matches[batchId] = clone(batch);
         }
       }
       return Object.keys(matches).length ? { batches: matches } : null;
@@ -314,7 +323,9 @@
         record.batches[batchId] = {
           items: clone(items),
           savedAt: timestamp,
-          ...(validInputHash(metadata.inputHash) ? { inputHash: metadata.inputHash.toLowerCase() } : {})
+          ...(validInputHash(metadata.inputHash) ? { inputHash: metadata.inputHash.toLowerCase() } : {}),
+          ...(validInputHash(metadata.presentationHash)
+            ? { presentationHash: metadata.presentationHash.toLowerCase() } : {})
         };
         record.updatedAt = timestamp;
         record.accessedAt = timestamp;
