@@ -578,6 +578,22 @@
       });
     }
 
+    function visibleTranslationState() {
+      if (state.status === "completed") {
+        return { translations: state.translations, origins: state.translationOrigins };
+      }
+      let contiguousBatches = 0;
+      while (state.completedBatchIndexes.has(contiguousBatches)) contiguousBatches += 1;
+      const translations = Object.create(null);
+      const origins = Object.create(null);
+      for (const [id, batchIndex] of state.batchAssignments) {
+        if (batchIndex >= contiguousBatches || typeof state.translations[id] !== "string") continue;
+        translations[id] = state.translations[id];
+        if (typeof state.translationOrigins[id] === "string") origins[id] = state.translationOrigins[id];
+      }
+      return { translations, origins };
+    }
+
     function renderView(name) {
       if (!chapter || !toolbar) return;
       state.view = name;
@@ -595,14 +611,17 @@
         return;
       }
       const mode = name === "chinese" ? "chinese" : "translation";
+      const visible = mode === "translation"
+        ? visibleTranslationState()
+        : { translations: state.translations, origins: state.translationOrigins };
       let reader = mode === "translation"
         ? nativeSync?.getBackgroundReader?.()
           || chapter.container.querySelector(".stvai-reader--translation")
         : null;
       if (reader) {
-        ui.updateReaderView(reader, chapter.blocks, state.translations, mode, state.translationOrigins);
+        ui.updateReaderView(reader, chapter.blocks, visible.translations, mode, visible.origins);
       } else {
-        reader = ui.createReaderView(document, chapter.blocks, state.translations, mode, state.translationOrigins);
+        reader = ui.createReaderView(document, chapter.blocks, visible.translations, mode, visible.origins);
         reader.classList.add("stvai-reader--inline");
       }
       chapter.container.hidden = false;
@@ -612,7 +631,7 @@
         name === "translation" && hasVerifiedCompleteTranslation(reader)
       );
       const hasTranslation = name === "translation"
-        && Object.values(state.translations).some((text) => typeof text === "string" && text.trim());
+        && Object.values(visible.translations).some((text) => typeof text === "string" && text.trim());
       if (hasTranslation && !copyrightGuard) {
         copyrightGuard = ui.createCopyrightGuard(document, chapter.container);
       } else if (!hasTranslation && copyrightGuard) {
@@ -1464,7 +1483,6 @@
           state.fallbackCount,
           Number(message.fallbackCount) || Object.values(state.translationOrigins).filter((value) => value === "convert").length
         );
-        if (merged && state.view !== "translation" && !originalViewPinned) renderView("translation");
         state.totalBatches = Math.max(1, Number(message.totalBatches) || state.totalBatches);
         const completedIndex = Number(message.batchIndex);
         if (batchRendered && Number.isInteger(completedIndex) && completedIndex >= 0 && completedIndex < state.totalBatches) {
@@ -1476,9 +1494,12 @@
           if (completedIndex === 0 && merged && batchIsAi) state.firstBatchReady = true;
         }
         if (state.view === "translation") renderView("translation");
+        else if (!originalViewPinned && state.completedBatchIndexes.has(0)) renderView("translation");
         state.completedBatches = state.completedBatchIndexes.size;
         state.status = "running";
-        updateToolbar(`Đã dịch ${state.completedBatches}/${state.totalBatches} batch`);
+        updateToolbar(!state.completedBatchIndexes.has(0) && state.completedBatches > 0
+          ? "Đã có phần sau — đang chờ phần đầu chương…"
+          : `Đã dịch ${state.completedBatches}/${state.totalBatches} batch`);
         recordAttachmentEvidence("attached", "confirmed", message, message.items.length);
         resumeListeningAfterBatch();
         return true;
