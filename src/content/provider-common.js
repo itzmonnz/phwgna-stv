@@ -500,7 +500,7 @@
     if (!expected) return false;
     const text = String(raw || "").replace(/[\u200b-\u200d\u2060\ufeff]/g, "")
       .replace(/^```[^\n]*\n?|\n?```$/g, "").trim();
-    if (text.split(/\r?\n/, 1)[0]?.trim() === expected) return true;
+    if (text.match(/^(batch_\d+_\d{4})(?=\s|$)/)?.[1] === expected) return true;
     const header = text.match(/^STVAI_RESULT\s+(\S+)\s+(\S+)/);
     if (header?.[2] === expected) return true;
     return String(parseJsonObject(text)?.batch_id || "") === expected;

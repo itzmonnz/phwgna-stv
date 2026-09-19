@@ -479,7 +479,9 @@ Chỉ trả kết quả dịch. Cấm giải thích, chú thích, giải nghĩa 
     for (const item of items || []) {
       const output = String(item?.text || "");
       const source = sourceById.get(String(item?.id || "")) || "";
-      if (normalizedComparableText(source) && normalizedComparableText(source) === normalizedComparableText(output)) {
+      const sourceHasChinese = /[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]/u.test(source);
+      if (sourceHasChinese && normalizedComparableText(source)
+        && normalizedComparableText(source) === normalizedComparableText(output)) {
         return { ok: false, reason: "source_language_unchanged" };
       }
       if (/[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]/u.test(output)) {
@@ -551,6 +553,7 @@ Chỉ trả kết quả dịch. Cấm giải thích, chú thích, giải nghĩa 
     for (const label of labels) counts.set(label, (counts.get(label) || 0) + 1);
     const expectedLabels = Array.from({ length: expectedCount }, (_value, index) => index + 1);
     const expectedResponseId = String(expected.expectedResponseId || "");
+    const leadingResponseId = text.match(/^(batch_\d+_\d{4})(?=\s|$)/)?.[1] || "";
     return {
       nonEmptyLineCount: Math.min(10_000, lines.filter(line => line.trim()).length),
       labelCount: Math.min(30, labels.length),
@@ -560,8 +563,8 @@ Chỉ trả kết quả dịch. Cấm giải thích, chú thích, giải nghĩa 
       labelsOutOfOrder: labels.length > 0 && (labels.length !== expectedLabels.length
         || labels.some((label, index) => label !== expectedLabels[index])),
       responseIdState: !expectedResponseId ? "unknown"
-        : lines[0]?.trim() === expectedResponseId ? "match"
-          : /^batch_\d+_\d{4}$/.test(lines[0]?.trim() || "") ? "mismatch" : "missing"
+        : leadingResponseId === expectedResponseId ? "match"
+          : leadingResponseId ? "mismatch" : "missing"
     };
   }
 
@@ -571,12 +574,13 @@ Chỉ trả kết quả dịch. Cấm giải thích, chú thích, giải nghĩa 
     const rawText = String(raw || "").replace(/[\u200b-\u200d\u2060\ufeff]/g, "")
       .replace(/^```[^\n]*\n?|\n?```$/g, "").trim();
     const shortLines = rawText.replace(/\r/g, "").split("\n");
-    if (shortLines[0]?.trim() === expectedResponseId) {
-      const responseBody = shortLines.slice(1).join("\n").trim();
+    const leadingResponseId = rawText.match(/^(batch_\d+_\d{4})(?=\s|$)/)?.[1] || "";
+    if (leadingResponseId === expectedResponseId) {
+      const responseBody = rawText.slice(leadingResponseId.length).trim();
       const labeledTranslations = parseLabeledTranslations(responseBody, expectedIds.length);
       const containsAnyLabel = /(?:^|\s)câu\s+\d+\s*:\s*/iu.test(responseBody);
       let translations = labeledTranslations
-        || (containsAnyLabel ? [] : shortLines.slice(1).map((line) => line.trim()).filter(Boolean));
+        || (containsAnyLabel ? [] : responseBody.replace(/\r/g, "").split("\n").map((line) => line.trim()).filter(Boolean));
       if (expectedIds.length === 1 && translations.length > 1) {
         translations = [translations.filter(Boolean).join("\n")];
       }
@@ -593,7 +597,7 @@ Chỉ trả kết quả dịch. Cấm giải thích, chú thích, giải nghĩa 
         invalidIds: []
       };
     }
-    if (/^batch_\d+_\d{4}$/.test(shortLines[0]?.trim() || "")) {
+    if (leadingResponseId) {
       return { ok: false, items: [], invalidIds: expectedIds, expectedCount: expectedIds.length,
         actualCount: shortLines.slice(1).filter(line => line.trim()).length, reason: "response_id_mismatch" };
     }
