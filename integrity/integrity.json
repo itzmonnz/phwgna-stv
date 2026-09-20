@@ -111,7 +111,7 @@
     },
     {
       "path": "src/background/contracts.js",
-      "sha256": "758e04b95b8bfa8a8ee89a56d0fe256a6e5371255d4c5737883eb74d77ebe1ac"
+      "sha256": "9dd3ffaf90f4c88dad147d60bc76d182a5e9e4b51838a7b2dc1ff2f866c84ffa"
     },
     {
       "path": "src/background/controller.js",
@@ -123,7 +123,7 @@
     },
     {
       "path": "src/background/provider-pool-service.js",
-      "sha256": "31e01c7f08a600c33da4195dde0ea01446894404bde70ff45e6d041c0a7ded6d"
+      "sha256": "2e897dd6084ba462587aae657d561f6713cdaf3e0a928d25fb88558decc4511a"
     },
     {
       "path": "src/background/translation-job-service.js",
@@ -155,11 +155,11 @@
     },
     {
       "path": "src/content/provider-common.js",
-      "sha256": "c2af48056100fc2939b22e6ca850f4e29e06a984ecfaac71006f6992cbbaabce"
+      "sha256": "de8dca9223d261c9c2213839dfa39c46156c93a368d9ae18c42d37e1c8a8eb88"
     },
     {
       "path": "src/content/provider-diagnostics.js",
-      "sha256": "69ad0ce779422ddea7a74d6c6c06a33913a1de8b51dbad522795fa0fa67ba950"
+      "sha256": "e180dfed26aa2fb00e666d13808d7c7920e95fe883e20cc3c6c9380520998eec"
     },
     {
       "path": "src/content/stv-account.js",
@@ -251,7 +251,7 @@
     },
     {
       "path": "src/shared/error-journal.js",
-      "sha256": "3577f3857a28c04f45b7b451f37370430f04c6a0d9ac2301f4e5895d3e73b3ce"
+      "sha256": "5eaccb2da60a81df8bd71d2afcc78f241fcde4a225d8ee2879088fb571fac6a1"
     },
     {
       "path": "src/shared/history-sync.js",
@@ -327,7 +327,7 @@
     }
   ],
   "product": "Phwgna Stv",
-  "sourceCommit": "41dcc18bbb286a0665e92e273cf4b87b444ebeeb",
+  "sourceCommit": "4f5061c55b70e7cfa9832abf9f302ce343d2716a",
   "officialRepository": "https://github.com/itzmonnz/phwgna-stv",
   "officialReleaseUrl": "https://github.com/itzmonnz/phwgna-stv/releases/tag/v0.2.8",
   "publicKeyFingerprint": "85ac74c199d0a6028bce843d6f68d7632317912b460aad1a7431193767ec9871"

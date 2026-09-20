@@ -20,7 +20,7 @@
   const SETUP_STATES = new Set(["idle", "running", "completed", "failed", "resuming", "unknown"]);
   const SETUP_STAGES = new Set(["idle", "waiting_composer", "sending", "waiting_marker", "confirmed", "resuming", "completed", "failed", "unknown"]);
   const READY_STEPS = new Set(["idle", "ready_1", "ready_2", "ready_3", "unknown"]);
-  const READY_STATES = new Set(["idle", "waiting_marker", "marker_seen", "rechecked_ready", "confirmed", "waiting_composer", "sending", "resuming", "failed", "unknown"]);
+  const READY_STATES = new Set(["idle", "waiting_marker", "marker_seen", "grace", "generating_grace", "rechecked_ready", "confirmed", "waiting_composer", "sending", "resuming", "failed", "unknown"]);
   const PERFORMANCE_MODES = new Set(["stable", "max", "none", "unknown"]);
   const EVENT_KINDS = new Set([
     "response_rejected", "retry_scheduled", "tab_retired", "tab_replaced",

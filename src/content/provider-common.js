@@ -325,6 +325,10 @@
     const ignored = String(options.ignoreValue || "").trim();
     const start = now();
     const primaryDeadline = start + timeoutMs;
+    const generatingHardTimeoutMs = message?.phase === "setup"
+      ? Math.max(timeoutMs, Number(options.generatingHardTimeoutMs) || timeoutMs)
+      : timeoutMs;
+    const generatingHardDeadline = start + generatingHardTimeoutMs;
     const markerGraceMs = message?.phase === "setup"
       ? Math.max(0, Number(options.markerGraceMs) || 0)
       : 0;
@@ -339,6 +343,8 @@
     let staleStopStableSince = null;
     let staleStopText = "";
     let graceActive = false;
+    let generationGraceActive = false;
+    let generationStoppedAt = null;
     let reportedState = "";
 
     function report(state) {
@@ -469,7 +475,30 @@
       const validDeadline = validStableSince === null || validGraceMs === 0
         ? primaryDeadline
         : Math.min(primaryDeadline + validGraceMs, validStableSince + validGraceMs);
-      const deadline = Math.max(markerDeadline, incompleteDeadline, staleStopDeadline, validDeadline);
+      if (message?.phase === "setup"
+        && currentTime >= primaryDeadline
+        && state.generating === true
+        && generatingHardDeadline > primaryDeadline) {
+        generationGraceActive = true;
+        generationStoppedAt = null;
+      } else if (generationGraceActive && generationStoppedAt === null) {
+        generationStoppedAt = currentTime;
+      }
+      const activeSetupGenerationDeadline = state.generating === true && generationGraceActive
+        ? generatingHardDeadline
+        : generationStoppedAt !== null
+          ? Math.min(generatingHardDeadline, generationStoppedAt + markerGraceMs)
+          : primaryDeadline;
+      if (generationGraceActive && currentTime < activeSetupGenerationDeadline) {
+        report("generating_grace");
+      }
+      const deadline = Math.max(
+        markerDeadline,
+        incompleteDeadline,
+        staleStopDeadline,
+        validDeadline,
+        activeSetupGenerationDeadline
+      );
       if (currentTime >= deadline) {
         if (message?.phase === "setup") report("failed");
         throw new ProviderError("response_timeout", "Đã hết thời gian chờ phản hồi ổn định từ trang AI.");
@@ -820,6 +849,7 @@
             onWaitSignal,
             ignoreValue: submission?.alreadySent ? "" : previousResponse,
             markerGraceMs: message.phase === "setup" ? (message.markerGraceMs ?? 2_000) : 0,
+            generatingHardTimeoutMs: message.phase === "setup" ? message.generatingHardTimeoutMs : undefined,
             incompleteGraceMs: message.phase === "batch" ? defaults.incompleteGraceMs : 0,
             validGraceMs: message.phase === "batch" ? defaults.validGraceMs : 0,
             staleStopGraceMs: message.phase === "batch" ? defaults.staleStopGraceMs : 0,

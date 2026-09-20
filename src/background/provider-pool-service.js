@@ -31,7 +31,8 @@
       nextStvPresenceGeneration, currentStvPresenceGeneration
     } = options;
     const {
-      SETUP_PARTS, PROVIDER_URLS, READY_TIMEOUT_MS, CHATGPT_READY_TIMEOUT_MS,
+      SETUP_PARTS, PROVIDER_URLS, READY_TIMEOUT_MS, GEMINI_SETUP_HARD_TIMEOUT_MS,
+      CHATGPT_READY_TIMEOUT_MS,
       READY_SEND_TIMEOUT_MS, CHATGPT_READY_SEND_TIMEOUT_MS,
       CHATGPT_SETUP_INACTIVITY_MS, CHATGPT_SETUP_HARD_TIMEOUT_MS,
       READY_MARKER_GRACE_MS, MAX_WARM_REPLACEMENTS, MIN_POOL_TABS,
@@ -782,6 +783,7 @@
               temporaryTimeoutMs: warmTemporaryTimeoutMs,
               sendTimeoutMs: readySendTimeoutMs,
               timeoutMs: readyTimeoutMs,
+              generatingHardTimeoutMs: GEMINI_SETUP_HARD_TIMEOUT_MS,
               markerGraceMs: READY_MARKER_GRACE_MS,
               temporaryChat: settings.temporaryChat,
               ...(finalSetup ? {
@@ -791,7 +793,7 @@
             };
             slot.readyWatchdogStep = `ready_${setupIndex + 1}`;
             slot.readyWatchdogState = "waiting_marker";
-            slot.readyWatchdogTimeoutMs = readyTimeoutMs;
+            slot.readyWatchdogTimeoutMs = GEMINI_SETUP_HARD_TIMEOUT_MS;
             slot.readyWatchdogGraceMs = READY_MARKER_GRACE_MS;
             slot.setupStageStartedAt = now();
             let response;

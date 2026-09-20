@@ -256,11 +256,11 @@
         ], "none"),
         readyStep: safeEnum(runtime.readyStep, ["idle", "ready_1", "ready_2"], "idle"),
         readyState: safeEnum(runtime.readyState, [
-          "idle", "waiting_marker", "marker_seen", "grace", "confirmed", "failed"
+          "idle", "waiting_marker", "marker_seen", "grace", "generating_grace", "confirmed", "failed"
         ], "idle"),
         readyFirstSeenAt: Math.max(0, Number(runtime.readyFirstSeenAt) || 0),
         stablePolls: Math.max(0, Math.min(2, Number(runtime.stablePolls) || 0)),
-        timeoutMs: Math.max(0, Math.min(60_000, Number(runtime.timeoutMs) || 0)),
+        timeoutMs: Math.max(0, Math.min(90_000, Number(runtime.timeoutMs) || 0)),
         graceMs: Math.max(0, Math.min(10_000, Number(runtime.graceMs) || 0)),
         batchAttempt: Math.max(0, Math.min(3, Number(runtime.batchAttempt) || 0)),
         expectedCount: Math.max(0, Math.min(10000, Number(runtime.expectedCount) || 0)),
