@@ -34,15 +34,36 @@
       SETUP_PARTS, PROVIDER_URLS, READY_TIMEOUT_MS, GEMINI_SETUP_HARD_TIMEOUT_MS,
       CHATGPT_READY_TIMEOUT_MS,
       READY_SEND_TIMEOUT_MS, CHATGPT_READY_SEND_TIMEOUT_MS,
+      GEMINI_SETUP_STEP_GAP_MS, GEMINI_SETUP_SLOT_GAP_MS,
+      GEMINI_SETUP_REJECTION_COOLDOWN_MS,
       CHATGPT_SETUP_INACTIVITY_MS, CHATGPT_SETUP_HARD_TIMEOUT_MS,
       READY_MARKER_GRACE_MS, MAX_WARM_REPLACEMENTS, MIN_POOL_TABS,
       MAX_POOL_TABS, POOL_STORAGE_KEY, OWNED_TABS_STORAGE_KEY,
       DEVELOPER_KEEP_TABS_KEY, OWNED_TABS_RECORD_VERSION, AUTHENTICATION_BLOCKERS,
       REPLACEABLE_WARM_FAILURES, isAuthenticationBlocker
     } = contracts;
+    const geminiSetupStepDelayMs = options.geminiSetupStepDelayMs
+      ?? GEMINI_SETUP_STEP_GAP_MS;
+    const geminiSetupSlotDelayMs = options.geminiSetupSlotDelayMs
+      ?? GEMINI_SETUP_SLOT_GAP_MS;
+    const geminiSetupRejectionCooldownMs = options.geminiSetupRejectionCooldownMs
+      ?? GEMINI_SETUP_REJECTION_COOLDOWN_MS;
     let poolFillOperation = null;
     let poolReconfigurationSerial = Promise.resolve();
     let geminiPreparationSerial = Promise.resolve();
+    let geminiPreparationNotBefore = 0;
+
+    function deferGeminiPreparation(milliseconds) {
+      geminiPreparationNotBefore = Math.max(
+        geminiPreparationNotBefore,
+        now() + Math.max(0, Number(milliseconds) || 0)
+      );
+    }
+
+    async function waitForGeminiPreparationWindow() {
+      const remaining = Math.max(0, geminiPreparationNotBefore - now());
+      if (remaining) await retrySleep(remaining);
+    }
 
     function providerUrlFor(provider, temporaryChat) {
       if (provider === "chatgpt" && temporaryChat) {
@@ -478,6 +499,9 @@
       slot.state = "failed";
       slot.errorCode = String(code || "warm_failed");
       slot.failedAt = now();
+      const geminiSessionRejected = slot.provider === "gemini"
+        && ["send_not_confirmed", "temporary_unavailable"].includes(slot.errorCode);
+      if (geminiSessionRejected) deferGeminiPreparation(geminiSetupRejectionCooldownMs);
       slot.errorIncidentKey ||= `setup:${slot.slotId}:${slot.openedAt || slot.failedAt}`;
       await errorJournal?.append?.(slot.errorIncidentKey, {
         kind: "setup_failed",
@@ -502,9 +526,11 @@
         performanceMode: slot.provider === "chatgpt" ? "stable" : "max",
         outcome: REPLACEABLE_WARM_FAILURES.has(slot.errorCode) ? "still_running" : "failed"
       });
-      slot.retryNotBefore = ["response_timeout", "send_not_confirmed"].includes(slot.errorCode)
-        ? slot.failedAt
-        : slot.failedAt + 8_000;
+      slot.retryNotBefore = geminiSessionRejected
+        ? slot.failedAt + geminiSetupRejectionCooldownMs
+        : ["response_timeout", "send_not_confirmed"].includes(slot.errorCode)
+          ? slot.failedAt
+          : slot.failedAt + 8_000;
       exposeSlotFailureToPool(slot);
       await persistPool();
       await notifyPoolStatus();
@@ -584,10 +610,13 @@
 
     async function prepareWarmSlot(slot, settings, options = {}) {
       if (slot?.provider === "gemini" && !options.geminiPreparationLockHeld) {
-        const queued = geminiPreparationSerial.then(() => prepareWarmSlot(slot, settings, {
-          ...options,
-          geminiPreparationLockHeld: true
-        }));
+        const queued = geminiPreparationSerial.then(async () => {
+          await waitForGeminiPreparationWindow();
+          return prepareWarmSlot(slot, settings, {
+            ...options,
+            geminiPreparationLockHeld: true
+          });
+        });
         geminiPreparationSerial = queued.catch(() => undefined);
         return queued;
       }
@@ -649,8 +678,13 @@
       await persistPool();
       if (!current()) return false;
       let status;
+      // A Gemini tab can wait behind another tab's serialized READY setup or
+      // an account-level rejection cooldown. That queue time is not evidence
+      // that this tab is unreachable; start its bridge-readiness budget only
+      // when this slot actually gets its turn.
+      const providerProbeStartedAt = now();
       for (let attempt = 0; attempt < providerReadyAttempts; attempt += 1) {
-        if (now() - Number(slot.documentLoadedAt || slot.openedAt) >= 60_000) {
+        if (now() - providerProbeStartedAt >= 60_000) {
           await markWarmSlotFailed(slot, "provider_unreachable");
           return false;
         }
@@ -857,6 +891,7 @@
               await markWarmSlotFailed(slot, "invalid_setup_response");
               return false;
             }
+            if (!finalSetup && geminiSetupStepDelayMs > 0) await retrySleep(geminiSetupStepDelayMs);
           }
           return true;
         }
@@ -873,6 +908,7 @@
       // leased this slot while verification was in flight. That lease belongs
       // to the active batch and must never be converted back to READY here.
       if (["ready", "leased"].includes(slot.state)) {
+        if (slot.provider === "gemini") deferGeminiPreparation(geminiSetupSlotDelayMs);
         await markWarmSlotRecovered(slot);
         await persistPool();
         return true;
@@ -882,6 +918,7 @@
       slot.preparationRequested = false;
       slot.preparationPasses = 0;
       slot.errorCode = "";
+      if (slot.provider === "gemini") deferGeminiPreparation(geminiSetupSlotDelayMs);
       warmPool.errorCode = "";
       if (warmPool.slots.length === warmPool.targetCount
         && warmPool.slots.every((candidate) => candidate.state === "ready")) {

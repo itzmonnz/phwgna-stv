@@ -1349,6 +1349,9 @@
       probeProvider: (...args) => translationJobs.probeProvider(...args),
       restoreJobs: (...args) => restoreJobs(...args),
       didRestoreJobs: () => jobsRestoredSuccessfully, retrySleep,
+      geminiSetupStepDelayMs: options.geminiSetupStepDelayMs,
+      geminiSetupSlotDelayMs: options.geminiSetupSlotDelayMs,
+      geminiSetupRejectionCooldownMs: options.geminiSetupRejectionCooldownMs,
       nextStvPresenceGeneration: () => ++stvPresenceGeneration,
       currentStvPresenceGeneration: () => stvPresenceGeneration
     });
