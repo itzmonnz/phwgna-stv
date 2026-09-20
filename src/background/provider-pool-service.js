@@ -44,26 +44,10 @@
     } = contracts;
     const geminiSetupStepDelayMs = options.geminiSetupStepDelayMs
       ?? GEMINI_SETUP_STEP_GAP_MS;
-    const geminiSetupSlotDelayMs = options.geminiSetupSlotDelayMs
-      ?? GEMINI_SETUP_SLOT_GAP_MS;
     const geminiSetupRejectionCooldownMs = options.geminiSetupRejectionCooldownMs
       ?? GEMINI_SETUP_REJECTION_COOLDOWN_MS;
     let poolFillOperation = null;
     let poolReconfigurationSerial = Promise.resolve();
-    let geminiPreparationSerial = Promise.resolve();
-    let geminiPreparationNotBefore = 0;
-
-    function deferGeminiPreparation(milliseconds) {
-      geminiPreparationNotBefore = Math.max(
-        geminiPreparationNotBefore,
-        now() + Math.max(0, Number(milliseconds) || 0)
-      );
-    }
-
-    async function waitForGeminiPreparationWindow() {
-      const remaining = Math.max(0, geminiPreparationNotBefore - now());
-      if (remaining) await retrySleep(remaining);
-    }
 
     function providerUrlFor(provider, temporaryChat) {
       if (provider === "chatgpt" && temporaryChat) {
@@ -501,7 +485,6 @@
       slot.failedAt = now();
       const geminiSessionRejected = slot.provider === "gemini"
         && ["send_not_confirmed", "temporary_unavailable"].includes(slot.errorCode);
-      if (geminiSessionRejected) deferGeminiPreparation(geminiSetupRejectionCooldownMs);
       slot.errorIncidentKey ||= `setup:${slot.slotId}:${slot.openedAt || slot.failedAt}`;
       await errorJournal?.append?.(slot.errorIncidentKey, {
         kind: "setup_failed",
@@ -609,17 +592,6 @@
     }
 
     async function prepareWarmSlot(slot, settings, options = {}) {
-      if (slot?.provider === "gemini" && !options.geminiPreparationLockHeld) {
-        const queued = geminiPreparationSerial.then(async () => {
-          await waitForGeminiPreparationWindow();
-          return prepareWarmSlot(slot, settings, {
-            ...options,
-            geminiPreparationLockHeld: true
-          });
-        });
-        geminiPreparationSerial = queued.catch(() => undefined);
-        return queued;
-      }
       if (!slot) return false;
       if (slot.documentLoading) return false;
       if (slot.state === "preparing") {
@@ -678,10 +650,8 @@
       await persistPool();
       if (!current()) return false;
       let status;
-      // A Gemini tab can wait behind another tab's serialized READY setup or
-      // an account-level rejection cooldown. That queue time is not evidence
-      // that this tab is unreachable; start its bridge-readiness budget only
-      // when this slot actually gets its turn.
+      // Each provider tab owns its readiness budget. Gemini tabs prepare in
+      // parallel, so one slow or rejected tab must not delay the others.
       const providerProbeStartedAt = now();
       for (let attempt = 0; attempt < providerReadyAttempts; attempt += 1) {
         if (now() - providerProbeStartedAt >= 60_000) {
@@ -908,7 +878,6 @@
       // leased this slot while verification was in flight. That lease belongs
       // to the active batch and must never be converted back to READY here.
       if (["ready", "leased"].includes(slot.state)) {
-        if (slot.provider === "gemini") deferGeminiPreparation(geminiSetupSlotDelayMs);
         await markWarmSlotRecovered(slot);
         await persistPool();
         return true;
@@ -918,7 +887,6 @@
       slot.preparationRequested = false;
       slot.preparationPasses = 0;
       slot.errorCode = "";
-      if (slot.provider === "gemini") deferGeminiPreparation(geminiSetupSlotDelayMs);
       warmPool.errorCode = "";
       if (warmPool.slots.length === warmPool.targetCount
         && warmPool.slots.every((candidate) => candidate.state === "ready")) {
@@ -1090,10 +1058,9 @@
           }, 0);
         }
       };
-      // Gemini can invalidate multiple Temporary Chat sessions when the same
-      // account creates them concurrently (observed as UI error 1905). Open
-      // every tab up front, but serialize its READY preparation.
-      const preparationConcurrency = settings.provider === "gemini" ? 1 : 2;
+      // Every selected tab prepares independently. Within one tab the setup
+      // prompts remain ordered, but no tab waits for another tab's READY flow.
+      const preparationConcurrency = settings.provider === "gemini" ? createdSlots.length : 2;
       const workers = Array.from({ length: Math.min(preparationConcurrency, createdSlots.length) }, () => worker());
       operation.all = Promise.all(workers).finally(() => {
         resolveFirstReady();
