@@ -87,6 +87,7 @@
     let temporaryMissingSince = null;
     let submittedSetupPrompt = false;
     let lastSubmittedSetupPrompt = "";
+    let pendingSubmittedPrompt = "";
     let activeBatchRequestId = "";
     let learnedCurrentDocument = false;
     const verifiedReadySteps = new Set();
@@ -330,6 +331,19 @@
       }
       if (!findComposer()) {
         return { state: "paused", code: "ui_changed", message: "Không nhận diện được ô nhập của Gemini." };
+      }
+      const currentComposer = findComposer();
+      if (pendingSubmittedPrompt
+        && comparableComposerText(readComposerText(currentComposer)) === pendingSubmittedPrompt) {
+        common.setComposerText(currentComposer, "", { focus: false });
+        submissionDiagnostic.composerState = "cleared_returned_prompt";
+        submissionDiagnostic.submissionConfirmed = false;
+        submissionDiagnostic.sendButtonState = "submission_rejected";
+        return {
+          state: "paused",
+          code: "send_not_confirmed",
+          message: "Gemini đã trả nội dung vừa gửi về ô nhập; yêu cầu chưa được chấp nhận."
+        };
       }
       if (temporaryRequired && verifiedTemporaryOnce) {
         if (temporaryPageIsActive()) temporaryMissingSince = null;
@@ -699,17 +713,33 @@
       submissionDiagnostic.clickAttempted = true;
       submissionDiagnostic.sendButtonState = "clicked";
       settledButton.click();
-      if (setupPrompt) {
-        submittedSetupPrompt = true;
-        lastSubmittedSetupPrompt = comparablePrompt;
-      }
+      let sawComposerClear = false;
+      let composerClearSince = 0;
+      const confirmationStableMs = Math.max(0, Number(
+        options.sendConfirmationStableMs ?? (setupPrompt ? 750 : 0)
+      ) || 0);
       try {
         await common.waitForElement(
           () => {
             if (alreadySent()) return document.body;
             if (findStopButton()) return document.body;
             const current = findComposer();
-            return current && !readComposerText(current) ? current : null;
+            const currentText = readComposerText(current);
+            if (sawComposerClear && comparableComposerText(currentText) === comparablePrompt) {
+              common.setComposerText(current, "", { focus: false });
+              submissionDiagnostic.composerState = "cleared_returned_prompt";
+              submissionDiagnostic.sendButtonState = "submission_rejected";
+              throw new common.ProviderError(
+                "send_not_confirmed",
+                "Gemini đã trả nội dung vừa gửi về ô nhập; yêu cầu chưa được chấp nhận."
+              );
+            }
+            if (!current || currentText) return null;
+            if (!sawComposerClear) {
+              sawComposerClear = true;
+              composerClearSince = now();
+            }
+            return now() - composerClearSince >= confirmationStableMs ? current : null;
           },
           {
             ...waitOptions,
@@ -718,6 +748,11 @@
         );
         submissionDiagnostic.submissionConfirmed = true;
         submissionDiagnostic.sendButtonState = "submission_confirmed";
+        pendingSubmittedPrompt = comparablePrompt;
+        if (setupPrompt) {
+          submittedSetupPrompt = true;
+          lastSubmittedSetupPrompt = comparablePrompt;
+        }
         const currentComposer = findComposer();
         if (currentComposer && !common.textOf(currentComposer).trim()) submissionDiagnostic.composerState = "cleared_after_send";
         return;

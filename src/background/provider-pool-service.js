@@ -41,6 +41,7 @@
     } = contracts;
     let poolFillOperation = null;
     let poolReconfigurationSerial = Promise.resolve();
+    let geminiPreparationSerial = Promise.resolve();
 
     function providerUrlFor(provider, temporaryChat) {
       if (provider === "chatgpt" && temporaryChat) {
@@ -581,6 +582,14 @@
     }
 
     async function prepareWarmSlot(slot, settings, options = {}) {
+      if (slot?.provider === "gemini" && !options.geminiPreparationLockHeld) {
+        const queued = geminiPreparationSerial.then(() => prepareWarmSlot(slot, settings, {
+          ...options,
+          geminiPreparationLockHeld: true
+        }));
+        geminiPreparationSerial = queued.catch(() => undefined);
+        return queued;
+      }
       if (!slot) return false;
       if (slot.documentLoading) return false;
       if (slot.state === "preparing") {
