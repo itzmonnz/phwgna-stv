@@ -1221,6 +1221,11 @@
     async function cleanupWarmPool() {
       return withPoolLock(async () => {
         const owned = [...warmPool.slots];
+        // A fill can outlive the tabs it was preparing (for example when the
+        // user cancels while the other Gemini tabs are still waiting for
+        // READY). Do not let the next manual start mistake that retired fill
+        // for work that can satisfy the new pool generation.
+        poolFillOperation = null;
         warmPool.waiters.length = 0;
         warmPool.provider = "";
         warmPool.settingsHash = "";
