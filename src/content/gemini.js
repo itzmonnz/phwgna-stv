@@ -85,6 +85,8 @@
     let temporaryRequired = false;
     let verifiedTemporaryOnce = false;
     let temporaryMissingSince = null;
+    let submittedSetupPrompt = false;
+    let lastSubmittedSetupPrompt = "";
     let activeBatchRequestId = "";
     let learnedCurrentDocument = false;
     const verifiedReadySteps = new Set();
@@ -351,6 +353,33 @@
         || TEMPORARY_ACTIVE_INDICATORS.some((selector) => document.querySelector(selector));
     }
 
+    function clearReturnedSetupPrompt() {
+      if (!lastSubmittedSetupPrompt) return;
+      const composer = findComposer();
+      if (composer && comparableComposerText(readComposerText(composer)) === lastSubmittedSetupPrompt) {
+        common.setComposerText(composer, "", { focus: false });
+      }
+    }
+
+    async function waitForPostSetupTemporaryStability(signal, timeoutMs) {
+      const requiredMs = Math.max(0, Number(options.temporaryPostSetupStableMs ?? 750) || 0);
+      if (!requiredMs) return;
+      const sleep = options.sleep || ((duration) => new Promise((resolve) => setTimeout(resolve, duration)));
+      const startedAt = now();
+      const deadline = startedAt + Math.min(requiredMs, Math.max(0, Number(timeoutMs) || requiredMs));
+      while (now() < deadline) {
+        if (signal?.aborted) throw new common.ProviderError("cancelled", "Tác vụ đã bị hủy.");
+        if (!temporaryPageIsActive()) {
+          clearReturnedSetupPrompt();
+          throw new common.ProviderError(
+            "temporary_unavailable",
+            "Gemini đã reset Temporary Chat sau READY 1. Tool đã dừng trước khi gửi READY 2."
+          );
+        }
+        await sleep(Math.min(options.pollIntervalMs ?? 100, Math.max(1, deadline - now())));
+      }
+    }
+
     function temporaryControlScore(control) {
       if (!control || !common.isVisible(control) || controlLooksLikeStop(control)) return -100;
       const fields = [
@@ -437,7 +466,19 @@
       const startedAt = now();
       const remaining = () => Math.max(0, stageTimeoutMs - (now() - startedAt));
       if (temporaryPageIsActive()) {
-        await waitForStableTemporary(signal, remaining());
+        try {
+          await waitForStableTemporary(signal, remaining());
+        } catch (error) {
+          if (error?.code === "cancelled" || !verifiedTemporaryOnce || !submittedSetupPrompt) throw error;
+          clearReturnedSetupPrompt();
+          throw new common.ProviderError(
+            "temporary_unavailable",
+            "Gemini đã reset Temporary Chat sau READY 1. Tool đã dừng trước khi gửi READY 2."
+          );
+        }
+        if (verifiedTemporaryOnce && submittedSetupPrompt) {
+          await waitForPostSetupTemporaryStability(signal, remaining());
+        }
         verifiedTemporaryOnce = true;
         return;
       }
@@ -488,6 +529,7 @@
       submissionDiagnostic = createSubmissionDiagnostic();
       const promptText = String(prompt || "").trim();
       const comparablePrompt = comparableComposerText(promptText);
+      const setupPrompt = sendOptions.phase === "setup";
       const state = getStatus();
       if (state.state !== "ready") {
         throw new common.ProviderError(state.code, state.message);
@@ -657,6 +699,10 @@
       submissionDiagnostic.clickAttempted = true;
       submissionDiagnostic.sendButtonState = "clicked";
       settledButton.click();
+      if (setupPrompt) {
+        submittedSetupPrompt = true;
+        lastSubmittedSetupPrompt = comparablePrompt;
+      }
       try {
         await common.waitForElement(
           () => {

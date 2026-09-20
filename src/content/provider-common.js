@@ -736,6 +736,7 @@
           : "";
         setDiagnosticState("sending", message.phase);
         const submission = await adapter.sendPrompt(message.prompt, {
+          phase: message.phase,
           signal: controller.signal,
           requestId: message.requestId,
           timeoutMs: message.sendTimeoutMs,

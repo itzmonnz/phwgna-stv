@@ -1042,7 +1042,11 @@
           }, 0);
         }
       };
-      const workers = Array.from({ length: Math.min(2, createdSlots.length) }, () => worker());
+      // Gemini can invalidate multiple Temporary Chat sessions when the same
+      // account creates them concurrently (observed as UI error 1905). Open
+      // every tab up front, but serialize its READY preparation.
+      const preparationConcurrency = settings.provider === "gemini" ? 1 : 2;
+      const workers = Array.from({ length: Math.min(preparationConcurrency, createdSlots.length) }, () => worker());
       operation.all = Promise.all(workers).finally(() => {
         resolveFirstReady();
         if (poolFillOperation === operation) poolFillOperation = null;
