@@ -668,6 +668,13 @@
       if (wasOpen && notify) options.onClose?.();
     }
 
+    function closeFromOutsidePointer(event) {
+      if (root.hidden || root.contains(event.target)) return;
+      close();
+    }
+
+    document.addEventListener("pointerdown", closeFromOutsidePointer, true);
+
     function bind(nextReader) {
       if (reader !== (nextReader || null)) close(false);
       if (reader) {
@@ -818,6 +825,7 @@
       destroy() {
         close(false);
         bind(null);
+        document.removeEventListener("pointerdown", closeFromOutsidePointer, true);
         positionController?.destroy?.();
         root.remove();
       },
