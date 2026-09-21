@@ -276,7 +276,7 @@
         }
         const record = stored?.[POOL_STORAGE_KEY];
         const keepDiagnosticTabs = await developerKeepsFailedTabs();
-        if ([2, 3, 4, 5].includes(record?.version) && Array.isArray(record.slots)) {
+        if ([2, 3, 4, 5, 6].includes(record?.version) && Array.isArray(record.slots)) {
           warmPool.suspendedStvTabs = new Set(
             (Array.isArray(record.suspendedStvTabIds) ? record.suspendedStvTabIds : [])
               .filter(Number.isInteger)
@@ -292,7 +292,27 @@
           // lock that can no longer be released by the old process.
           warmPool.reconfiguring = false;
           const legacyDiagnosticTabs = record.slots.filter((slot) => slot?.state === "diagnostic_held");
-          const recordedSlots = record.slots.filter((slot) => slot?.state !== "diagnostic_held").slice(0, MAX_POOL_TABS);
+          const recordedSlots = record.slots.filter((slot) => slot?.state !== "diagnostic_held")
+            .slice(0, record.version >= 6 ? MAX_POOL_TABS + 1 : MAX_POOL_TABS);
+          if (record.version >= 6) {
+            for (const standby of recordedSlots.filter((slot) => slot?.state === "handoff_standby")) {
+              const successor = recordedSlots.find((slot) => slot?.slotId === standby.handoffSuccessorSlotId);
+              if (successor?.state === "ready") {
+                if (Number.isInteger(standby.providerTabId) && typeof tabs.remove === "function") {
+                  try { await tabs.remove(standby.providerTabId); } catch (_error) { /* retry during normal cleanup */ }
+                }
+                standby.state = "retiring";
+                successor.handoffPredecessorSlotId = "";
+              } else {
+                if (Number.isInteger(successor?.providerTabId) && typeof tabs.remove === "function") {
+                  try { await tabs.remove(successor.providerTabId); } catch (_error) { /* retry during normal cleanup */ }
+                }
+                if (successor) successor.state = "retiring";
+                standby.state = "ready";
+                standby.handoffSuccessorSlotId = "";
+              }
+            }
+          }
           if (keepDiagnosticTabs) {
             const persistedDiagnosticTabs = Array.isArray(record.diagnosticTabs) ? record.diagnosticTabs : [];
             warmPool.diagnosticTabs = [...persistedDiagnosticTabs, ...legacyDiagnosticTabs]
@@ -308,13 +328,13 @@
           for (const slot of recordedSlots) {
             const resumableChatGPT = slot?.provider === "chatgpt" && slot?.state === "preparing"
               && typeof slot?.setupSessionId === "string" && slot.setupSessionId;
-            if (["ready", "leased", "retiring"].includes(slot?.state) || resumableChatGPT
+            if (["ready", "leased", "retiring", "handoff_standby"].includes(slot?.state) || resumableChatGPT
               || !Number.isInteger(slot?.providerTabId)) continue;
             if (typeof tabs.remove === "function") {
               try { await tabs.remove(slot.providerTabId); } catch (_error) { /* already closed */ }
             }
           }
-          warmPool.slots = recordedSlots.filter((slot) => ["ready", "leased", "retiring"].includes(slot?.state)
+          warmPool.slots = recordedSlots.filter((slot) => ["ready", "leased", "retiring", "handoff_standby"].includes(slot?.state)
             || (slot?.provider === "chatgpt" && slot?.state === "preparing" && slot?.setupSessionId)).map((slot) => ({
             slotId: String(slot?.slotId || createId("slot")),
             providerTabId: Number.isInteger(slot?.providerTabId) ? slot.providerTabId : null,
@@ -341,7 +361,9 @@
             firstBatchDispatchedAt: Math.max(0, Number(slot?.firstBatchDispatchedAt) || 0),
             errorCode: "",
             jobId: slot?.state === "leased" ? String(slot?.jobId || "") : "",
-            restored: true
+            restored: true,
+            handoffPredecessorSlotId: String(slot?.handoffPredecessorSlotId || ""),
+            handoffSuccessorSlotId: String(slot?.handoffSuccessorSlotId || "")
           })).filter((slot) => (
             Number.isInteger(slot.providerTabId)
             && slot.warmSessionId
@@ -517,7 +539,7 @@
       exposeSlotFailureToPool(slot);
       await persistPool();
       await notifyPoolStatus();
-      if (REPLACEABLE_WARM_FAILURES.has(slot.errorCode)
+      if (!slot.suppressAutomaticReplacement && REPLACEABLE_WARM_FAILURES.has(slot.errorCode)
         && (slot.recoveryAttempts || 0) < MAX_WARM_REPLACEMENTS) {
         setTimeout(() => { void replaceFailedWarmSlot(slot); }, 0);
       }
@@ -897,8 +919,10 @@
       return true;
     }
 
-    async function createWarmSlot(settings, settingsHash, recoveryAttempts = 0, purpose = "shared") {
-      if (warmPool.slots.length >= warmPool.targetCount) return null;
+    async function createWarmSlot(settings, settingsHash, recoveryAttempts = 0, purpose = "shared", createOptions = {}) {
+      const operationalCount = warmPool.slots.filter((slot) => !["handoff_standby", "retiring"].includes(slot.state)).length;
+      if (operationalCount >= warmPool.targetCount && createOptions.allowHandoffOverflow !== true) return null;
+      if (warmPool.slots.length >= warmPool.targetCount + (createOptions.allowHandoffOverflow === true ? 1 : 0)) return null;
       const targetUrl = ownedProviderUrl(settings.provider, settings.temporaryChat);
       const slot = {
         slotId: createId("slot"),
@@ -928,7 +952,9 @@
         recoveryAttempts: Math.max(0, Number(recoveryAttempts) || 0),
         openedAt: now(),
         documentLoadedAt: 0,
-        failedAt: 0
+        failedAt: 0,
+        handoffPredecessorSlotId: String(createOptions.handoffPredecessorSlotId || ""),
+        suppressAutomaticReplacement: createOptions.suppressAutomaticReplacement === true
       };
       warmPool.slots.push(slot);
       let tab;
@@ -1077,13 +1103,14 @@
       await restorePoolMetadata();
       const targetCount = normalizedPoolTarget(config.settings);
       const remainingPurposes = desiredPoolPurposes(targetCount);
-      const hasInvalidRole = warmPool.slots.some((slot) => {
+      const operationalSlots = warmPool.slots.filter((slot) => !["handoff_standby", "retiring"].includes(slot.state));
+      const hasInvalidRole = operationalSlots.some((slot) => {
         const index = remainingPurposes.indexOf(slot.purpose || "shared");
         if (index < 0) return true;
         remainingPurposes.splice(index, 1);
         return false;
       });
-      const rolesMismatch = warmPool.slots.length > 0 && (
+      const rolesMismatch = operationalSlots.length > 0 && (
         warmPool.targetCount !== targetCount
         || hasInvalidRole
       );
@@ -1402,6 +1429,7 @@
       if (!job?.poolSlotId) return;
       await restorePoolMetadata();
       const automation = await readAutomationConfig(job.settings);
+      let handoff = null;
       await withPoolLock(async () => {
         const slot = warmPool.slots.find((candidate) => candidate.slotId === job.poolSlotId);
         if (slot) {
@@ -1412,12 +1440,27 @@
             slot.state = "spent";
             slot.jobId = "";
             if (job.status === "completed") {
-              const recycled = warmPool.settings
-                ? await recycleOwnedSlot(slot, warmPool.settings)
-                : false;
-              if (!recycled) {
+              if (warmPool.settings) {
+                slot.state = "handoff_standby";
+                const replacement = await createWarmSlot(
+                  warmPool.settings,
+                  warmPool.settingsHash,
+                  0,
+                  slot.purpose || "shared",
+                  {
+                    allowHandoffOverflow: true,
+                    handoffPredecessorSlotId: slot.slotId,
+                    suppressAutomaticReplacement: true
+                  }
+                );
+                if (replacement) {
+                  slot.handoffSuccessorSlotId = replacement.slotId;
+                  handoff = { standby: slot, replacement, settings: warmPool.settings };
+                } else {
+                  slot.state = "ready";
+                }
+              } else {
                 await removeOwnedSlot(slot, { removalReason: "job_completed" });
-                if (warmPool.settings) await fillWarmPool(warmPool.settings, warmPool.settingsHash);
               }
             }
             await persistPool();
@@ -1425,6 +1468,29 @@
         }
       });
       job.poolSlotId = "";
+      if (handoff) {
+        const prepared = await prepareWarmSlot(handoff.replacement, handoff.settings, { deferUnavailable: true });
+        await withPoolLock(async () => {
+          const standbyPresent = warmPool.slots.includes(handoff.standby);
+          const replacementPresent = warmPool.slots.includes(handoff.replacement);
+          const replacementReady = prepared && replacementPresent && handoff.replacement.state === "ready";
+          if (replacementReady) {
+            handoff.replacement.handoffPredecessorSlotId = "";
+            if (standbyPresent) await removeOwnedSlot(handoff.standby, { removalReason: "job_completed" });
+          } else {
+            if (replacementPresent) await removeOwnedSlot(handoff.replacement, {
+              force: true,
+              errorReason: handoff.replacement.errorCode || "handoff_setup_failed"
+            });
+            if (standbyPresent && handoff.standby.state !== "retiring") {
+              handoff.standby.handoffSuccessorSlotId = "";
+              handoff.standby.state = await verifyPreparedSlot(handoff.standby) ? "ready" : "failed";
+              handoff.standby.errorCode = handoff.standby.state === "ready" ? "" : "warm_evidence_missing";
+            }
+          }
+          await persistPool();
+        });
+      }
       await notifyPoolStatus();
       if (!options.deferDrain) await drainWarmWaiters();
     }

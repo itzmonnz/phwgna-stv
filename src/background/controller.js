@@ -426,9 +426,10 @@
     }
 
     function hasExactPoolRoles(targetCount) {
-      if (warmPool.slots.length !== targetCount) return false;
+      const operationalSlots = warmPool.slots.filter((slot) => !["handoff_standby", "retiring"].includes(slot.state));
+      if (operationalSlots.length !== targetCount) return false;
       const remaining = desiredPoolPurposes(targetCount);
-      for (const slot of warmPool.slots) {
+      for (const slot of operationalSlots) {
         const index = remaining.indexOf(slot.purpose || "shared");
         if (index < 0) return false;
         remaining.splice(index, 1);
@@ -838,7 +839,9 @@
           setupErrorCode: slot.setupErrorCode || "",
           firstBatchDispatchedAt: Math.max(0, Number(slot.firstBatchDispatchedAt) || 0),
           errorCode: slot.errorCode || "",
-          jobId: slot.jobId || ""
+          jobId: slot.jobId || "",
+          handoffPredecessorSlotId: slot.handoffPredecessorSlotId || "",
+          handoffSuccessorSlotId: slot.handoffSuccessorSlotId || ""
         }))
       };
       try {
