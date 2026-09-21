@@ -2077,8 +2077,13 @@
       return null;
     }
     setDiagnosticState(dependencies.diagnosticState, "waiting_root");
+    // A full reload can expose the first i[t] token before STV has finished
+    // appending or replacing the beginning of the chapter. Extracting at that
+    // instant changes only batch one and makes a complete cache look partial.
+    // Require a short quiet window on both navigation paths before identity and
+    // batch hashes are captured.
     const found = await waitForChapterRoot(dependencies.document, 30_000, dependencies.signal,
-      dependencies.sameDocumentNavigation ? 250 : 0);
+      dependencies.sameDocumentNavigation ? 250 : 500);
     if (dependencies.signal?.aborted) return null;
     if (!found) {
       setDiagnosticState(dependencies.diagnosticState, "root_timeout", "SOURCE_NOT_FOUND");
