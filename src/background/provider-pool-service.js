@@ -972,7 +972,9 @@
         const settingsHash = failedSlot.settingsHash;
         const nextAttempt = (failedSlot.recoveryAttempts || 0) + 1;
         const errorIncidentKey = failedSlot.errorIncidentKey;
-        if (["send_not_confirmed", "response_timeout"].includes(failedSlot.errorCode)) {
+        const mayRecycleSameConversation = failedSlot.errorCode === "response_timeout"
+          || (failedSlot.errorCode === "send_not_confirmed" && failedSlot.provider !== "gemini");
+        if (mayRecycleSameConversation) {
           failedSlot.recoveryAttempts = nextAttempt;
           recycledInPlace = await recycleOwnedSlot(failedSlot, settings);
           if (recycledInPlace) {
@@ -1407,16 +1409,19 @@
             || (!hasEligibleStvTab() && !options.preserveWithoutStv)) {
             await removeOwnedSlot(slot, { removalReason: "automation_disabled_or_stv_gone" });
           } else {
-            slot.state = "spent";
+            const retainCompletedForDiagnostics = job.status === "completed"
+              && await developerKeepsFailedTabs();
+            slot.state = job.status === "completed" && !retainCompletedForDiagnostics ? "ready" : "spent";
             slot.jobId = "";
-            if (job.status === "completed") {
-              const recycled = warmPool.settings
-                ? await recycleOwnedSlot(slot, warmPool.settings)
-                : false;
-              if (!recycled) {
-                await removeOwnedSlot(slot, { removalReason: "job_completed" });
-                if (warmPool.settings) await fillWarmPool(warmPool.settings, warmPool.settingsHash);
-              }
+            // A completed request leaves the prepared conversation healthy and
+            // idle. Keep its READY evidence so later chapters can lease the
+            // same tab without another Temporary Chat activation or READY 1/2.
+            // Cancelled/uncertain work remains spent and is retired elsewhere.
+            // Developer retention remains an explicit exception so a completed
+            // conversation can still be inspected without occupying the pool.
+            if (retainCompletedForDiagnostics) {
+              await removeOwnedSlot(slot, { removalReason: "job_completed" });
+              if (warmPool.settings) await fillWarmPool(warmPool.settings, warmPool.settingsHash);
             }
             await persistPool();
           }

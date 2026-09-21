@@ -721,8 +721,8 @@
       try {
         await common.waitForElement(
           () => {
-            if (alreadySent()) return document.body;
-            if (findStopButton()) return document.body;
+            const responseOrGenerationStarted = alreadySent() || Boolean(findStopButton());
+            if (!setupPrompt && responseOrGenerationStarted) return document.body;
             const current = findComposer();
             const currentText = readComposerText(current);
             if (sawComposerClear && comparableComposerText(currentText) === comparablePrompt) {
