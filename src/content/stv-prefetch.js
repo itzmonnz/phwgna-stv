@@ -274,7 +274,7 @@
       trace?.update({ extraction: { state: "failed", errorCode: ["SOURCE_NOT_FOUND", "SOURCE_NOT_CHINESE"].includes(error?.code) ? error.code : "UNEXPECTED" } });
       throw new Error('next_chapter_source_unavailable');
     }
-    const batches = options.splitIntoBatches(chapter.translatableBlocks, { maxChars: 5000, maxBlocks: 30 })
+    const batches = options.splitIntoBatches(chapter.translatableBlocks, core.TRANSLATION_BATCH_LIMITS)
       .slice(0, core.PREFETCH_BATCH_LIMIT);
     trace?.update({ stage: "ready", extraction: { state: "ok", errorCode: "none",
       blockCount: markerBucket(chapter.translatableBlocks.length), batchCount: batches.length } });

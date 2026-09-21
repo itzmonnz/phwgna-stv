@@ -1137,7 +1137,7 @@
         if (!active || generation !== prefetchGeneration || state.status !== "completed" || !result.batches.length
           || setupSnapshot !== core.stableSettingsPayload(settings)) return;
         // Send the full source to the trusted background for cache identity.
-        // Only its first three batches may be sent to the AI during prefetch.
+        // Only the configured leading batches may be sent to the AI during prefetch.
         const targetChapter = result.chapter;
         const jobId = `prefetch-${createJobId()}`;
         const message = await buildStartMessage(jobId, false, targetChapter, {

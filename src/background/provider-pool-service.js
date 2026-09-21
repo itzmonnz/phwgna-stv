@@ -1409,19 +1409,16 @@
             || (!hasEligibleStvTab() && !options.preserveWithoutStv)) {
             await removeOwnedSlot(slot, { removalReason: "automation_disabled_or_stv_gone" });
           } else {
-            const retainCompletedForDiagnostics = job.status === "completed"
-              && await developerKeepsFailedTabs();
-            slot.state = job.status === "completed" && !retainCompletedForDiagnostics ? "ready" : "spent";
+            slot.state = "spent";
             slot.jobId = "";
-            // A completed request leaves the prepared conversation healthy and
-            // idle. Keep its READY evidence so later chapters can lease the
-            // same tab without another Temporary Chat activation or READY 1/2.
-            // Cancelled/uncertain work remains spent and is retired elsewhere.
-            // Developer retention remains an explicit exception so a completed
-            // conversation can still be inspected without occupying the pool.
-            if (retainCompletedForDiagnostics) {
-              await removeOwnedSlot(slot, { removalReason: "job_completed" });
-              if (warmPool.settings) await fillWarmPool(warmPool.settings, warmPool.settingsHash);
+            if (job.status === "completed") {
+              const recycled = warmPool.settings
+                ? await recycleOwnedSlot(slot, warmPool.settings)
+                : false;
+              if (!recycled) {
+                await removeOwnedSlot(slot, { removalReason: "job_completed" });
+                if (warmPool.settings) await fillWarmPool(warmPool.settings, warmPool.settingsHash);
+              }
             }
             await persistPool();
           }

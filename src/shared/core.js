@@ -374,8 +374,8 @@ Chỉ trả kết quả dịch. Cấm giải thích, chú thích, giải nghĩa 
     return [INTRODUCTION_PROMPT, system];
   }
 
-  const TRANSLATION_BATCH_LIMITS = Object.freeze({ maxChars: 5000, maxBlocks: 30 });
-  const PREFETCH_BATCH_LIMIT = 3;
+  const TRANSLATION_BATCH_LIMITS = Object.freeze({ maxChars: Infinity, maxBlocks: 30 });
+  const PREFETCH_BATCH_LIMIT = 10;
 
   function splitIntoBatches(blocks, options) {
     const maxChars = Math.max(1, Number(options && options.maxChars) || 6000);
