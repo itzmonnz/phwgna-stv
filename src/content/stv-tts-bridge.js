@@ -84,6 +84,8 @@
     let sentenceAnimationFrame = null;
     let smoothFollowActive = false;
     let followMenuOpen = false;
+    let instantListRevealPending = false;
+    let instantListRevealTimer = null;
     let pronunciationReplacer = pronunciation.createReplacer([]);
     const GATE_KEY = "stvai:tts-ai-only";
     const ARM_KEY = "stvai:tts-armed";
@@ -211,6 +213,27 @@
     intercept(root, "speaker", value => { gateMethod(value, "readBook", false, () => false, false, true); return value; });
     function gateTtsUi(value) {
       intercept(value, "updateActiveSentence", method => typeof method !== 'function' ? method : function (...args) {
+        if (instantListRevealPending) {
+          const list = this.overlay?.querySelector('#tts-sentence-list');
+          const active = list?.querySelector(`.tts-sentence-item[data-index="${this.player?.currentSentenceIndex}"]`);
+          const scroller = list?.closest('.tts-sentence-scroller') || list?.parentElement;
+          if (active && scroller) {
+            list.querySelectorAll('.tts-sentence-item').forEach(item => {
+              item.classList.toggle('active', item === active);
+            });
+            const top = Math.max(0, Number(active.offsetTop || 0)
+              - Math.max(0, (Number(scroller.clientHeight || 0) - Number(active.offsetHeight || 0)) / 2));
+            if (typeof scroller.scrollTo === 'function') {
+              scroller.scrollTo({ top, left: Number(scroller.scrollLeft || 0), behavior: 'instant' });
+            } else {
+              scroller.scrollTop = top;
+            }
+            instantListRevealPending = false;
+            if (instantListRevealTimer != null) root.clearTimeout(instantListRevealTimer);
+            instantListRevealTimer = null;
+            return undefined;
+          }
+        }
         if (!owned || !guardedReader || (listFollowTimer == null && !listScrollbarDrag)) return method.apply(this, args);
         // STV combines active-row styling and scrolling in this method. Keep
         // styling current while the user browses, without invoking its scroll.
@@ -759,6 +782,14 @@
     const onHistory = () => { if (chapterChanged()) holdForChapter(); };
     const onOverlayInput = event => {
       if (!event.target?.closest?.('.tts-control-overlay')) return;
+      if (event.type === 'click' && event.target.closest('.tts-minimized-control')) {
+        instantListRevealPending = true;
+        if (instantListRevealTimer != null) root.clearTimeout(instantListRevealTimer);
+        instantListRevealTimer = root.setTimeout(() => {
+          instantListRevealPending = false;
+          instantListRevealTimer = null;
+        }, 1000);
+      }
       overlayInteraction = true;
       root.queueMicrotask(() => { overlayInteraction = false; });
     };
@@ -1059,6 +1090,9 @@
         document.removeEventListener("pointermove", onReadingPointerMove, true);
         document.removeEventListener("pointerup", finishReadingPointer, true);
         document.removeEventListener("pointercancel", finishReadingPointer, true);
+        if (instantListRevealTimer != null) root.clearTimeout(instantListRevealTimer);
+        instantListRevealTimer = null;
+        instantListRevealPending = false;
         root.removeEventListener?.("scroll", extendManualScrollDeferral, true);
         root.removeEventListener?.("blur", finishAllReadingPointers);
         for (const event of ['wheel', 'touchmove', 'keydown', 'pointerdown']) document.removeEventListener(event, onListReadingInput, true);
