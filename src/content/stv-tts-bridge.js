@@ -345,6 +345,14 @@
       scheduleAutoFollow();
     }
 
+    function extendManualScrollDeferral() {
+      // Touch clients can keep scrolling with momentum after the last touchmove.
+      // Only extend an already-manual pause; auto-follow itself clears the timer
+      // before scrolling, so its own scroll events cannot create a feedback loop.
+      if (!owned || !guardedReader?.isConnected || autoFollowTimer == null) return;
+      scheduleAutoFollow();
+    }
+
     function onReadingKey(event) {
       if (event.altKey || event.ctrlKey || event.metaKey || !SCROLL_KEYS.has(event.key)) return;
       deferAutoFollow(event);
@@ -443,6 +451,7 @@
     document.addEventListener("pointermove", onReadingPointerMove, true);
     document.addEventListener("pointerup", finishReadingPointer, true);
     document.addEventListener("pointercancel", finishReadingPointer, true);
+    root.addEventListener?.("scroll", extendManualScrollDeferral, { capture: true, passive: true });
     root.addEventListener?.("blur", finishAllReadingPointers);
     const followMenuObserver = typeof root.MutationObserver === "function"
       ? new root.MutationObserver(syncFollowMenuState)
@@ -1050,6 +1059,7 @@
         document.removeEventListener("pointermove", onReadingPointerMove, true);
         document.removeEventListener("pointerup", finishReadingPointer, true);
         document.removeEventListener("pointercancel", finishReadingPointer, true);
+        root.removeEventListener?.("scroll", extendManualScrollDeferral, true);
         root.removeEventListener?.("blur", finishAllReadingPointers);
         for (const event of ['wheel', 'touchmove', 'keydown', 'pointerdown']) document.removeEventListener(event, onListReadingInput, true);
         if (guardedReader) stopPlayer(true);

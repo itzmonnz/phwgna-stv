@@ -262,6 +262,7 @@
     let previewState = { source: "", hanviet: "", english: "", romaji: "", vietnamese: "" };
     let pendingTap = null;
     let pointerGesture = null;
+    let outsidePointerGesture = null;
     let lastOpened = null;
     let openingNode = null;
     const now = typeof options.now === "function" ? options.now : () => Date.now();
@@ -668,12 +669,44 @@
       if (wasOpen && notify) options.onClose?.();
     }
 
-    function closeFromOutsidePointer(event) {
-      if (root.hidden || root.contains(event.target)) return;
-      close();
+    function outsidePointerDown(event) {
+      if (root.hidden || root.contains(event.target) || (event.button != null && event.button !== 0)) {
+        outsidePointerGesture = null;
+        return;
+      }
+      outsidePointerGesture = {
+        id: event.pointerId ?? "mouse",
+        x: Number(event.clientX) || 0,
+        y: Number(event.clientY) || 0,
+        moved: false
+      };
     }
 
-    document.addEventListener("pointerdown", closeFromOutsidePointer, true);
+    function outsidePointerMove(event) {
+      if (!outsidePointerGesture || outsidePointerGesture.id !== (event.pointerId ?? "mouse")) return;
+      const distance = Math.hypot(
+        (Number(event.clientX) || 0) - outsidePointerGesture.x,
+        (Number(event.clientY) || 0) - outsidePointerGesture.y
+      );
+      if (distance > moveThresholdPx) outsidePointerGesture.moved = true;
+    }
+
+    function outsidePointerFinish(event) {
+      if (!outsidePointerGesture || outsidePointerGesture.id !== (event.pointerId ?? "mouse")) return;
+      const completed = outsidePointerGesture;
+      outsidePointerGesture = null;
+      if (event.type === "pointerup" && !completed.moved && !root.contains(event.target)) close();
+    }
+
+    function outsideTouchMove() {
+      if (outsidePointerGesture) outsidePointerGesture.moved = true;
+    }
+
+    document.addEventListener("pointerdown", outsidePointerDown, true);
+    document.addEventListener("pointermove", outsidePointerMove, true);
+    document.addEventListener("pointerup", outsidePointerFinish, true);
+    document.addEventListener("pointercancel", outsidePointerFinish, true);
+    document.addEventListener("touchmove", outsideTouchMove, { capture: true, passive: true });
 
     function bind(nextReader) {
       if (reader !== (nextReader || null)) close(false);
@@ -825,7 +858,11 @@
       destroy() {
         close(false);
         bind(null);
-        document.removeEventListener("pointerdown", closeFromOutsidePointer, true);
+        document.removeEventListener("pointerdown", outsidePointerDown, true);
+        document.removeEventListener("pointermove", outsidePointerMove, true);
+        document.removeEventListener("pointerup", outsidePointerFinish, true);
+        document.removeEventListener("pointercancel", outsidePointerFinish, true);
+        document.removeEventListener("touchmove", outsideTouchMove, true);
         positionController?.destroy?.();
         root.remove();
       },
