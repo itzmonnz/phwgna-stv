@@ -255,6 +255,46 @@
         itemCount: markerBucket(attachment.itemCount)
       };
     }
+    if (input.chapterFlow && typeof input.chapterFlow === "object") {
+      const flow = input.chapterFlow;
+      const count = (value, max = 10_000) => Number.isFinite(Number(value))
+        ? Math.max(0, Math.min(max, Math.trunc(Number(value)))) : 0;
+      const stages = new Set([
+        "controller_created", "controller_ready", "start_reset", "start_request", "start_response",
+        "batch_received", "batch_attached", "batch_rejected", "render", "replay_request",
+        "replay_response", "job_complete", "controller_destroy"
+      ]);
+      const reasons = new Set([
+        "none", "confirmed", "completed", "running", "paused", "waiting_provider", "cancelled",
+        "source_container_detached", "chapter_url_changed", "chapter_id_changed", "source_block_map_invalid",
+        "source_token_detached", "source_token_changed", "source_context_detached", "source_context_changed",
+        "items_empty", "item_invalid", "item_unknown", "item_duplicate", "items_out_of_order",
+        "item_conflict", "batch_identity_invalid", "block_batch_conflict", "completion_incomplete",
+        "replay_failed", "navigation", "disabled"
+      ]);
+      const indexes = (value, total) => Array.from(new Set((Array.isArray(value) ? value : [])
+        .filter(Number.isInteger)
+        .filter(index => index >= 0 && index < Math.min(100, Math.max(0, total)))
+        .slice(0, 10))).sort((left, right) => left - right);
+      result.chapterFlow = {
+        generation: count(flow.generation, 100_000),
+        events: (Array.isArray(flow.events) ? flow.events.slice(-80) : []).map(event => {
+          const totalBatches = count(event?.totalBatches, 100);
+          return {
+            atMs: count(event?.atMs, 600_000),
+            generation: count(event?.generation, 100_000),
+            stage: stages.has(event?.stage) ? event.stage : "render",
+            blockCount: count(event?.blockCount),
+            totalBatches,
+            cachedIndexes: indexes(event?.cachedIndexes, totalBatches),
+            receivedIndexes: indexes(event?.receivedIndexes, totalBatches),
+            attachedIndexes: indexes(event?.attachedIndexes, totalBatches),
+            visibleIndexes: indexes(event?.visibleIndexes, totalBatches),
+            reason: reasons.has(event?.reason) ? event.reason : "none"
+          };
+        })
+      };
+    }
     if (input.tts && typeof input.tts === "object") {
       const tts = input.tts;
       const safe = (candidate, allowed, fallback) => allowed.includes(candidate) ? candidate : fallback;

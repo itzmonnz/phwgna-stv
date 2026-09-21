@@ -48,6 +48,14 @@
       ?? GEMINI_SETUP_REJECTION_COOLDOWN_MS;
     let poolFillOperation = null;
     let poolReconfigurationSerial = Promise.resolve();
+    let geminiSetupReopenNotBefore = 0;
+    let geminiSetupCooldownOperation = null;
+    let geminiSetupRefillOperation = null;
+
+    function isGeminiSetupRejection(slot) {
+      return slot?.provider === "gemini"
+        && ["send_not_confirmed", "temporary_unavailable"].includes(String(slot?.errorCode || ""));
+    }
 
     function providerUrlFor(provider, temporaryChat) {
       if (provider === "chatgpt" && temporaryChat) {
@@ -505,8 +513,13 @@
       slot.state = "failed";
       slot.errorCode = String(code || "warm_failed");
       slot.failedAt = now();
-      const geminiSessionRejected = slot.provider === "gemini"
-        && ["send_not_confirmed", "temporary_unavailable"].includes(slot.errorCode);
+      const geminiSessionRejected = isGeminiSetupRejection(slot);
+      if (geminiSessionRejected) {
+        geminiSetupReopenNotBefore = Math.max(
+          geminiSetupReopenNotBefore,
+          slot.failedAt + geminiSetupRejectionCooldownMs
+        );
+      }
       slot.errorIncidentKey ||= `setup:${slot.slotId}:${slot.openedAt || slot.failedAt}`;
       await errorJournal?.append?.(slot.errorIncidentKey, {
         kind: "setup_failed",
@@ -538,6 +551,17 @@
           : slot.failedAt + 8_000;
       exposeSlotFailureToPool(slot);
       await persistPool();
+      if (geminiSessionRejected) {
+        const shouldRefill = !slot.suppressAutomaticReplacement
+          && REPLACEABLE_WARM_FAILURES.has(slot.errorCode)
+          && (slot.recoveryAttempts || 0) < MAX_WARM_REPLACEMENTS;
+        await removeOwnedSlot(slot, { errorReason: slot.errorCode, force: true });
+        await notifyPoolStatus();
+        if (shouldRefill) {
+          setTimeout(() => { void refillGeminiPoolAfterSetupRejection(); }, 0);
+        }
+        return;
+      }
       await notifyPoolStatus();
       if (!slot.suppressAutomaticReplacement && REPLACEABLE_WARM_FAILURES.has(slot.errorCode)
         && (slot.recoveryAttempts || 0) < MAX_WARM_REPLACEMENTS) {
@@ -980,6 +1004,26 @@
     }
 
     async function replaceFailedWarmSlot(failedSlot) {
+      if (isGeminiSetupRejection(failedSlot)) {
+        let shouldRefill = false;
+        await withPoolLock(async () => {
+          if (!warmPool.slots.includes(failedSlot)
+            || failedSlot.state !== "failed"
+            || !isGeminiSetupRejection(failedSlot)) return;
+          shouldRefill = Boolean(
+            (failedSlot.recoveryAttempts || 0) < MAX_WARM_REPLACEMENTS
+            && warmPool.settings
+            && hasEligibleStvTab()
+          );
+          await removeOwnedSlot(failedSlot, {
+            errorReason: failedSlot.errorCode,
+            force: true
+          });
+        });
+        await notifyPoolStatus();
+        if (!shouldRefill) return false;
+        return refillGeminiPoolAfterSetupRejection();
+      }
       let replacement = null;
       let settings = null;
       let recycledInPlace = false;
@@ -1027,8 +1071,48 @@
       return replacement.state === "ready";
     }
 
+    async function refillGeminiPoolAfterSetupRejection() {
+      if (geminiSetupRefillOperation) return geminiSetupRefillOperation;
+      const operation = (async () => {
+        await waitForGeminiSetupReopen();
+        const settings = warmPool.settings;
+        const settingsHash = warmPool.settingsHash;
+        if (!settings || !settingsHash || !hasEligibleStvTab()) return false;
+        await fillWarmPool(settings, settingsHash);
+        await notifyPoolStatus();
+        await drainWarmWaiters();
+        return warmPool.slots.some((slot) => slot.state === "ready");
+      })();
+      geminiSetupRefillOperation = operation;
+      try {
+        return await operation;
+      } finally {
+        if (geminiSetupRefillOperation === operation) geminiSetupRefillOperation = null;
+      }
+    }
+
+    async function waitForGeminiSetupReopen() {
+      if (geminiSetupCooldownOperation) return geminiSetupCooldownOperation;
+      const operation = (async () => {
+        while (true) {
+          const remaining = Math.max(0, geminiSetupReopenNotBefore - now());
+          if (!remaining) return;
+          await retrySleep(remaining);
+        }
+      })();
+      geminiSetupCooldownOperation = operation;
+      try {
+        await operation;
+      } finally {
+        if (geminiSetupCooldownOperation === operation) geminiSetupCooldownOperation = null;
+      }
+    }
+
     async function fillWarmPool(settings, settingsHash) {
       if (isAuthenticationBlocker(warmPool.errorCode)) return;
+      if (settings?.provider === "gemini" && geminiSetupReopenNotBefore > now()) {
+        await waitForGeminiSetupReopen();
+      }
       if (poolFillOperation) {
         if (warmPool.slots.some((slot) => slot.state === "ready")) return;
         await Promise.race([poolFillOperation.firstReady, poolFillOperation.all]);

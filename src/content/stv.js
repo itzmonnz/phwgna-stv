@@ -389,6 +389,7 @@
       prefetchRetryWait = waitForPrefetchRetry,
       historyNavigation: navigatedThroughHistory = false,
       sameDocumentNavigation = false,
+      controllerGeneration,
       createJobId = createDefaultJobId
     } = dependencies;
 
@@ -458,6 +459,54 @@
     let poolCaptchaCode = "";
     let originalViewPinned = false;
     const captchaToastMessage = "Dính captcha, xác thực xong ấn dịch lại";
+    const previousFlow = diagnosticState?.chapterFlow && typeof diagnosticState.chapterFlow === "object"
+      ? diagnosticState.chapterFlow : null;
+    const flowGeneration = Number.isInteger(controllerGeneration) && controllerGeneration >= 0
+      ? controllerGeneration : Math.max(0, Number(previousFlow?.generation) || 0) + 1;
+    const flowStartedAt = Number(previousFlow?.startedAt) || Date.now();
+    if (diagnosticState && typeof diagnosticState === "object") {
+      diagnosticState.chapterFlow = {
+        generation: flowGeneration,
+        startedAt: flowStartedAt,
+        events: Array.isArray(previousFlow?.events) ? previousFlow.events.slice(-79) : []
+      };
+    }
+
+    function safeBatchIndexes(value) {
+      return Array.from(new Set((Array.isArray(value) ? value : [])
+        .map(Number).filter(Number.isInteger).filter(index => index >= 0 && index < 100)))
+        .sort((left, right) => left - right).slice(0, 10);
+    }
+
+    function visibleBatchIndexes() {
+      const result = [];
+      for (let index = 0; index < state.totalBatches && state.completedBatchIndexes.has(index); index += 1) {
+        result.push(index);
+      }
+      return result;
+    }
+
+    function traceChapterFlow(stage, patch = {}) {
+      if (!diagnosticState?.chapterFlow) return;
+      const event = {
+        atMs: Math.max(0, Date.now() - flowStartedAt),
+        generation: flowGeneration,
+        stage,
+        blockCount: Math.max(0, Number(chapter?.translatableBlocks?.length) || 0),
+        totalBatches: Math.max(1, Number(state.totalBatches) || 1),
+        cachedIndexes: safeBatchIndexes(patch.cachedIndexes),
+        receivedIndexes: safeBatchIndexes(patch.receivedIndexes),
+        attachedIndexes: safeBatchIndexes(patch.attachedIndexes ?? [...state.completedBatchIndexes]),
+        visibleIndexes: safeBatchIndexes(patch.visibleIndexes ?? visibleBatchIndexes()),
+        reason: typeof patch.reason === "string" ? patch.reason : "none"
+      };
+      diagnosticState.chapterFlow.generation = flowGeneration;
+      diagnosticState.chapterFlow.events.push(event);
+      if (diagnosticState.chapterFlow.events.length > 80) diagnosticState.chapterFlow.events.splice(0,
+        diagnosticState.chapterFlow.events.length - 80);
+    }
+
+    traceChapterFlow("controller_created");
 
     function setCaptchaRetry(reason) {
       captchaRetry = ["captcha", "security_verification"].includes(reason);
@@ -796,6 +845,9 @@
     }
 
     function rejectAttachment(message, evidence) {
+      traceChapterFlow("batch_rejected", {
+        receivedIndexes: [Number(message?.batchIndex)], reason: evidence.reason
+      });
       recordAttachmentEvidence("rejected", evidence.reason, message, message?.items?.length);
       const sourceChanged = [
         "source_token_detached", "source_token_changed",
@@ -1206,11 +1258,13 @@
       state.translationOrigins = Object.create(null);
       state.fallbackCount = 0;
       state.firstBatchReady = false;
+      traceChapterFlow("start_reset", { attachedIndexes: [], visibleIndexes: [] });
       ttsCompleted = false;
       if (state.view === "translation") renderView("translation");
       updateToolbar("Đang chuẩn bị chương…");
       try {
         const startMessage = await buildStartMessage(jobId, manualStart);
+        traceChapterFlow("start_request", { attachedIndexes: [], visibleIndexes: [] });
         if (!active || state.activeJobId !== jobId || state.status === "cancelled") return;
         if (keepListening) {
           if (!state.ttsPending || !ttsSessionId) return;
@@ -1231,6 +1285,11 @@
           reportAction("Áp dụng Bộ Name mới nên phải dịch lại.");
         }
         state.totalBatches = Math.max(1, Number(response.totalBatches) || 1);
+        traceChapterFlow("start_response", {
+          cachedIndexes: Array.isArray(response.cachedBatches)
+            ? response.cachedBatches.map(batch => Number(batch?.batchIndex)) : [],
+          attachedIndexes: [], visibleIndexes: [], reason: String(response.status || "waiting_provider").replaceAll("-", "_")
+        });
         if (response.status !== "completed" && Array.isArray(response.cachedBatches)) {
           for (const cachedBatch of response.cachedBatches) {
             handleMessage({
@@ -1277,9 +1336,15 @@
         .some(index => !state.completedBatchIndexes.has(index))) return;
       const jobId = state.activeJobId;
       batchReplayPending = true;
+      traceChapterFlow("replay_request", { reason: "none" });
       try {
         const response = await sendRuntime(runtime, { type: "STVAI_REPLAY_JOB", jobId });
         if (!active || destroyed || state.activeJobId !== jobId || response?.ok === false) return;
+        traceChapterFlow("replay_response", {
+          cachedIndexes: Array.isArray(response?.cachedBatches)
+            ? response.cachedBatches.map(batch => Number(batch?.batchIndex)) : [],
+          reason: String(response?.status || "running").replaceAll("-", "_")
+        });
         for (const cachedBatch of Array.isArray(response?.cachedBatches) ? response.cachedBatches : []) {
           handleMessage({
             type: "STV_BATCH_COMPLETE",
@@ -1295,6 +1360,7 @@
           handleMessage({ ...response, type: "STV_JOB_COMPLETE", jobId });
         }
       } catch (_error) {
+        traceChapterFlow("replay_response", { reason: "replay_failed" });
         // The live job continues normally; a later out-of-order batch can retry.
       } finally {
         batchReplayPending = false;
@@ -1508,6 +1574,7 @@
       if (["cancelled", "completed"].includes(state.status)) return false;
 
       if (MESSAGE_TYPES.batch.has(message.type)) {
+        traceChapterFlow("batch_received", { receivedIndexes: [Number(message.batchIndex)] });
         const attachment = validateTranslationItems(message);
         if (!attachment.ok) return rejectAttachment(message, attachment);
         const merged = mergeItems(message.items);
@@ -1535,6 +1602,9 @@
           ? "Đã có phần sau — đang chờ phần đầu chương…"
           : `Đã dịch ${state.completedBatches}/${state.totalBatches} batch`);
         recordAttachmentEvidence("attached", "confirmed", message, message.items.length);
+        traceChapterFlow("batch_attached", {
+          receivedIndexes: [completedIndex], reason: "confirmed"
+        });
         resumeListeningAfterBatch();
         void reconcileMissingBatches();
         return true;
@@ -1613,6 +1683,7 @@
           ? `Có ${state.fallbackCount} câu dùng Convert — chương này không được lưu cache`
           : message.cached ? "Đã tải bản dịch từ bộ nhớ đệm." : "Đã dịch xong chương.");
         recordAttachmentEvidence("attached", "confirmed", message, message.items?.length);
+        traceChapterFlow("job_complete", { reason: "completed" });
         resumeListeningAfterBatch();
         enqueue(() => prefetchNextChapter());
         return true;
@@ -1631,6 +1702,7 @@
       try {
         chapter = extractor.extractChapter(document);
         if (prefetch?.prepareChapter) chapter = prefetch.prepareChapter(chapter);
+        traceChapterFlow("controller_ready");
         nativeSync = createNativeSyncForChapter();
         removeNativeListenGestureGuard = installNativeListenGestureGuard();
       } catch (error) {
@@ -1970,6 +2042,7 @@
 
     function destroy({ navigation = false } = {}) {
       if (destroyed) return;
+      traceChapterFlow("controller_destroy", { reason: navigation ? "navigation" : "disabled" });
       destroyed = true;
       void stopPrefetch();
       active = false;
@@ -2144,6 +2217,7 @@
           if (!controller?.active) {
             activation = new AbortController();
             const result = await activate({ signal: activation.signal,
+              controllerGeneration: expected,
               historyNavigation: Boolean(historyNavigationUrl && historyNavigationUrl === window?.location.href),
               sameDocumentNavigation: activationIsSameDocument });
             if (disposed || !enabled || expected !== generation) {
