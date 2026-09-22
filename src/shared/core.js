@@ -135,7 +135,7 @@ Chỉ trả kết quả dịch. Cấm giải thích, chú thích, giải nghĩa 
     "streamimg=sờ trym ming", "style=sờ tai", "test=tét", "tiktok=tít tót",
     "vi=vy", "x=ích", "xi=xy"
   ].join("\n");
-  const SETTINGS_DEFAULTS_VERSION = 1;
+  const SETTINGS_DEFAULTS_VERSION = 2;
   const LEGACY_SHORT_SYSTEM_PROMPT = [
     "Bạn là biên dịch viên tiểu thuyết chuyên nghiệp.",
     "Dịch từ {{sourcelanguage}} sang {{targetlanguage}}, giữ ý nghĩa, giọng văn và cách xưng hô nhất quán.",
@@ -150,6 +150,16 @@ Chỉ trả kết quả dịch. Cấm giải thích, chú thích, giải nghĩa 
     "- Không thêm kiểu đánh số ngoài nhãn kỹ thuật do công cụ yêu cầu; không Markdown, không JSON, không giải thích, chú thích hoặc giải nghĩa.",
     "- Không đánh số, không Markdown, không JSON, không giải thích, chú thích hoặc giải nghĩa."
   );
+  // The 0.2.8 packaged bundle carried this older built-in prompt.  Chrome
+  // keeps extension storage across uninstall/reinstall, so identify only that
+  // exact shape during migration; never replace an arbitrary custom prompt.
+  const LEGACY_PACKAGED_SYSTEM_PROMPT_LENGTH = 3249;
+  function isLegacyPackagedSystemPrompt(value) {
+    return typeof value === "string"
+      && value.length === LEGACY_PACKAGED_SYSTEM_PROMPT_LENGTH
+      && value.startsWith("VAI TRÒ\n\nBạn là dịch giả chuyên dịch tiểu thuyết Trung Quốc sang tiếng Việt.")
+      && value.endsWith("Không tự ý thêm ngoặc chứa nghĩa hoặc tên thay thế.");
+  }
 
   const DEFAULT_SETTINGS = Object.freeze({
     provider: "gemini",
@@ -195,7 +205,9 @@ Chỉ trả kết quả dịch. Cấm giải thích, chú thích, giải nghĩa 
     if (!Object.hasOwn(settings, "webAiTabCount") || Number(settings.webAiTabCount) === 2) {
       settings.webAiTabCount = DEFAULT_SETTINGS.webAiTabCount;
     }
-    if (!systemPrompt || legacySystemPrompts.has(systemPrompt)) settings.systemPrompt = DEFAULT_SYSTEM_PROMPT;
+    if (!systemPrompt || legacySystemPrompts.has(systemPrompt) || isLegacyPackagedSystemPrompt(systemPrompt)) {
+      settings.systemPrompt = DEFAULT_SYSTEM_PROMPT;
+    }
     if (!userPrompt || userPrompt === LEGACY_SHORT_USER_PROMPT) settings.userPrompt = DEFAULT_USER_PROMPT;
     settings.settingsDefaultsVersion = SETTINGS_DEFAULTS_VERSION;
     return { settings, version: SETTINGS_DEFAULTS_VERSION, changed: true };

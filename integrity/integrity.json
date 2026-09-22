@@ -75,11 +75,11 @@
     },
     {
       "path": "options/options.html",
-      "sha256": "3e8959a160b0d24d63c9bb73b42dd30c5c47b49a79641df6092fe75e6fe610ca"
+      "sha256": "2b46e8fe78cafbb4b6eb99fef798e377433331d86ba8ab9e7f9317e7b4a11866"
     },
     {
       "path": "options/options.js",
-      "sha256": "6c3c4028b1b8496f82d3957ebef064b2c8a9acb59c93c5b01ef88a3c07536bec"
+      "sha256": "d237d6d720e7ee325f12f5ae08fd21d5a870bbb0084f0d5dd5adb3920e1ffcad"
     },
     {
       "path": "popup/popup.css",
@@ -115,7 +115,7 @@
     },
     {
       "path": "src/background/controller.js",
-      "sha256": "e78bf2ba8c0cb1466828562a8fec7ddd3eceb36d63978844ab1cda6fa6316c0f"
+      "sha256": "7d1820b07976a8336ddf7bd15ff506aaf08580c62fbc57e3c9cf91d54ad6bd81"
     },
     {
       "path": "src/background/message-router.js",
@@ -171,7 +171,7 @@
     },
     {
       "path": "src/content/stv-extractor.js",
-      "sha256": "39e4f8cd5b476cb499173248d5ea8087bd818d4d82d21fd67ef029508e344761"
+      "sha256": "bffafde21726bb1da27f909b79a4477c5a068563fd7d2421a9f3ddf2bd469ad4"
     },
     {
       "path": "src/content/stv-history.js",
@@ -195,7 +195,7 @@
     },
     {
       "path": "src/content/stv-prefetch.js",
-      "sha256": "5f89c7a16218f141f06d631e42d8c06fa1ff64c8560fa5a0c9201c12bcb73d76"
+      "sha256": "8bc14e502e19ef6137c1523be99bdde3447951b2263619e075d68467eb3e3bd0"
     },
     {
       "path": "src/content/stv-site-navigation.js",
@@ -219,7 +219,7 @@
     },
     {
       "path": "src/content/stv.js",
-      "sha256": "adcf1efa4eaebe05cfafe6a7b93e2d16ef32f37802c6f3d2645dca7c1da64e2f"
+      "sha256": "df5b350dc7dc2e2f65bb3dd8895dafafa9c954b8bf4634dd7d4a37fece673506"
     },
     {
       "path": "src/shared/account-history-sync.js",
@@ -239,7 +239,7 @@
     },
     {
       "path": "src/shared/core.js",
-      "sha256": "821d9266e086889d2e85e81434b75f99090e15bb4e87d7c6481e5c3aaeceb26a"
+      "sha256": "e4e80fd98c1dfb4f0b5aff4b0240999640ebf997e3af960281baba19683c2638"
     },
     {
       "path": "src/shared/data-backup.js",
@@ -327,7 +327,7 @@
     }
   ],
   "product": "Phwgna Stv",
-  "sourceCommit": "7059f5b93e9622eec5b96da1ea6405cd966d36d4",
+  "sourceCommit": "3e42aa6025655b3af14798cec7efd27318f9ed15",
   "officialRepository": "https://github.com/itzmonnz/phwgna-stv",
   "officialReleaseUrl": "https://github.com/itzmonnz/phwgna-stv/releases/tag/v0.2.8",
   "publicKeyFingerprint": "85ac74c199d0a6028bce843d6f68d7632317912b460aad1a7431193767ec9871"

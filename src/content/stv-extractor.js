@@ -527,6 +527,15 @@
         mergeContext(pendingReferenceItems, "\n", element);
         return;
       }
+      // Fanqie's readchapter response keeps story paragraphs in <p> tags,
+      // while STV's live reader renders the same boundaries as <br><br>.
+      // Preserve that boundary before hashing and splitting either source.
+      if (tagName === "P") {
+        if (started) mergeContext(pendingReferenceItems, "\n\n");
+        for (const child of element.childNodes) visit(child);
+        if (started) mergeContext(pendingReferenceItems, "\n\n");
+        return;
+      }
       if (
         element.matches(
           "a, img, picture, video, audio, svg, canvas, iframe, button, "

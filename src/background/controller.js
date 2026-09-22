@@ -2077,6 +2077,11 @@
         && !Object.hasOwn(changes, "toolEnabled")
         && !Object.hasOwn(changes, DEVELOPER_KEEP_TABS_KEY)) return;
       await restorePoolMetadata();
+      if (Object.hasOwn(changes, "settings")) {
+        await Promise.all(Array.from(warmPool.stvTabs.keys(), (tabId) => sendToTab(tabId, {
+          type: "STVAI_SETTINGS_CHANGED"
+        })));
+      }
       if (changes[DEVELOPER_KEEP_TABS_KEY]?.newValue !== true) {
         await withPoolLock(async () => {
           for (const entry of [...warmPool.diagnosticTabs]) await removeDiagnosticTab(entry);

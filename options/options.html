@@ -230,8 +230,11 @@
           <div class="data-actions">
             <button class="button button--secondary" id="importButton" type="button">Nhập tệp sao lưu</button>
             <button class="button button--secondary" id="exportButton" type="button">Xuất JSON</button>
+            <button class="button button--secondary" id="importPromptNameButton" type="button">Nhập Prompt + Name + Phát âm</button>
+            <button class="button button--secondary" id="exportPromptNameButton" type="button">Xuất Prompt + Name + Phát âm</button>
             <button class="button button--ghost" id="restoreImportButton" type="button" hidden>Hoàn tác lần nhập gần nhất</button>
             <input id="importFile" class="visually-hidden" type="file" accept="application/json,text/plain,.json,.txt" aria-label="Chọn tệp sao lưu của tool hoặc STV">
+            <input id="importPromptNameFile" class="visually-hidden" type="file" accept="application/json,.json,.txt" aria-label="Chọn tệp Prompt, Bộ Name và Bộ phát âm">
           </div>
           <div class="import-preview" id="importPreview" role="dialog" aria-modal="true" aria-labelledby="importPreviewTitle" hidden>
             <h3 id="importPreviewTitle">Xác nhận nhập dữ liệu</h3>

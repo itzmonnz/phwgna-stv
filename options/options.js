@@ -61,6 +61,34 @@
     "ttsPronunciationGuide"
   ]);
   const MAX_IMPORT_BYTES = 5 * 1024 * 1024;
+  const PROMPT_NAME_FORMAT = "phwgna-stv-prompts-name";
+
+  function createPromptNamePayload(settings) {
+    const safe = sanitizeSettings(settings);
+    return { format: PROMPT_NAME_FORMAT, version: 1, generatedAt: Date.now(),
+      systemPrompt: safe.systemPrompt, userPrompt: safe.userPrompt, nameGuide: safe.nameGuide,
+      ttsPronunciationGuide: safe.ttsPronunciationGuide };
+  }
+
+  function parsePromptNameImport(text) {
+    let payload;
+    try { payload = JSON.parse(text); } catch (_) { throw new Error("Tệp Prompt không phải JSON hợp lệ."); }
+    if (!payload || payload.format !== PROMPT_NAME_FORMAT || payload.version !== 1) {
+      throw new Error("Tệp không đúng định dạng Prompt + Bộ Name.");
+    }
+    for (const key of ["systemPrompt", "userPrompt", "nameGuide"]) {
+      if (typeof payload[key] !== "string") throw new Error(`Tệp thiếu ${key} hợp lệ.`);
+    }
+    const result = { systemPrompt: payload.systemPrompt, userPrompt: payload.userPrompt,
+      nameGuide: core?.normalizeNameGuide ? core.normalizeNameGuide(payload.nameGuide) : payload.nameGuide };
+    if (Object.hasOwn(payload, "ttsPronunciationGuide")) {
+      if (typeof payload.ttsPronunciationGuide !== "string" || payload.ttsPronunciationGuide.length > 20_000) {
+        throw new Error("Tệp chứa bộ phát âm không hợp lệ.");
+      }
+      result.ttsPronunciationGuide = payload.ttsPronunciationGuide;
+    }
+    return result;
+  }
 
   function normalizeUiScale(value) {
     const number = Number(value);
@@ -717,6 +745,26 @@
     async function importText(text) {
       let payload;
       try { payload = JSON.parse(text); } catch (_) { payload = null; }
+      if (payload?.format === PROMPT_NAME_FORMAT) {
+        const imported = parsePromptNameImport(text);
+        const current = sanitizeSettings(await storageGet(chromeApi));
+        const currentUi = await readUi();
+        const rollback = dataBackup.createPayload({
+          settings: current, ui: currentUi,
+          history: await storageGet(chromeApi, HISTORY_KEY) || await storageGet(chromeApi, LEGACY_HISTORY_KEY),
+          portable: await storageGet(chromeApi, PORTABLE_KEY)
+        });
+        rollback.missingUiKeys = UI_BACKUP_KEYS.filter(key => !Object.hasOwn(currentUi, key));
+        const settings = sanitizeSettings({ ...current, ...imported });
+        await storageWrite(chromeApi, { [ROLLBACK_KEY]: rollback, [STORAGE_KEY]: copySettings(settings) });
+        draftSettings = settings;
+        formBaseline = copySettings(settings);
+        currentProvider = settings.provider;
+        writeForm(document, settings);
+        updateProviderPanel();
+        setStatus(document, "Đã nhập Prompt và Bộ Name.", "success");
+        return settings;
+      }
       if (payload?.format === dataBackup?.FORMAT) {
         const validated = dataBackup.validatePayload(payload, { sanitizeSettings, history, portable });
         if (!validated.ok) throw new Error(`Tệp sao lưu không hợp lệ (${validated.code}).`);
@@ -806,6 +854,12 @@
         const nativeNameCount = Object.values(validated.portable.items || {}).filter(item => item.category === "nativeNames").length;
         const nativePreferenceCount = Object.values(validated.portable.items || {}).filter(item => item.category === "nativePreferences").length;
         summary = `${date}: cài đặt tool, ${shelfCount} mục lịch sử, ${nativeNameCount} Bộ Name STV và ${nativePreferenceCount} cài đặt STV.`;
+      } else if (payload?.format === PROMPT_NAME_FORMAT) {
+        const imported = parsePromptNameImport(text);
+        const nameCount = imported.nameGuide.split("\\n").filter(Boolean).length;
+        const pronunciationCount = typeof imported.ttsPronunciationGuide === "string"
+          ? imported.ttsPronunciationGuide.split("\\n").filter(Boolean).length : 0;
+        summary = `Tệp Prompt + Bộ Name: system prompt ${imported.systemPrompt.length} ký tự, user prompt ${imported.userPrompt.length} ký tự, ${nameCount} dòng Name và ${pronunciationCount} dòng phát âm.`;
       } else if (payload?.name && typeof payload.name === 'object' && !Array.isArray(payload.name)) {
         const validated = dataBackup.validateStvExport(payload, {
           history, portable, origins: defaultSites.ORIGINS
@@ -873,6 +927,14 @@
       const text = `${JSON.stringify(payload, null, 2)}\n`;
       downloadText(text, document, "phwgna-stv-backup.json");
       setStatus(document, "Đã xuất tệp sao lưu dữ liệu.", "success");
+      return payload;
+    }
+
+    async function exportPromptNameData() {
+      captureApiFields();
+      const payload = createPromptNamePayload(readForm(document, draftSettings));
+      downloadText(`${JSON.stringify(payload, null, 2)}\n`, document, "phwgna-stv-prompts-name.json");
+      setStatus(document, "Đã xuất Prompt, Bộ Name và Bộ phát âm.", "success");
       return payload;
     }
 
@@ -946,6 +1008,21 @@
     document.getElementById("exportButton").addEventListener("click", () => {
       void exportData().catch(error => setStatus(document, error.message, "error"));
     });
+    document.getElementById("exportPromptNameButton").addEventListener("click", () => {
+      void exportPromptNameData().catch(error => setStatus(document, error.message, "error"));
+    });
+    const promptNameInput = document.getElementById("importPromptNameFile");
+    document.getElementById("importPromptNameButton").addEventListener("click", () => promptNameInput.click());
+    promptNameInput.addEventListener("change", async () => {
+      const file = promptNameInput.files?.[0];
+      if (!file) return;
+      try {
+        validateImportFile(file);
+        previewImportText(await readFileText(file));
+      } catch (error) {
+        setStatus(document, error instanceof Error ? error.message : "Không thể nhập Prompt và Bộ Name.", "error");
+      } finally { promptNameInput.value = ""; }
+    });
     legacyHistoryStart?.addEventListener("click", () => {
       if (!legacyHistoryAccount.value) return;
       legacyHistorySummary.textContent = "Toàn bộ lịch sử cũ sẽ được nhập vào tài khoản đã chọn. Dữ liệu lưu trữ cũ vẫn được giữ lại.";
@@ -981,7 +1058,7 @@
     });
 
     void refreshLegacyHistory();
-    return Object.freeze({ save, reset, importText, previewImportText, confirmImport, restoreLastImport, exportData, testApi,
+    return Object.freeze({ save, reset, importText, previewImportText, confirmImport, restoreLastImport, exportData, exportPromptNameData, testApi,
       refreshLegacyHistory });
   }
 
@@ -991,6 +1068,8 @@
     sanitizeSettings,
     parseImportText,
     createExportPayload,
+    createPromptNamePayload,
+    parsePromptNameImport,
     validateImportFile,
     renderSupportedSites,
     initOptions

@@ -1979,6 +1979,17 @@
         });
       });
       messageListener = (message) => {
+        if (message?.type === "STVAI_SETTINGS_CHANGED") {
+          void refreshControllerSettings(storage, core, settings).then(({ settings: next, changed }) => {
+            if (!active || !changed) return;
+            settings = next;
+            nameManagerInstance?.setNameGuide?.(settings.nameGuide);
+            if (["running", "waiting-provider"].includes(state.status)) {
+              reportAction("Đã nhận cài đặt mới; sẽ áp dụng cho lượt dịch tiếp theo.");
+            }
+          }).catch(() => undefined);
+          return false;
+        }
         handleMessage(message);
         return false;
       };
@@ -2141,6 +2152,15 @@
       const root = readyRoot();
       if (root) scheduleReady(root);
     });
+  }
+
+  async function refreshControllerSettings(storage, core, currentSettings) {
+    const stored = await storageGet(storage, ["settings"]);
+    const next = sanitizedSettings(core, stored.settings || currentSettings);
+    return {
+      settings: next,
+      changed: core.stableSettingsPayload(next) !== core.stableSettingsPayload(currentSettings)
+    };
   }
 
   async function bootstrap(dependencies) {

@@ -198,6 +198,10 @@
       otherRootCount: markerBucket(otherChapterRoots.filter(node => node !== root).length)
     } });
     if (!root) {
+      const pageNotice = String(document.body?.textContent || "").replace(/\s+/g, " ").trim();
+      if (/hiện không thể tải chương|không thể tải chương/i.test(pageNotice)) {
+        throw new Error('next_chapter_end');
+      }
       if (otherChapterRoots.length) throw new Error('next_chapter_identity_mismatch');
       const container = document.querySelector('#content-container') || document.createElement('div');
       if (!container.isConnected) {
@@ -245,6 +249,40 @@
         trace?.update({ endpoint: { payloadCodeOk, payloadIdentityMatch } });
         if (payloadHasIdentity && !payloadIdentityMatch) {
           throw new Error('next_chapter_identity_mismatch');
+        }
+        // STV's reader normally asks readchapter with a GET query.  Keep the
+        // POST probe for installations that prepare the source through it,
+        // but do not mistake an empty POST response for a missing chapter:
+        // some STV hosts only return the source on the native GET transport.
+        if (payloadSourceEmpty && attempt === 0) {
+          let getResponse;
+          try {
+            getResponse = await options.request(endpoint.href, {
+              ...fetchOptions,
+              method: 'GET',
+              body: undefined,
+              headers: undefined
+            });
+          } catch (_) {
+            if (signal.aborted) throw prefetchError('next_chapter_cancelled');
+          }
+          trace?.update({ endpoint: { getFallbackAttempted: true,
+            getFallbackResponseClass: responseClass(getResponse?.status, getResponse?.ok) } });
+          if (getResponse?.ok && (!getResponse.url || getResponse.url === endpoint.href)) {
+            const getParsed = parseReadChapterPayload(await getResponse.text());
+            const getPayload = getParsed.payload;
+            const getIdentityMatch = String(getPayload?.bookid) === bookId && getPayload?.bookhost === host;
+            const getHasIdentity = getPayload?.bookid != null || getPayload?.bookhost != null;
+            const getCodeOk = [0, '0'].includes(getPayload?.code) && typeof getPayload.data === 'string' && Boolean(getPayload.data.trim());
+            trace?.update({ endpoint: { getFallbackJsonValid: Boolean(getPayload),
+              getFallbackEnvelope: getParsed.envelope, getFallbackIdentityMatch: getIdentityMatch,
+              getFallbackPayloadCodeOk: getCodeOk, getFallbackDataBytesBucket: bytesBucket(getPayload?.data) } });
+            if (getHasIdentity && !getIdentityMatch) throw new Error('next_chapter_identity_mismatch');
+            if (getCodeOk) {
+              payload = getPayload;
+              break;
+            }
+          }
         }
         if (payloadCodeOk) {
           if (!payloadIdentityMatch) throw new Error('next_chapter_identity_mismatch');
