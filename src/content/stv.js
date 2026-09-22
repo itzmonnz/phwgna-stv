@@ -2120,6 +2120,8 @@
     return new Promise((resolve) => {
       let settleTimer = null;
       let candidateRoot = null;
+      let stableReads = 0;
+      const requiredStableReads = 3;
       const finish = value => {
         clearTimeout(timeout);
         clearTimeout(settleTimer);
@@ -2128,16 +2130,29 @@
         resolve(value);
       };
       const aborted = () => finish(false);
+      const checkStable = () => {
+        const root = readyRoot();
+        if (!root || root !== candidateRoot) {
+          candidateRoot = root;
+          stableReads = 0;
+        } else {
+          stableReads += 1;
+          if (stableReads >= requiredStableReads) return finish(true);
+        }
+        if (root) settleTimer = setTimeout(checkStable, settleMs);
+      };
       const scheduleReady = root => {
         candidateRoot = root;
+        stableReads = 0;
         clearTimeout(settleTimer);
-        settleTimer = setTimeout(() => finish(Boolean(readyRoot())), settleMs);
+        settleTimer = setTimeout(checkStable, settleMs);
       };
       const timeout = setTimeout(() => finish(Boolean(readyRoot())), timeoutMs);
       const observer = new Observer((records) => {
         const root = readyRoot();
         if (!root) {
           candidateRoot = null;
+          stableReads = 0;
           clearTimeout(settleTimer);
           settleTimer = null;
           return;
