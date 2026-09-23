@@ -1652,6 +1652,10 @@
             updateToolbar(`Batch ${batchNumber}: ${counts}đang thử lại nguyên batch…`);
           } else if (message.reason === 'rechecking_response') {
             updateToolbar(`Batch ${batchNumber}: đang kiểm tra phản hồi đến muộn đúng mã yêu cầu…`);
+          } else if (message.reason === 'rechecking_send') {
+            updateToolbar(`Gemini chưa nhận prompt — đang thử lại ${Math.max(1, Number(message.retryAttempt) || 1)}/15…`);
+          } else if (message.reason === 'recovering_temporary_chat') {
+            updateToolbar("Gemini bị thoát Temporary Chat — đang mở lại trên tab hiện tại…");
           } else if (message.reason === 'switching_ready_batch') {
             updateToolbar(`Batch ${batchNumber} vẫn lỗi — chuyển sang tab READY…`);
           } else if (message.reason === 'waiting_provider_busy') {

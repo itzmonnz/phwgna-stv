@@ -19,7 +19,7 @@
       ensureWarmPool, exposeSlotFailureToPool, fillWarmPool, findPoolSlotByTab,
       hasEligibleStvTab, hasPrefetchParent, isStvUrl, markWarmSlotFailed,
       markWarmSlotRecovered, notifyPoolStatus, openProvider, persistPool,
-      prepareWarmSlot, providerTabMatches, readySendTimeoutFor, readyTimeoutFor,
+      prepareWarmSlot, restartLeasedGeminiSlot, providerTabMatches, readySendTimeoutFor, readyTimeoutFor,
       registerStvTab, releaseChatGPTSetupPerformanceLease, rememberPrefetchParent,
       removeOwnedSlot, recycleOwnedSlot, requestedPurposePriorities, resolveStvSenderChapter,
       restoreJobs, restorePoolMetadata, sendProviderMessage, spendJobSlot,
@@ -796,6 +796,11 @@
         }
         if (reason === "temporary_unavailable" && job.provider === "gemini"
           && job.settings?.temporaryChat !== false) {
+          if ((job.sendNotConfirmedAttempts || 0) >= GEMINI_SEND_NOT_CONFIRMED_RETRIES) {
+            return pause(job, "temporary_unavailable");
+          }
+          job.sendNotConfirmedAttempts = (job.sendNotConfirmedAttempts || 0) + 1;
+          await persistJob(job);
           return recoverLostGeminiTemporaryChat(job);
         }
         if (reason === "send_not_confirmed" && ["gemini", "chatgpt"].includes(job.provider)
@@ -922,6 +927,23 @@
         jobId: job.id,
         requestId: job.activeRequestId
       });
+
+      if (slot && typeof restartLeasedGeminiSlot === "function") {
+        const restarted = await restartLeasedGeminiSlot(slot, job.settings, {
+          timeoutMs: warmTemporaryTimeoutMs
+        });
+        if (restarted && job.status === "running" && job.poolSlotId === slot.slotId) {
+          job.providerTabId = slot.providerTabId;
+          job.warmSessionId = slot.warmSessionId;
+          job.settingsHash = slot.settingsHash;
+          job.unsentRequestId = /^batch_\d+_\d{4}$/.test(requestId || "") ? requestId : "";
+          job.activeRequestId = "";
+          job.batchAttempts = Math.max(0, (job.batchAttempts || 0) - 1);
+          resetStable(job);
+          await persistJob(job);
+          return dispatchCurrent(job);
+        }
+      }
 
       let closed = false;
       if (slot) {

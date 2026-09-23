@@ -32,6 +32,7 @@
     MIN_POOL_TABS, MAX_POOL_TABS, READY_TIMEOUT_MS, CHATGPT_READY_TIMEOUT_MS,
     READY_SEND_TIMEOUT_MS, CHATGPT_READY_SEND_TIMEOUT_MS, CHATGPT_SETUP_INACTIVITY_MS,
     CHATGPT_SETUP_HARD_TIMEOUT_MS, READY_MARKER_GRACE_MS, MAX_WARM_REPLACEMENTS,
+    GEMINI_SEND_NOT_CONFIRMED_RETRIES,
     PERFORMANCE_HEARTBEAT_MS, JOB_RECORD_VERSION, POOL_RECORD_VERSION,
     OWNED_TABS_RECORD_VERSION, DOM_PROFILE_RECORD_VERSION, AUTHENTICATION_BLOCKERS,
     REPLACEABLE_WARM_FAILURES, sanitizeDomProfileStore, isAuthenticationBlocker,
@@ -1073,6 +1074,9 @@
       };
       if (reason) message.reason = reason;
       if (reason === "auto_retry") message.retryAttempt = job.retryAttempts || 0;
+      if (["rechecking_send", "recovering_temporary_chat"].includes(reason)) {
+        message.retryAttempt = job.sendNotConfirmedAttempts || 0;
+      }
       await sendToTab(job.sourceTabId, message);
     }
 
@@ -1264,7 +1268,7 @@
         setupIndex: core.isApiProvider(settings.provider) ? 0 : (restoredPoolSlotId ? core.createSetupMessages({ setupId, jobId: record.id, settings }).length : 0),
         setupAttempts: Math.max(0, Number(record.setupAttempts) || 0),
         retryAttempts: Math.max(0, Number(record.retryAttempts) || 0),
-        sendNotConfirmedAttempts: Math.max(0, Math.min(3, Number(record.sendNotConfirmedAttempts) || 0)),
+        sendNotConfirmedAttempts: Math.max(0, Math.min(GEMINI_SEND_NOT_CONFIRMED_RETRIES, Number(record.sendNotConfirmedAttempts) || 0)),
         automaticRecoveryCycles: Math.max(0, Math.min(1, Number(record.automaticRecoveryCycles) || 0)),
         phase: core.isApiProvider(settings.provider)
           ? (["batch", "repair"].includes(phase) ? phase : "batch")
@@ -1370,7 +1374,7 @@
       verifiedReadySlotByPriority, acquireJapaneseLookupSlot,
       releaseJapaneseLookupSlot, cancelJapaneseLookup, markWarmSlotFailed,
       markWarmSlotRecovered, validateSetupProviderResult, recheckSetupMarker,
-      prepareWarmSlot, createWarmSlot, replaceFailedWarmSlot, fillWarmPool,
+      prepareWarmSlot, restartLeasedGeminiSlot, createWarmSlot, replaceFailedWarmSlot, fillWarmPool,
       ensureWarmPool, performWarmPoolReconfiguration, reconfigureWarmPool,
       cleanupWarmPool, scheduleLastStvCleanup, assignWarmSlot, acquireWarmSlot,
       drainWarmWaiters, spendJobSlot, closeLegacyProviderTab, openProvider
@@ -1386,7 +1390,7 @@
       ensureWarmPool, exposeSlotFailureToPool, fillWarmPool, findPoolSlotByTab,
       hasEligibleStvTab, hasPrefetchParent, isStvUrl, markWarmSlotFailed,
       markWarmSlotRecovered, notifyPoolStatus, openProvider, persistPool,
-      prepareWarmSlot, providerTabMatches, readySendTimeoutFor, readyTimeoutFor,
+      prepareWarmSlot, restartLeasedGeminiSlot, providerTabMatches, readySendTimeoutFor, readyTimeoutFor,
       registerStvTab, releaseChatGPTSetupPerformanceLease, rememberPrefetchParent,
       removeOwnedSlot, recycleOwnedSlot, requestedPurposePriorities, resolveStvSenderChapter,
       restoreJobs, restorePoolMetadata, sendProviderMessage, spendJobSlot,

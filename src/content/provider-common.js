@@ -659,6 +659,20 @@
         }
       }
 
+      if (type === "STVAI_PROVIDER_RESTART_TEMPORARY") {
+        if (defaults.provider !== "gemini" || typeof adapter.restartTemporaryChat !== "function") {
+          return { ok: false, error: { code: "unsupported" } };
+        }
+        try {
+          return await adapter.restartTemporaryChat({
+            signal: activeJob?.controller?.signal,
+            timeoutMs: message.timeoutMs
+          });
+        } catch (error) {
+          return { ok: false, error: serializeError(error) };
+        }
+      }
+
       if (type === "STVAI_PROVIDER_CANCEL" || type === "STV_PROVIDER_CANCEL") {
         if (!activeJob || activeJob.jobId !== message.jobId
           || (message.requestId && message.requestId !== activeJob.requestId)) {
@@ -1212,6 +1226,7 @@
         "STVAI_PROVIDER_READY_RECHECK",
         "STVAI_PROVIDER_SEND",
         "STVAI_PROVIDER_RECOVER_STALE_STOP",
+        "STVAI_PROVIDER_RESTART_TEMPORARY",
         "STVAI_PROVIDER_CANCEL",
         "STV_PROVIDER_SEND",
         "STV_PROVIDER_CANCEL"

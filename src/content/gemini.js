@@ -39,6 +39,14 @@
     "[data-test-id='temp-chat-button-container'] gem-icon-button.temp-chat-on",
     "gem-icon-button.temp-chat-on"
   ];
+  const NEW_CHAT_SELECTORS = [
+    "a[aria-label='Cuộc trò chuyện mới' i]",
+    "a[aria-label='New chat' i]",
+    "button[aria-label='Cuộc trò chuyện mới' i]",
+    "button[aria-label='New chat' i]",
+    "[role='button'][aria-label='Cuộc trò chuyện mới' i]",
+    "[role='button'][aria-label='New chat' i]"
+  ];
 
   function runtimeMessage(chromeApi, message) {
     return new Promise((resolve, reject) => {
@@ -446,6 +454,34 @@
         .map((item) => item.control);
     }
 
+    function findNewChatControl() {
+      const candidates = [];
+      const seen = new Set();
+      const append = (element, score) => {
+        if (!element || seen.has(element) || !common.isVisible(element)
+          || !common.buttonIsEnabled(element)) return;
+        seen.add(element);
+        candidates.push({ element, score });
+      };
+      NEW_CHAT_SELECTORS.forEach((selector, index) => {
+        document.querySelectorAll(selector).forEach(element => append(element, 100 - index));
+      });
+      Array.from(document.querySelectorAll("a, button, [role='button']")).forEach(element => {
+        const label = [
+          element.getAttribute("aria-label"),
+          element.getAttribute("title"),
+          element.textContent,
+          element.getAttribute("href")
+        ].filter(Boolean).join(" ").trim();
+        if (/^(?:cuộc trò chuyện mới|new chat)$/iu.test(label)
+          || /(?:^|\/)app(?:\?|$)/i.test(element.getAttribute("href") || "")
+            && /(?:new|mới|chat|trò chuyện)/iu.test(label)) {
+          append(element, 50);
+        }
+      });
+      return candidates.sort((left, right) => right.score - left.score)[0]?.element || null;
+    }
+
     async function waitForStableTemporary(signal, timeoutMs) {
       let consecutiveReads = 0;
       await common.waitForElement(
@@ -536,6 +572,53 @@
         "temporary_unavailable",
         "Không xác nhận được chế độ trò chuyện tạm thời trên Gemini."
       );
+    }
+
+    async function restartTemporaryChat({ signal, timeoutMs } = {}) {
+      const control = findNewChatControl();
+      if (!control) {
+        throw new common.ProviderError("temporary_unavailable", "Không tìm thấy nút Cuộc trò chuyện mới trên Gemini.");
+      }
+      if (signal?.aborted) throw new common.ProviderError("cancelled", "Tác vụ đã bị hủy.");
+      const sleep = options.sleep || ((duration) => new Promise(resolve => setTimeout(resolve, duration)));
+      const deadline = now() + Math.max(1, Number(timeoutMs ?? options.temporaryTimeoutMs ?? 10_000) || 10_000);
+      const previousComposer = findComposer();
+      const previousChatWindow = document.querySelector("chat-window");
+      const previousTurnCount = document.querySelectorAll("user-query, model-response").length;
+      verifiedTemporaryOnce = false;
+      temporaryMissingSince = null;
+      submittedSetupPrompt = false;
+      lastSubmittedSetupPrompt = "";
+      pendingSubmittedPrompt = "";
+      activeBatchRequestId = "";
+      learnedCurrentDocument = false;
+      verifiedReadySteps.clear();
+      control.focus?.();
+      control.click();
+      await common.waitForElement(
+        () => {
+          if (signal?.aborted) throw new common.ProviderError("cancelled", "Tác vụ đã bị hủy.");
+          const composer = findComposer();
+          if (!composer || now() >= deadline) return null;
+          const chatWindow = document.querySelector("chat-window");
+          const turnCount = document.querySelectorAll("user-query, model-response").length;
+          const newConversationVisible = composer !== previousComposer
+            || chatWindow !== previousChatWindow
+            || turnCount < previousTurnCount
+            || (!temporaryPageIsActive() && !readComposerText(composer));
+          return newConversationVisible ? composer : null;
+        },
+        {
+          timeoutMs: Math.max(1, deadline - now()),
+          intervalMs: options.pollIntervalMs ?? 100,
+          now: options.now,
+          sleep: options.sleep,
+          waitForChange: eventWaiter,
+          signal
+        }
+      );
+      await prepareSession({ temporaryChat: true, signal, timeoutMs: Math.max(1, deadline - now()) });
+      return { ok: true, state: "temporary_ready" };
     }
 
     async function sendPrompt(prompt, sendOptions = {}) {
@@ -902,6 +985,7 @@
       readLatestResponse,
       readResponseState,
       recoverStaleStop,
+      restartTemporaryChat,
       setPerformanceMode,
       waitForResponseChange: eventWaiter,
       sendPrompt

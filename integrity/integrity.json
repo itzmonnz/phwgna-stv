@@ -111,11 +111,11 @@
     },
     {
       "path": "src/background/contracts.js",
-      "sha256": "c8500e08d04cc5ac2cef01dd5a84852878bc9d1aac0faccd7368c063a0d14ce3"
+      "sha256": "eff4c718ad5ab99c13dedea03330b7a37f0777f4657663defdbe9a7eb2cc8796"
     },
     {
       "path": "src/background/controller.js",
-      "sha256": "e46253063d3a4e4237ac38a9e0bb0920070c751cf04b9090054478b00f659b7a"
+      "sha256": "8dad7496c5fe09be45359ccbe2be49da3629ea779ed72aedaa6db65d3538b0d2"
     },
     {
       "path": "src/background/message-router.js",
@@ -123,11 +123,11 @@
     },
     {
       "path": "src/background/provider-pool-service.js",
-      "sha256": "3389d6fc1af6322b788db8c9c21962baac514b03bdb9be37f3da32b239218e78"
+      "sha256": "acfadbe72adab7032ed1db5329212fd60a5d88d5e63be9a203d84402060d5a38"
     },
     {
       "path": "src/background/translation-job-service.js",
-      "sha256": "491ebdb5f5c36aa5bbf7143ff8f796c3a87de6cf53859397cbc1d9d96a78ffc1"
+      "sha256": "a659a068482899222d235becba6ec4abc9e8a9f43c15f6a073a42462d2a09ab2"
     },
     {
       "path": "src/background/tts-session-service.js",
@@ -151,11 +151,11 @@
     },
     {
       "path": "src/content/gemini.js",
-      "sha256": "0e8b9918b2d4c69f2802a61f6084ec1735a61015317e3c020c49a422725130f7"
+      "sha256": "512c8a8befa481f9ae70dd1e2eb2b06bde669760b80fef8637e102c59b3c1396"
     },
     {
       "path": "src/content/provider-common.js",
-      "sha256": "de8dca9223d261c9c2213839dfa39c46156c93a368d9ae18c42d37e1c8a8eb88"
+      "sha256": "eb2ffea75c2daa12b99117ac34f8c49d98733ed4e1b787de5df4359362075020"
     },
     {
       "path": "src/content/provider-diagnostics.js",
@@ -219,7 +219,7 @@
     },
     {
       "path": "src/content/stv.js",
-      "sha256": "c7434b737365a257f93114047b5b37ff63b994b89c9abf119155e34d14eb4c00"
+      "sha256": "9ffafea89ba330538893951aa09262262293c882d5ed7301f354749afd99d6e3"
     },
     {
       "path": "src/shared/account-history-sync.js",
@@ -331,7 +331,7 @@
     }
   ],
   "product": "Phwgna Stv",
-  "sourceCommit": "d7213941fec32342364ae991a0890d27ee0c21f0",
+  "sourceCommit": "b0f4754f4b7f74d628c250f7dd456dd66d8bfbee",
   "officialRepository": "https://github.com/itzmonnz/phwgna-stv",
   "officialReleaseUrl": "https://github.com/itzmonnz/phwgna-stv/releases/tag/v0.2.8",
   "publicKeyFingerprint": "85ac74c199d0a6028bce843d6f68d7632317912b460aad1a7431193767ec9871"

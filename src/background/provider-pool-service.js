@@ -644,7 +644,8 @@
         slot.preparationRequested = true;
         return false;
       }
-      if (!["opening", "restoring"].includes(slot.state)) return false;
+      const rebindLeased = options.rebindLeased === true && slot.state === "leased";
+      if (!["opening", "restoring"].includes(slot.state) && !rebindLeased) return false;
       const generation = slot.documentGeneration || 0;
       const preparationAttemptId = createId("ready-attempt");
       slot.preparationAttemptId = preparationAttemptId;
@@ -653,7 +654,7 @@
         && slot.preparationAttemptId === preparationAttemptId
         && !slot.documentLoading;
       const restoring = slot.state === "restoring";
-      if (!restoring) slot.state = "preparing";
+      if (!restoring && !rebindLeased) slot.state = "preparing";
       if (!(await providerTabMatches(slot.provider, slot.providerTabId, slot.lastKnownUrl))) {
         if (!current()) return false;
         await markWarmSlotFailed(slot, "provider_origin_mismatch");
@@ -940,6 +941,48 @@
       }
       await markWarmSlotRecovered(slot);
       await persistPool();
+      return true;
+    }
+
+    async function restartLeasedGeminiSlot(slot, settings, options = {}) {
+      if (!slot || slot.provider !== "gemini" || slot.state !== "leased"
+        || !Number.isInteger(slot.providerTabId) || !settings) return false;
+      const tabId = slot.providerTabId;
+      let reset;
+      try {
+        reset = await tabs.sendMessage(tabId, {
+          type: "STVAI_PROVIDER_RESTART_TEMPORARY",
+          timeoutMs: options.timeoutMs
+        });
+      } catch (_error) {
+        return false;
+      }
+      if (!reset?.ok || !warmPool.slots.includes(slot)) return false;
+      slot.documentGeneration = (slot.documentGeneration || 0) + 1;
+      slot.documentLoading = false;
+      slot.errorCode = "";
+      slot.warmSessionId = createId("warm");
+      slot.setupId = createId("setup");
+      slot.setupSessionId = createId("setup-session");
+      slot.warmJobId = createId("warm-job");
+      slot.setupCheckpoint = 0;
+      slot.setupState = "idle";
+      slot.setupStage = "idle";
+      slot.setupStageStartedAt = 0;
+      slot.setupLastProgressAt = 0;
+      slot.setupLastFailureProgressAt = 0;
+      slot.setupProgressRevision = 0;
+      slot.setupLastFailureRevision = 0;
+      slot.setupResumeCount = 0;
+      slot.setupServiceWorkerRestarts = 0;
+      slot.setupResumeAttempts = 0;
+      slot.setupErrorCode = "";
+      slot.firstBatchDispatchedAt = 0;
+      slot.preparationRequested = false;
+      slot.preparationPasses = 0;
+      await persistPool();
+      const prepared = await prepareWarmSlot(slot, settings, { rebindLeased: true });
+      if (!prepared || !warmPool.slots.includes(slot) || slot.state !== "leased") return false;
       return true;
     }
 
@@ -1625,7 +1668,7 @@
       verifiedReadySlotByPriority, acquireJapaneseLookupSlot,
       releaseJapaneseLookupSlot, cancelJapaneseLookup, markWarmSlotFailed,
       markWarmSlotRecovered, validateSetupProviderResult, recheckSetupMarker,
-      prepareWarmSlot, createWarmSlot, replaceFailedWarmSlot, fillWarmPool,
+      prepareWarmSlot, restartLeasedGeminiSlot, createWarmSlot, replaceFailedWarmSlot, fillWarmPool,
       ensureWarmPool, performWarmPoolReconfiguration, reconfigureWarmPool,
       cleanupWarmPool, scheduleLastStvCleanup, assignWarmSlot, acquireWarmSlot,
       drainWarmWaiters, spendJobSlot, closeLegacyProviderTab, openProvider
