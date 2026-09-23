@@ -225,13 +225,13 @@
             <div>
               <h2 id="data-title">Sao lưu dữ liệu</h2>
             </div>
-            <p>Nhập bản sao lưu của tool hoặc tệp <code>.txt</code> do STV xuất. Không chứa API key, cookie hay cache dịch.</p>
+            <p>Prompt, Bộ Name và Bộ phát âm được ghi đè vào một tệp <code>phwgna-stv-config.json</code> cố định mỗi khi bấm Lưu. Lần đầu hãy chọn tệp trong thư mục dự án.</p>
           </div>
           <div class="data-actions">
             <button class="button button--secondary" id="importButton" type="button">Nhập tệp sao lưu</button>
             <button class="button button--secondary" id="exportButton" type="button">Xuất JSON</button>
             <button class="button button--secondary" id="importPromptNameButton" type="button">Nhập Prompt + Name + Phát âm</button>
-            <button class="button button--secondary" id="exportPromptNameButton" type="button">Xuất Prompt + Name + Phát âm</button>
+            <button class="button button--secondary" id="exportPromptNameButton" type="button">Chọn/đổi tệp cấu hình</button>
             <button class="button button--ghost" id="restoreImportButton" type="button" hidden>Hoàn tác lần nhập gần nhất</button>
             <input id="importFile" class="visually-hidden" type="file" accept="application/json,text/plain,.json,.txt" aria-label="Chọn tệp sao lưu của tool hoặc STV">
             <input id="importPromptNameFile" class="visually-hidden" type="file" accept="application/json,.json,.txt" aria-label="Chọn tệp Prompt, Bộ Name và Bộ phát âm">
@@ -287,6 +287,7 @@
     <script src="../src/shared/native-history.js"></script>
     <script src="../src/shared/native-portable.js"></script>
     <script src="../src/shared/data-backup.js"></script>
+    <script src="../src/shared/config-file-store.js"></script>
     <script src="../src/shared/official-build.js"></script>
     <script src="options.js"></script>
   </body>

@@ -4,7 +4,8 @@
   const history = root.STVAINativeHistory || (typeof require === "function" ? require("../src/shared/native-history.js") : null);
   const portable = root.STVAINativePortable || (typeof require === "function" ? require("../src/shared/native-portable.js") : null);
   const dataBackup = root.STVAIDataBackup || (typeof require === "function" ? require("../src/shared/data-backup.js") : null);
-  const api = factory(core, root.STVAISites, pronunciation, history, portable, dataBackup);
+  const configFiles = root.STVAIConfigFileStore || (typeof require === "function" ? require("../src/shared/config-file-store.js") : null);
+  const api = factory(core, root.STVAISites, pronunciation, history, portable, dataBackup, configFiles);
   if (typeof module === "object" && module.exports) {
     module.exports = api;
   }
@@ -21,7 +22,7 @@
       });
     });
   }
-})(typeof globalThis !== "undefined" ? globalThis : this, function createOptionsApi(core, defaultSites, pronunciation, history, portable, dataBackup) {
+})(typeof globalThis !== "undefined" ? globalThis : this, function createOptionsApi(core, defaultSites, pronunciation, history, portable, dataBackup, configFiles) {
   "use strict";
 
   const STORAGE_KEY = "settings";
@@ -402,12 +403,14 @@
     return true;
   }
 
-  async function initOptions({ document, chromeApi, downloadText = defaultDownload }) {
+  async function initOptions({ document, chromeApi, downloadText = defaultDownload, configFileStore } = {}) {
     if (!document || !chromeApi?.storage?.local) {
       throw new Error("Không tìm thấy bộ nhớ của tiện ích.");
     }
 
     const form = document.getElementById("settingsForm");
+    const localConfig = configFileStore || configFiles?.createConfigFileStore?.();
+    await localConfig?.prepare?.();
     renderSupportedSites(document);
     const importInput = document.getElementById("importFile");
     const storedSettings = await storageGet(chromeApi);
@@ -705,6 +708,10 @@
           if (formSettings[key] !== formBaseline[key]) mergedSettings[key] = formSettings[key];
         }
         draftSettings = sanitizeSettings(mergedSettings);
+        const configText = `${JSON.stringify(createPromptNamePayload(draftSettings), null, 2)}\n`;
+        const configWrite = localConfig?.write?.(configText)
+          .then(() => ({ ok: true }))
+          .catch(error => ({ ok: false, error }));
         developerKeepAiTabs = document.getElementById("developerKeepAiTabs").checked;
         const payload = {
           [STORAGE_KEY]: copySettings(draftSettings),
@@ -712,11 +719,20 @@
         };
         if (API_PROVIDERS.includes(draftSettings.provider) || Object.keys(credentials).length) payload[CREDENTIALS_KEY] = { ...credentials };
         await storageWrite(chromeApi, payload);
+        const configResult = await configWrite;
         formBaseline = copySettings(draftSettings);
         currentProvider = draftSettings.provider;
         writeForm(document, draftSettings);
         updateProviderPanel();
-        setStatus(document, "Đã lưu cài đặt.", "success");
+        if (configResult?.ok) {
+          setStatus(document, `Đã lưu cài đặt và ghi đè ${configFiles?.CONFIG_FILENAME || "phwgna-stv-config.json"}.`, "success");
+        } else {
+          const cancelled = configResult?.error?.name === "AbortError";
+          setStatus(document, cancelled
+            ? "Đã lưu trong trình duyệt; chưa chọn tệp cấu hình."
+            : `Đã lưu trong trình duyệt; chưa ghi được tệp cấu hình${configResult?.error?.message ? `: ${configResult.error.message}` : "."}`,
+          "warning");
+        }
         return draftSettings;
       } finally {
         saveButton.disabled = false;
@@ -933,8 +949,9 @@
     async function exportPromptNameData() {
       captureApiFields();
       const payload = createPromptNamePayload(readForm(document, draftSettings));
-      downloadText(`${JSON.stringify(payload, null, 2)}\n`, document, "phwgna-stv-prompts-name.json");
-      setStatus(document, "Đã xuất Prompt, Bộ Name và Bộ phát âm.", "success");
+      if (!localConfig?.write) throw new Error("Trình duyệt không hỗ trợ tệp cấu hình cố định.");
+      await localConfig.write(`${JSON.stringify(payload, null, 2)}\n`, { choose: true });
+      setStatus(document, `Đã chọn và ghi đè ${configFiles?.CONFIG_FILENAME || "phwgna-stv-config.json"}.`, "success");
       return payload;
     }
 
