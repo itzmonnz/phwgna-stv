@@ -131,7 +131,7 @@
     },
     {
       "path": "src/background/tts-session-service.js",
-      "sha256": "86687617255cbcbda61d65c8f1ec9793e24e0b81bbb5e7f29002008493078f9b"
+      "sha256": "43f431c9b38b9ca40d944eeee3b45f0029125fcea78548cd7de4e16b378ea6a1"
     },
     {
       "path": "src/content/chatgpt-dom-resolver.js",
@@ -219,7 +219,7 @@
     },
     {
       "path": "src/content/stv.js",
-      "sha256": "33d6b5732e95cbc2b292973e09c085bf1b96426eebdb2f696182d0adabf145bc"
+      "sha256": "c7434b737365a257f93114047b5b37ff63b994b89c9abf119155e34d14eb4c00"
     },
     {
       "path": "src/shared/account-history-sync.js",
@@ -331,7 +331,7 @@
     }
   ],
   "product": "Phwgna Stv",
-  "sourceCommit": "d375fc2f924fb07ced450811a5129b4a11637155",
+  "sourceCommit": "2a91c3801eaaaf7f0c016a136b124c8f5f541eb5",
   "officialRepository": "https://github.com/itzmonnz/phwgna-stv",
   "officialReleaseUrl": "https://github.com/itzmonnz/phwgna-stv/releases/tag/v0.2.8",
   "publicKeyFingerprint": "85ac74c199d0a6028bce843d6f68d7632317912b460aad1a7431193767ec9871"

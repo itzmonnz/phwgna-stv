@@ -579,16 +579,24 @@
     const chapterUrl = location.href;
 
     function nextListeningUrl() {
-      const node = document.querySelector('#navnexttop[href], #navnextbot[href], a[rel="next"][href]');
-      const candidate = node?.getAttribute('href') || prefetch?.findNextChapterUrl?.(document, chapterUrl);
-      try {
-        const url = new URL(candidate, chapterUrl);
-        const current = new URL(chapterUrl);
-        url.hash = '';
-        return candidate && url.origin === current.origin && url.href !== current.href
-          && url.pathname.split('/').slice(0, 5).join('/') === current.pathname.split('/').slice(0, 5).join('/')
-          ? url.href : '';
-      } catch (_error) { return ''; }
+      const candidates = [
+        prefetch?.findNextChapterUrl?.(document, chapterUrl),
+        ...Array.from(document.querySelectorAll('#navnexttop[href], #navnextbot[href], a[rel="next"][href], #btnnextchapter[href]'))
+          .map(node => node.getAttribute('href'))
+      ];
+      const current = new URL(chapterUrl);
+      for (const candidate of candidates) {
+        if (!candidate) continue;
+        try {
+          const url = new URL(candidate, chapterUrl);
+          url.hash = '';
+          if (url.origin === current.origin && url.href !== current.href
+            && url.pathname.split('/').slice(0, 5).join('/') === current.pathname.split('/').slice(0, 5).join('/')) {
+            return url.href;
+          }
+        } catch (_error) { /* Try the next chapter link. */ }
+      }
+      return '';
     }
 
     function enqueue(work) {

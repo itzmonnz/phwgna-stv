@@ -154,7 +154,11 @@
             return { ok: true, claimed: true, state: value.state, sessionId: value.sessionId,
               ...(value.jobId ? { jobId: value.jobId } : {}) };
           }
-          if (message.historyNavigation === true || message.reload === true || chapterUrl(message.url) !== url || session.nextUrl !== url) {
+          const followsUnlinkedChapter = !session.nextUrl && session.intent === true
+            && ["playing", "playing_next", "waiting_next"].includes(session.state)
+            && followingUrl(url, session.currentUrl) === url;
+          if (message.historyNavigation === true || message.reload === true || chapterUrl(message.url) !== url
+            || (session.nextUrl !== url && !followsUnlinkedChapter)) {
             if (session.currentUrl !== url || message.historyNavigation === true || message.reload === true) await storageCall(sessionStorage, "remove", key);
             const holdNative = message.historyNavigation !== true && message.reload !== true
               && session.currentUrl === url;
