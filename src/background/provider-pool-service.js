@@ -430,19 +430,19 @@
         && state.prepared?.settingsHash === slot.settingsHash;
     }
 
-    async function verifiedReadySlot(provider, settingsHash, purpose = "shared") {
+    async function verifiedReadySlot(provider, settingsHash, purpose = "shared", excludedSlotId = "") {
       for (const slot of warmPool.slots.slice()) {
         if (slot.state !== "ready" || slot.provider !== provider || slot.settingsHash !== settingsHash
-          || !slotMatchesPurpose(slot, purpose)) continue;
+          || slot.slotId === excludedSlotId || !slotMatchesPurpose(slot, purpose)) continue;
         if (await verifyPreparedSlot(slot)) return slot;
         await removeOwnedSlot(slot, { errorReason: "warm_evidence_missing" });
       }
       return null;
     }
 
-    async function verifiedReadySlotByPriority(provider, settingsHash, purposes) {
+    async function verifiedReadySlotByPriority(provider, settingsHash, purposes, excludedSlotId = "") {
       for (const purpose of purposes) {
-        const slot = await verifiedReadySlot(provider, settingsHash, purpose);
+        const slot = await verifiedReadySlot(provider, settingsHash, purpose, excludedSlotId);
         if (slot) return slot;
       }
       return null;
@@ -742,7 +742,15 @@
           await persistPool();
           return false;
         }
-        await markWarmSlotFailed(slot, status?.error?.code || status?.state?.code || status?.state?.state || "provider_unavailable");
+        const statusCode = status?.error?.code || status?.state?.code || status?.state?.state || "provider_unavailable";
+        if (options.inPlaceRecovery
+          && ["send_not_confirmed", "temporary_unavailable"].includes(statusCode)) {
+          slot.errorCode = statusCode;
+          slot.state = "opening";
+          await persistPool();
+          return false;
+        }
+        await markWarmSlotFailed(slot, statusCode);
         return false;
       }
 
@@ -884,7 +892,17 @@
               }
             }
             if (response?.ok === false) {
-              await markWarmSlotFailed(slot, response.error?.code || "warm_setup_failed");
+              const responseCode = response.error?.code || "warm_setup_failed";
+              if (options.inPlaceRecovery
+                && ["send_not_confirmed", "temporary_unavailable"].includes(responseCode)) {
+                // Keep the physical tab for the recovery loop. The caller will
+                // open another Temporary Chat and replay READY on this same tab.
+                slot.errorCode = responseCode;
+                slot.state = "opening";
+                await persistPool();
+                return false;
+              }
+              await markWarmSlotFailed(slot, responseCode);
               return false;
             }
             if (response?.outcomeCode === "content_refused") {
@@ -945,45 +963,177 @@
     }
 
     async function restartLeasedGeminiSlot(slot, settings, options = {}) {
-      if (!slot || slot.provider !== "gemini" || slot.state !== "leased"
+      if (!slot || slot.provider !== "gemini" || !["leased", "recovering"].includes(slot.state)
         || !Number.isInteger(slot.providerTabId) || !settings) return false;
       const tabId = slot.providerTabId;
+      const cancelled = () => options.shouldStop?.() === true || slot.recoveryCancelled === true;
+      if (cancelled()) return false;
+      const resetSlotState = async () => {
+        if (cancelled()) return false;
+        slot.documentGeneration = (slot.documentGeneration || 0) + 1;
+        slot.state = "opening";
+        slot.errorCode = "";
+        slot.warmSessionId = createId("warm");
+        slot.setupId = createId("setup");
+        slot.setupSessionId = createId("setup-session");
+        slot.warmJobId = createId("warm-job");
+        slot.setupCheckpoint = 0;
+        slot.setupState = "idle";
+        slot.setupStage = "idle";
+        slot.setupStageStartedAt = 0;
+        slot.setupLastProgressAt = 0;
+        slot.setupLastFailureProgressAt = 0;
+        slot.setupProgressRevision = 0;
+        slot.setupLastFailureRevision = 0;
+        slot.setupResumeCount = 0;
+        slot.setupServiceWorkerRestarts = 0;
+        slot.setupResumeAttempts = 0;
+        slot.setupErrorCode = "";
+        slot.firstBatchDispatchedAt = 0;
+        slot.preparationRequested = false;
+        slot.preparationPasses = 0;
+        await persistPool();
+        return true;
+      };
       let reset;
+      let navigationInterruptedReply = false;
       try {
         reset = await tabs.sendMessage(tabId, {
           type: "STVAI_PROVIDER_RESTART_TEMPORARY",
           timeoutMs: options.timeoutMs
         });
       } catch (_error) {
+        // Gemini's "New chat" control may perform a real document navigation.
+        // The click succeeds, but Chrome then destroys the replying content
+        // script and rejects sendMessage because its port disappeared. Treat
+        // that transport loss as an interrupted acknowledgement and prove the
+        // result by preparing this same physical tab after it reloads.
+        navigationInterruptedReply = true;
+      }
+      if ((!reset?.ok && !navigationInterruptedReply) || !warmPool.slots.includes(slot)
+        || cancelled()) return false;
+      if (!await resetSlotState()) return false;
+
+      // A navigation event and this continuation race each other. Whichever
+      // observes the fresh document first may prepare it; the other side only
+      // waits for the same slot to become READY. Never open a successor merely
+      // because the old content-script reply was disconnected by navigation.
+      const preparationDeadline = now()
+        + Math.max(
+          1_000,
+          Number(options.timeoutMs || warmTemporaryTimeoutMs || 0),
+          (readyTimeoutFor("gemini") * SETUP_PARTS.length) + geminiSetupStepDelayMs + 5_000
+        );
+      const reclaimPreparedLease = async () => {
+        if (!warmPool.slots.includes(slot) || slot.state !== "ready") return false;
+        if (options.inPlaceRecovery) return true;
+        if (!slot.jobId) return false;
+        slot.state = "leased";
+        await persistPool();
+        return true;
+      };
+      while (warmPool.slots.includes(slot) && (options.inPlaceRecovery || now() < preparationDeadline)) {
+        if (cancelled()) return false;
+        if (slot.state === "ready") return reclaimPreparedLease();
+        if (slot.state === "failed" || slot.state === "retiring") return false;
+        if (!slot.documentLoading && slot.state === "opening") {
+          const prepared = await prepareWarmSlot(slot, settings, {
+            deferUnavailable: true,
+            inPlaceRecovery: options.inPlaceRecovery === true
+          });
+          if (cancelled()) return false;
+          if (prepared && warmPool.slots.includes(slot) && slot.state === "ready") {
+            return reclaimPreparedLease();
+          }
+          if (options.inPlaceRecovery
+            && ["send_not_confirmed", "temporary_unavailable"].includes(slot.errorCode)) {
+            // 1095 rejected this chat. Re-open Temporary Chat on the same
+            // physical tab and replay READY without handing the batch back here.
+            let nextReset;
+            try {
+              nextReset = await tabs.sendMessage(tabId, {
+                type: "STVAI_PROVIDER_RESTART_TEMPORARY",
+                timeoutMs: options.timeoutMs
+              });
+            } catch (_error) {
+              nextReset = null;
+            }
+            if (cancelled()) return false;
+            if (!nextReset?.ok) {
+              slot.errorCode = "provider_unreachable";
+              await persistPool();
+              return false;
+            }
+            await retrySleep(Math.max(250, Number(providerReadyDelayMs) || 1_000));
+            // Test doubles may provide a no-op retrySleep; keep the recovery
+            // loop cooperative even when that happens.
+            await new Promise(resolve => setTimeout(resolve, 25));
+            if (!await resetSlotState()) return false;
+            continue;
+          }
+        }
+        if (slot.state === "ready") return reclaimPreparedLease();
+        if (slot.state === "failed" || slot.state === "retiring") return false;
+        await retrySleep(Math.max(25, Math.min(250, Number(providerReadyDelayMs) || 100)));
+      }
+      return reclaimPreparedLease();
+    }
+
+    async function cancelGeminiRecovery(jobId) {
+      const id = String(jobId || "");
+      if (!id) return false;
+      let cancelled = false;
+      for (const slot of warmPool.slots) {
+        if (slot.provider !== "gemini" || slot.recoveryJobId !== id
+          || ["failed", "retiring"].includes(slot.state)) continue;
+        slot.recoveryCancelled = true;
+        slot.errorCode = "recovery_cancelled";
+        cancelled = true;
+      }
+      if (cancelled) await persistPool();
+      return cancelled;
+    }
+
+    async function recoverGeminiSlotInPlace(slot, settings) {
+      if (!slot || slot.provider !== "gemini" || !Number.isInteger(slot.providerTabId)
+        || !settings || !warmPool.slots.includes(slot)) return false;
+      slot.state = "recovering";
+      slot.recoveryCancelled = false;
+      slot.jobId = "";
+      await persistPool();
+      const recovered = await restartLeasedGeminiSlot(slot, settings, {
+        timeoutMs: warmTemporaryTimeoutMs,
+        inPlaceRecovery: true,
+        shouldStop: () => slot.recoveryCancelled === true
+      });
+      if (slot.recoveryCancelled) {
+        if (warmPool.slots.includes(slot)) {
+          slot.state = "failed";
+          slot.errorCode = "recovery_cancelled";
+          slot.recoveryJobId = "";
+          await persistPool();
+        }
         return false;
       }
-      if (!reset?.ok || !warmPool.slots.includes(slot)) return false;
-      slot.documentGeneration = (slot.documentGeneration || 0) + 1;
-      slot.documentLoading = false;
-      slot.errorCode = "";
-      slot.warmSessionId = createId("warm");
-      slot.setupId = createId("setup");
-      slot.setupSessionId = createId("setup-session");
-      slot.warmJobId = createId("warm-job");
-      slot.setupCheckpoint = 0;
-      slot.setupState = "idle";
-      slot.setupStage = "idle";
-      slot.setupStageStartedAt = 0;
-      slot.setupLastProgressAt = 0;
-      slot.setupLastFailureProgressAt = 0;
-      slot.setupProgressRevision = 0;
-      slot.setupLastFailureRevision = 0;
-      slot.setupResumeCount = 0;
-      slot.setupServiceWorkerRestarts = 0;
-      slot.setupResumeAttempts = 0;
-      slot.setupErrorCode = "";
-      slot.firstBatchDispatchedAt = 0;
-      slot.preparationRequested = false;
-      slot.preparationPasses = 0;
-      await persistPool();
-      const prepared = await prepareWarmSlot(slot, settings, { rebindLeased: true });
-      if (!prepared || !warmPool.slots.includes(slot) || slot.state !== "leased") return false;
-      return true;
+      if (recovered && warmPool.slots.includes(slot) && slot.state === "ready") {
+        slot.errorCode = "";
+        slot.jobId = "";
+        slot.recoveryJobId = "";
+        slot.recoveryCancelled = false;
+        await markWarmSlotRecovered(slot);
+        await persistPool();
+        await notifyPoolStatus();
+        await drainWarmWaiters();
+        return true;
+      }
+      if (warmPool.slots.includes(slot)) {
+        slot.state = "failed";
+        slot.errorCode ||= "recovery_blocked";
+        slot.recoveryJobId = "";
+        await persistPool();
+        await notifyPoolStatus();
+      }
+      return false;
     }
 
     async function createWarmSlot(settings, settingsHash, recoveryAttempts = 0, purpose = "shared", createOptions = {}) {
@@ -1427,7 +1577,7 @@
     }
 
     async function acquireWarmSlot(job) {
-      if (job.recoveryStage === "switching_ready") return acquireRecoverySlot(job);
+      if (["switching_ready", "handoff_batch"].includes(job.recoveryStage)) return acquireRecoverySlot(job);
       if (["cancelled", "paused", "completed"].includes(job.status)) return true;
       const config = await readAutomationConfig(job.settings);
       if (!config.consented || !config.enabled) return false;
@@ -1492,7 +1642,8 @@
       // Recovery may lease READY, but cannot rebuild the standby to force a retry.
       for (const jobId of [...warmPool.waiters]) {
         const job = jobs.get(jobId);
-        if (job?.status === "waiting-provider" && job.recoveryStage === "switching_ready") {
+        if (job?.status === "waiting-provider"
+          && ["switching_ready", "handoff_batch"].includes(job.recoveryStage)) {
           await acquireRecoverySlot(job);
         }
       }
@@ -1508,7 +1659,8 @@
           let selected = null;
           const index = warmPool.waiters.findIndex((jobId) => {
             const job = jobs.get(jobId);
-            return job && job.status === "waiting-provider" && job.recoveryStage !== "switching_ready";
+            return job && job.status === "waiting-provider"
+              && !["switching_ready", "handoff_batch"].includes(job.recoveryStage);
           });
           if (index >= 0) {
             const job = jobs.get(warmPool.waiters[index]);
@@ -1556,7 +1708,57 @@
       if (!job?.poolSlotId) return;
       await restorePoolMetadata();
       const automation = await readAutomationConfig(job.settings);
+      const keepCompletedTabsForDiagnostics = await developerKeepsFailedTabs();
       let handoff = null;
+
+      // A healthy Gemini conversation does not need a physical replacement
+      // after every completed chapter/prefetch job. Re-open Temporary chat in
+      // the same tab, replay READY 1/2, then return that tab to the warm pool.
+      // Besides avoiding visible tab churn, this also removes an unnecessary
+      // new-session pressure point that can trigger Gemini's 1095 reset.
+      //
+      // Keep the existing handoff path as the fallback: if the in-place reset
+      // cannot be proven READY, the old slot remains available until a fresh
+      // successor has completed setup.
+      if (job.status === "completed"
+        && job.provider === "gemini"
+        && automation.consented && automation.enabled
+        && !keepCompletedTabsForDiagnostics
+        && (hasEligibleStvTab() || options.preserveWithoutStv)) {
+        const reusable = warmPool.slots.find((candidate) => (
+          candidate.slotId === job.poolSlotId
+          && candidate.state === "leased"
+          && candidate.jobId === job.id
+        ));
+        const settings = warmPool.settings || job.settings;
+        if (reusable && settings?.provider === "gemini") {
+          const restarted = await restartLeasedGeminiSlot(reusable, settings, {
+            timeoutMs: warmTemporaryTimeoutMs
+          });
+          if (restarted) {
+            let released = false;
+            await withPoolLock(async () => {
+              if (!warmPool.slots.includes(reusable)
+                || !["leased", "ready"].includes(reusable.state)
+                || reusable.jobId !== job.id) return;
+              reusable.state = "ready";
+              reusable.jobId = "";
+              reusable.errorCode = "";
+              reusable.handoffPredecessorSlotId = "";
+              reusable.handoffSuccessorSlotId = "";
+              await persistPool();
+              released = true;
+            });
+            if (released) {
+              job.poolSlotId = "";
+              await notifyPoolStatus();
+              if (!options.deferDrain) await drainWarmWaiters();
+              return;
+            }
+          }
+        }
+      }
+
       await withPoolLock(async () => {
         const slot = warmPool.slots.find((candidate) => candidate.slotId === job.poolSlotId);
         if (slot) {
@@ -1668,7 +1870,7 @@
       verifiedReadySlotByPriority, acquireJapaneseLookupSlot,
       releaseJapaneseLookupSlot, cancelJapaneseLookup, markWarmSlotFailed,
       markWarmSlotRecovered, validateSetupProviderResult, recheckSetupMarker,
-      prepareWarmSlot, restartLeasedGeminiSlot, createWarmSlot, replaceFailedWarmSlot, fillWarmPool,
+      prepareWarmSlot, restartLeasedGeminiSlot, recoverGeminiSlotInPlace, cancelGeminiRecovery, createWarmSlot, replaceFailedWarmSlot, fillWarmPool,
       ensureWarmPool, performWarmPoolReconfiguration, reconfigureWarmPool,
       cleanupWarmPool, scheduleLastStvCleanup, assignWarmSlot, acquireWarmSlot,
       drainWarmWaiters, spendJobSlot, closeLegacyProviderTab, openProvider

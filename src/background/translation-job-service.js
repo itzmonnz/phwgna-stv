@@ -19,7 +19,7 @@
       ensureWarmPool, exposeSlotFailureToPool, fillWarmPool, findPoolSlotByTab,
       hasEligibleStvTab, hasPrefetchParent, isStvUrl, markWarmSlotFailed,
       markWarmSlotRecovered, notifyPoolStatus, openProvider, persistPool,
-      prepareWarmSlot, restartLeasedGeminiSlot, providerTabMatches, readySendTimeoutFor, readyTimeoutFor,
+      prepareWarmSlot, restartLeasedGeminiSlot, recoverGeminiSlotInPlace, cancelGeminiRecovery, providerTabMatches, readySendTimeoutFor, readyTimeoutFor,
       registerStvTab, releaseChatGPTSetupPerformanceLease, rememberPrefetchParent,
       removeOwnedSlot, recycleOwnedSlot, requestedPurposePriorities, resolveStvSenderChapter,
       restoreJobs, restorePoolMetadata, sendProviderMessage, spendJobSlot,
@@ -225,6 +225,7 @@
       job.batchAttempts = 0;
       job.batchSwitched = false;
       job.recoveryStage = "initial";
+      job.recoveryExcludedSlotId = "";
       job.workState = "queued";
       job.validationDiagnostic = null;
       job.lastBatchError = "";
@@ -420,7 +421,7 @@
       let assigned = false;
       let blockedReason = "";
       const runnable = () => ["running", "waiting-provider"].includes(job.status)
-        && job.recoveryStage === "switching_ready" && !job.poolSlotId;
+        && ["switching_ready", "handoff_batch"].includes(job.recoveryStage) && !job.poolSlotId;
       await withPoolLock(async () => {
         if (!runnable()) return;
         const config = await readAutomationConfig(job.settings);
@@ -431,11 +432,13 @@
           const slot = await verifiedReadySlotByPriority(
             job.provider,
             settingsHash,
-            requestedPurposePriorities(job, "recovery")
+            requestedPurposePriorities(job, "recovery"),
+            job.recoveryExcludedSlotId || ""
           );
           if (!runnable()) return;
           if (slot) {
             assignWarmSlot(job, slot);
+            job.recoveryExcludedSlotId = "";
             assigned = true;
           }
         };
@@ -461,7 +464,11 @@
       if (!assigned && !runnable()) return true;
       if (assigned && job.status !== "running") return true;
       if (!assigned && blockedReason) { await pause(job, blockedReason); return true; }
-      if (!assigned) { await notifyStatus(job, "waiting-provider", "pool_waiting"); return true; }
+      if (!assigned) {
+        await notifyStatus(job, "waiting-provider",
+          job.recoveryStage === "handoff_batch" ? "waiting_ready_tab" : "pool_waiting");
+        return true;
+      }
       await notifyStatus(job, "running");
       await dispatchCurrent(job);
       return true;
@@ -796,12 +803,10 @@
         }
         if (reason === "temporary_unavailable" && job.provider === "gemini"
           && job.settings?.temporaryChat !== false) {
-          if ((job.sendNotConfirmedAttempts || 0) >= GEMINI_SEND_NOT_CONFIRMED_RETRIES) {
-            return pause(job, "temporary_unavailable");
-          }
-          job.sendNotConfirmedAttempts = (job.sendNotConfirmedAttempts || 0) + 1;
-          await persistJob(job);
-          return recoverLostGeminiTemporaryChat(job);
+          return handoffGeminiBatch(job, reason);
+        }
+        if (reason === "send_not_confirmed" && job.provider === "gemini" && job.unsentRequestId) {
+          return handoffGeminiBatch(job, reason);
         }
         if (reason === "send_not_confirmed" && ["gemini", "chatgpt"].includes(job.provider)
           && job.unsentRequestId
@@ -839,6 +844,66 @@
       await retrySleep(retryDelayMs);
       if (job.status !== "running") return { ok: false, reason: "not-runnable" };
       return dispatchCurrent(job);
+    }
+
+    async function handoffGeminiBatch(job, reason) {
+      if (job.status !== "running" || job.provider !== "gemini") {
+        return { ok: false, reason: "not-runnable" };
+      }
+      const requestId = job.unsentRequestId || job.activeRequestId;
+      const oldSlotId = job.poolSlotId;
+      const oldTabId = job.providerTabId;
+      const incidentKey = `${job.id}:${job.batchIndex}`;
+      job.recoveryStage = "handoff_batch";
+      job.recoveryExcludedSlotId = oldSlotId || "";
+      job.workState = "queued";
+      job.pending = false;
+      job.batchSwitched = true;
+      await notifyStatus(job, "running", "switching_batch_tab");
+      if (job.status !== "running") return { ok: false, reason: "not-runnable" };
+      await sendToTab(oldTabId, { type: "STVAI_PROVIDER_CANCEL", jobId: job.id, requestId });
+      let failedSlot = null;
+      await withPoolLock(async () => {
+        failedSlot = warmPool.slots.find(candidate => (
+          candidate.slotId === oldSlotId && candidate.jobId === job.id
+        ));
+        if (!failedSlot) return;
+        // Keep the physical tab alive, but make it unavailable to the pool while
+        // its Temporary Chat is rebuilt in the background.
+        failedSlot.state = "recovering";
+        failedSlot.jobId = "";
+        failedSlot.recoveryJobId = job.id;
+        failedSlot.recoveryCancelled = false;
+        failedSlot.errorCode = reason;
+        failedSlot.recoveryAttempts = Math.max(0, Number(failedSlot.recoveryAttempts) || 0) + 1;
+        job.providerTabId = null;
+        job.poolSlotId = "";
+        job.warmSessionId = "";
+        job.settingsHash = "";
+        job.activeRequestId = "";
+        job.unsentRequestId = requestId;
+        await persistPool();
+      });
+      if (!failedSlot) {
+        job.providerTabId = null;
+        job.poolSlotId = "";
+      }
+      await errorJournal?.append?.(incidentKey, {
+        kind: "batch_handoff",
+        provider: "gemini",
+        phase: diagnosticPhase(job),
+        batchIndex: job.batchIndex,
+        errorCode: reason,
+        recoveryStage: job.recoveryStage,
+        tabRetained: Boolean(failedSlot),
+        outcome: "still_running"
+      });
+      await persistJob(job);
+      if (failedSlot && typeof recoverGeminiSlotInPlace === "function") {
+        void recoverGeminiSlotInPlace(failedSlot, warmPool.settings || job.settings);
+      }
+      if (!await acquireRecoverySlot(job)) return pause(job, "provider_unavailable");
+      return { ok: true, switched: true };
     }
 
     async function recoverBusyGeminiTab(job) {
@@ -1299,6 +1364,7 @@
           if (message.prefetch) return { ok: false, reason: 'prefetch_not_allowed' };
           priorJob.status = "cancelled";
           priorJob.pending = false;
+          if (typeof cancelGeminiRecovery === "function") await cancelGeminiRecovery(priorJob.id);
           priorJob.apiAbortController?.abort();
           priorJob.apiAbortController = null;
           await sendToTab(priorJob.providerTabId, { type: "STVAI_PROVIDER_CANCEL", jobId: priorJob.id });
@@ -1490,6 +1556,7 @@
       }
       job.status = "cancelled";
       job.pending = false;
+      if (typeof cancelGeminiRecovery === "function") await cancelGeminiRecovery(job.id);
       job.apiAbortController?.abort();
       job.apiAbortController = null;
       await sendToTab(job.providerTabId, { type: "STVAI_PROVIDER_CANCEL", jobId: job.id });

@@ -464,7 +464,13 @@
         candidates.push({ element, score });
       };
       NEW_CHAT_SELECTORS.forEach((selector, index) => {
-        document.querySelectorAll(selector).forEach(element => append(element, 100 - index));
+        document.querySelectorAll(selector).forEach(element => {
+          const href = String(element.getAttribute("href") || "");
+          const isAppConversation = /^\/app(?:[/?#]|$)/i.test(href);
+          const isSparkleHome = href === "/"
+            || element.matches?.("[data-test-id='side-nav-sparkle-button'], .side-nav-sparkle-button");
+          append(element, (100 - index) + (isAppConversation ? 1_000 : 0) - (isSparkleHome ? 1_000 : 0));
+        });
       });
       Array.from(document.querySelectorAll("a, button, [role='button']")).forEach(element => {
         const label = [

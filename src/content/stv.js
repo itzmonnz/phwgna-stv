@@ -1653,7 +1653,11 @@
           } else if (message.reason === 'rechecking_response') {
             updateToolbar(`Batch ${batchNumber}: đang kiểm tra phản hồi đến muộn đúng mã yêu cầu…`);
           } else if (message.reason === 'rechecking_send') {
-            updateToolbar(`Gemini chưa nhận prompt — đang thử lại ${Math.max(1, Number(message.retryAttempt) || 1)}/15…`);
+            updateToolbar("Gemini chưa xác nhận prompt — đang kiểm tra tab khác…");
+          } else if (message.reason === 'switching_batch_tab') {
+            updateToolbar(`Batch ${batchNumber}: Gemini gặp 1095 — chuyển ngay sang tab READY khác…`);
+          } else if (message.reason === 'waiting_ready_tab') {
+            updateToolbar(`Batch ${batchNumber}: đang chờ tab Gemini READY 2 gần nhất…`);
           } else if (message.reason === 'recovering_temporary_chat') {
             updateToolbar("Gemini bị thoát Temporary Chat — đang mở lại trên tab hiện tại…");
           } else if (message.reason === 'switching_ready_batch') {

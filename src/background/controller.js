@@ -909,6 +909,7 @@
         batchAttempts: job.batchAttempts || 0,
         batchSwitched: job.batchSwitched === true,
         recoveryStage: job.recoveryStage || "initial",
+        recoveryExcludedSlotId: job.recoveryExcludedSlotId || "",
         activeRequestId: job.activeRequestId || "",
         validationDiagnostic: job.validationDiagnostic || null,
         lastBatchError: job.lastBatchError || "",
@@ -1283,7 +1284,8 @@
         recoveryRequests: Math.max(0, Number(record.recoveryRequests) || 0),
         batchAttempts: Math.max(0, Math.min(3, Number(record.batchAttempts) || 0)),
         batchSwitched: record.batchSwitched === true,
-        recoveryStage: ['initial', 'retry_same_tab', 'switching_ready', 'exhausted'].includes(record.recoveryStage) ? record.recoveryStage : 'initial',
+        recoveryStage: ['initial', 'retry_same_tab', 'switching_ready', 'handoff_batch', 'exhausted'].includes(record.recoveryStage) ? record.recoveryStage : 'initial',
+        recoveryExcludedSlotId: typeof record.recoveryExcludedSlotId === 'string' ? record.recoveryExcludedSlotId : '',
         activeRequestId: /^batch_\d+_\d{4}$/.test(record.activeRequestId || '') ? record.activeRequestId : '',
         validationDiagnostic: record.validationDiagnostic || null,
         lastBatchError: typeof record.lastBatchError === 'string' ? record.lastBatchError : '',
@@ -1374,7 +1376,7 @@
       verifiedReadySlotByPriority, acquireJapaneseLookupSlot,
       releaseJapaneseLookupSlot, cancelJapaneseLookup, markWarmSlotFailed,
       markWarmSlotRecovered, validateSetupProviderResult, recheckSetupMarker,
-      prepareWarmSlot, restartLeasedGeminiSlot, createWarmSlot, replaceFailedWarmSlot, fillWarmPool,
+      prepareWarmSlot, restartLeasedGeminiSlot, recoverGeminiSlotInPlace, cancelGeminiRecovery, createWarmSlot, replaceFailedWarmSlot, fillWarmPool,
       ensureWarmPool, performWarmPoolReconfiguration, reconfigureWarmPool,
       cleanupWarmPool, scheduleLastStvCleanup, assignWarmSlot, acquireWarmSlot,
       drainWarmWaiters, spendJobSlot, closeLegacyProviderTab, openProvider
@@ -1390,7 +1392,7 @@
       ensureWarmPool, exposeSlotFailureToPool, fillWarmPool, findPoolSlotByTab,
       hasEligibleStvTab, hasPrefetchParent, isStvUrl, markWarmSlotFailed,
       markWarmSlotRecovered, notifyPoolStatus, openProvider, persistPool,
-      prepareWarmSlot, restartLeasedGeminiSlot, providerTabMatches, readySendTimeoutFor, readyTimeoutFor,
+      prepareWarmSlot, restartLeasedGeminiSlot, recoverGeminiSlotInPlace, cancelGeminiRecovery, providerTabMatches, readySendTimeoutFor, readyTimeoutFor,
       registerStvTab, releaseChatGPTSetupPerformanceLease, rememberPrefetchParent,
       removeOwnedSlot, recycleOwnedSlot, requestedPurposePriorities, resolveStvSenderChapter,
       restoreJobs, restorePoolMetadata, sendProviderMessage, spendJobSlot,
@@ -1909,7 +1911,21 @@
             if (job.poolSlotId) {
               await withPoolLock(async () => {
                 const used = warmPool.slots.find((candidate) => candidate.slotId === job.poolSlotId);
-                if (used) await removeOwnedSlot(used, { removalReason: "stv_navigation" });
+                // A prefetch belongs to the pool, not to the old reader DOM.
+                // Navigation cancels its request, but must not destroy the
+                // physical READY tab; otherwise three in-flight prefetches can
+                // erase the entire Gemini pool before the new chapter starts.
+                if (job.prefetch === true && used?.state === "leased") {
+                  used.state = "ready";
+                  used.jobId = "";
+                  used.errorCode = "";
+                  used.firstBatchDispatchedAt = 0;
+                  used.handoffPredecessorSlotId = "";
+                  used.handoffSuccessorSlotId = "";
+                  await persistPool();
+                } else if (used) {
+                  await removeOwnedSlot(used, { removalReason: "stv_navigation" });
+                }
                 job.poolSlotId = "";
               });
             } else await closeLegacyProviderTab(job);
