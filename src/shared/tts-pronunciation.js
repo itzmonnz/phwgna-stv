@@ -320,6 +320,7 @@
     MAX_RULES,
     MAX_SOURCE_LENGTH,
     MAX_SPOKEN_LENGTH,
+    sourceKey: ruleKey,
     parseGuide,
     sanitizeRules,
     migrateGuide,

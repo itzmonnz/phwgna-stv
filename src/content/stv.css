@@ -1755,6 +1755,15 @@
   user-select: text !important;
 }
 .stvai-tts-pronunciation input::placeholder { color: #b7bdca; }
+.window[data-stvai-tts-settings="true"] .stvai-tts-pronunciation input.stvai-tts-pronunciation-duplicate {
+  border-color: #ff4d63 !important;
+  box-shadow: 0 0 0 2px rgba(255, 77, 99, 0.42), 0 0 14px rgba(255, 77, 99, 0.72) !important;
+  animation: stvai-pronunciation-duplicate-flash 1s ease-out !important;
+}
+@keyframes stvai-pronunciation-duplicate-flash {
+  0%, 100% { background: #181a24; }
+  20%, 65% { background: #4b2029; }
+}
 .window[data-stvai-tts-settings="true"] :is(.stvai-tts-pronunciation-delete, .stvai-tts-pronunciation-preview) {
   width: 36px !important; height: 40px !important; padding: 0 !important;
   border: 0 !important; background: transparent !important; color: #f5f7fb !important; font-size: 24px !important;

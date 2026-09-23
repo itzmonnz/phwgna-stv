@@ -1,8 +1,10 @@
 (function attachUI(root, factory) {
-  const api = factory();
+  const pronunciation = root.STVAITTSPronunciation
+    || (typeof require === "function" ? require("../shared/tts-pronunciation.js") : null);
+  const api = factory(pronunciation);
   if (typeof module === "object" && module.exports) module.exports = api;
   root.STVAIUI = api;
-})(typeof globalThis !== "undefined" ? globalThis : this, function createUI() {
+})(typeof globalThis !== "undefined" ? globalThis : this, function createUI(pronunciation) {
   "use strict";
 
   const UI_SCALES = Object.freeze([0.5, 0.75, 1, 1.25, 1.5]);
@@ -1188,15 +1190,53 @@
       let generation = 0;
       let previewTask = 0;
       let saving = false;
+      const duplicateTimers = new Map();
+      const sourceKey = value => pronunciation?.sourceKey?.(value)
+        || `folded:${String(value || '').trim().normalize('NFC').replace(/\s+/gu, ' ').toLocaleLowerCase('vi')}`;
+      function duplicateRow(currentRow, value) {
+        const key = sourceKey(value);
+        if (!String(value || '').trim() || key === 'folded:') return null;
+        return Array.from(list.children).find(candidate => candidate !== currentRow
+          && sourceKey(candidate.querySelector('.stvai-tts-pronunciation-source')?.value) === key) || null;
+      }
+      function revealDuplicate(row) {
+        const input = row?.querySelector('.stvai-tts-pronunciation-source');
+        if (!input) return;
+        const oldTimer = duplicateTimers.get(input);
+        if (oldTimer) view?.clearTimeout?.(oldTimer);
+        input.classList.remove('stvai-tts-pronunciation-duplicate');
+        input.classList.add('stvai-tts-pronunciation-duplicate');
+        row.scrollIntoView?.({ block: 'center', inline: 'nearest', behavior: 'auto' });
+        input.focus({ preventScroll: true });
+        input.select?.();
+        const timer = view?.setTimeout?.(() => {
+          input.classList.remove('stvai-tts-pronunciation-duplicate');
+          duplicateTimers.delete(input);
+        }, 1000);
+        if (timer) duplicateTimers.set(input, timer);
+        status.textContent = 'Từ gốc này đã có. Hãy sửa Cách đọc ở dòng được đánh dấu.';
+      }
       function addRow(source = '', spoken = '') {
         const row = element(document, 'div', 'stvai-tts-pronunciation-row');
+        let sourceInput = null;
         for (const [name, value, label, limit] of [['source', source, 'Từ gốc', 100], ['spoken', spoken, 'Cách đọc', 200]]) {
           const input = element(document, 'input', `stvai-tts-pronunciation-${name}`);
           input.type = 'text'; input.value = value; input.maxLength = limit;
           input.setAttribute('aria-label', label); input.placeholder = label;
           input.spellcheck = false;
+          if (name === 'source') sourceInput = input;
           row.append(input);
         }
+        sourceInput.dataset.lastUniqueValue = sourceInput.value;
+        sourceInput.addEventListener('change', () => {
+          const duplicate = duplicateRow(row, sourceInput.value);
+          if (!duplicate) {
+            sourceInput.dataset.lastUniqueValue = sourceInput.value;
+            return;
+          }
+          sourceInput.value = sourceInput.dataset.lastUniqueValue || '';
+          revealDuplicate(duplicate);
+        });
         const remove = button(document, 'stvai-button stvai-tts-pronunciation-delete', '×');
         const preview = button(document, 'stvai-button stvai-tts-pronunciation-preview', '▶');
         preview.title = 'Nghe thử bằng giọng hiện tại';
@@ -1281,6 +1321,8 @@
         clearPendingSelectionClick();
         ++generation;
         ++previewTask;
+        for (const timer of duplicateTimers.values()) view?.clearTimeout?.(timer);
+        duplicateTimers.clear();
         panel.hidden = true;
         delete win.dataset.stvaiPronunciationOpen;
         toggle.setAttribute('aria-expanded', 'false');
@@ -1311,15 +1353,7 @@
           list.replaceChildren();
           sampleInput.value = '';
           sampleResult.textContent = '';
-          const mappings = [];
-          for (const line of (typeof guide === 'string' ? guide : '').split(/\r?\n/u)) {
-            const separator = line.indexOf('=');
-            if (separator < 0 || !line.slice(0, separator).trim() || !line.slice(separator + 1).trim()) continue;
-            mappings.push({
-              source: line.slice(0, separator).trim(),
-              spoken: line.slice(separator + 1).trim()
-            });
-          }
+          const mappings = pronunciation?.parseGuide?.(typeof guide === 'string' ? guide : '') || [];
           for (const mapping of sortPronunciationMappings(mappings)) addRow(mapping.source, mapping.spoken);
           busy(false);
           status.textContent = '';
@@ -1335,14 +1369,24 @@
       saveButton.addEventListener('click', async () => {
         if (saveButton.disabled || !enabled) return;
         const mappings = [];
+        const seenSources = new Map();
         for (const row of list.children) {
-          const source = row.querySelector('.stvai-tts-pronunciation-source').value.trim();
+          const sourceInput = row.querySelector('.stvai-tts-pronunciation-source');
+          const source = sourceInput.value.trim();
           const spoken = row.querySelector('.stvai-tts-pronunciation-spoken').value.trim();
           if (!source && !spoken) continue;
           if (!source || !spoken || /[=\r\n]/u.test(source)) {
             status.textContent = 'Điền đủ Từ gốc và Cách đọc; Từ gốc không chứa dấu =.';
             return;
           }
+          const key = sourceKey(source);
+          const existing = seenSources.get(key);
+          if (existing) {
+            sourceInput.value = sourceInput.dataset.lastUniqueValue || '';
+            revealDuplicate(existing);
+            return;
+          }
+          seenSources.set(key, row);
           mappings.push({ source, spoken, row });
         }
         const sortedMappings = sortPronunciationMappings(mappings);
