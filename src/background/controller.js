@@ -893,6 +893,7 @@
         setupIndex: job.setupIndex,
         setupAttempts: job.setupAttempts,
         retryAttempts: job.retryAttempts || 0,
+        sendNotConfirmedAttempts: job.sendNotConfirmedAttempts || 0,
         automaticRecoveryCycles: job.automaticRecoveryCycles || 0,
         phase: job.phase,
         repairBlocks: job.repairBlocks,
@@ -1263,6 +1264,7 @@
         setupIndex: core.isApiProvider(settings.provider) ? 0 : (restoredPoolSlotId ? core.createSetupMessages({ setupId, jobId: record.id, settings }).length : 0),
         setupAttempts: Math.max(0, Number(record.setupAttempts) || 0),
         retryAttempts: Math.max(0, Number(record.retryAttempts) || 0),
+        sendNotConfirmedAttempts: Math.max(0, Math.min(3, Number(record.sendNotConfirmedAttempts) || 0)),
         automaticRecoveryCycles: Math.max(0, Math.min(1, Number(record.automaticRecoveryCycles) || 0)),
         phase: core.isApiProvider(settings.provider)
           ? (["batch", "repair"].includes(phase) ? phase : "batch")

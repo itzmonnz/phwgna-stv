@@ -28,6 +28,7 @@
     } = options;
     const {
       SETUP_PARTS, READY_MARKER_GRACE_MS, REPLACEABLE_WARM_FAILURES,
+      GEMINI_SEND_NOT_CONFIRMED_RETRIES,
       batchIdAt, exactItems, isAuthenticationBlocker
     } = contracts;
     const PREFETCH_NAME_RECEIPT_PREFIX = "stvai-prefetch-name-receipt:";
@@ -96,6 +97,7 @@
       job.setupIndex = 0;
       job.setupAttempts = 0;
       job.retryAttempts = 0;
+      job.sendNotConfirmedAttempts = 0;
       clearBusyState(job);
       job.repairBlocks = [];
       job.repairAttempts = 0;
@@ -797,13 +799,25 @@
           return recoverLostGeminiTemporaryChat(job);
         }
         if (reason === "send_not_confirmed" && ["gemini", "chatgpt"].includes(job.provider)
-          && job.unsentRequestId && job.retryAttempts < 1) {
-          job.retryAttempts += 1;
+          && job.unsentRequestId
+          && (job.sendNotConfirmedAttempts || 0) < (job.provider === "gemini"
+            ? GEMINI_SEND_NOT_CONFIRMED_RETRIES : 1)) {
+          job.sendNotConfirmedAttempts = (job.sendNotConfirmedAttempts || 0) + 1;
           job.workState = "queued";
           await notifyStatus(job, "running", "rechecking_send");
           await retrySleep(retryDelayMs);
           if (job.status !== "running") return { ok: false, reason: "not-runnable" };
           return dispatchCurrent(job);
+        }
+        if (reason === "send_not_confirmed" && job.provider === "gemini"
+          && job.unsentRequestId && (job.sendNotConfirmedAttempts || 0) >= GEMINI_SEND_NOT_CONFIRMED_RETRIES
+          && (job.sendNotConfirmedAttempts || 0) === GEMINI_SEND_NOT_CONFIRMED_RETRIES) {
+          // The same marker was rejected repeatedly. Retire this Gemini
+          // conversation once, then let the normal warm-pool path open a
+          // fresh Temporary Chat. A later failure pauses instead of looping.
+          job.sendNotConfirmedAttempts += 1;
+          await persistJob(job);
+          return recoverLostGeminiTemporaryChat(job);
         }
         if (["response_timeout", "network_error", "provider_unavailable"].includes(reason)) return recoverBatch(job, reason);
         return pause(job, reason);
@@ -897,6 +911,7 @@
     async function recoverLostGeminiTemporaryChat(job) {
       const oldTabId = job.providerTabId;
       const oldSlotId = job.poolSlotId;
+      const requestId = job.unsentRequestId || job.activeRequestId;
       const slot = oldSlotId
         ? warmPool.slots.find((candidate) => candidate.slotId === oldSlotId && candidate.jobId === job.id)
         : null;
@@ -926,7 +941,10 @@
       job.poolSlotId = "";
       job.warmSessionId = "";
       job.settingsHash = "";
-      job.unsentRequestId = "";
+      // A 1095/Temporary reset restores the prompt before Gemini accepts it.
+      // Keep the exact batch marker so a replacement tab retries the same
+      // logical request instead of manufacturing a second request identity.
+      job.unsentRequestId = /^batch_\d+_\d{4}$/.test(requestId || "") ? requestId : "";
       job.activeRequestId = "";
       // The adapter refuses this request before Send, so it must not consume a
       // translation attempt or force the user into the manual recovery path.
@@ -998,6 +1016,7 @@
       }
       job.unsentRequestId = "";
       job.retryAttempts = 0;
+      job.sendNotConfirmedAttempts = 0;
       clearBusyState(job);
       return processProviderResult(job, {
         ...providerMessage,
@@ -1292,6 +1311,7 @@
         setupIndex: 0,
         setupAttempts: 0,
         retryAttempts: 0,
+        sendNotConfirmedAttempts: 0,
         automaticRecoveryCycles: 0,
         phase: core.isApiProvider(settings.provider) ? "batch" : "setup",
         pending: false,
