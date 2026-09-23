@@ -51,6 +51,9 @@
     let geminiSetupReopenNotBefore = 0;
     let geminiSetupCooldownOperation = null;
     let geminiSetupRefillOperation = null;
+    const GEMINI_IN_PLACE_RECOVERY_CODES = new Set([
+      "send_not_confirmed", "temporary_unavailable", "provider_busy"
+    ]);
 
     function isGeminiSetupRejection(slot) {
       return slot?.provider === "gemini"
@@ -426,6 +429,8 @@
       }
       const state = response?.state;
       return state?.state === "ready"
+        && state?.operation?.active !== true
+        && state?.runtime?.stage !== "error"
         && state.prepared?.warmSessionId === slot.warmSessionId
         && state.prepared?.settingsHash === slot.settingsHash;
     }
@@ -736,15 +741,19 @@
         return false;
       }
       slot.preparationPasses = 0;
-      if (status?.state?.state !== "ready") {
+      const runtimeStatusCode = status?.state?.runtime?.stage === "error"
+        ? String(status?.state?.runtime?.errorCode || "") : "";
+      const operationStatusCode = status?.state?.operation?.active === true ? "provider_busy" : "";
+      if (status?.state?.state !== "ready" || runtimeStatusCode || operationStatusCode) {
         if (options.deferUnavailable && !status?.state?.state && !status?.error?.code) {
           slot.state = "opening";
           await persistPool();
           return false;
         }
-        const statusCode = status?.error?.code || status?.state?.code || status?.state?.state || "provider_unavailable";
+        const statusCode = runtimeStatusCode || operationStatusCode || status?.error?.code
+          || status?.state?.code || status?.state?.state || "provider_unavailable";
         if (options.inPlaceRecovery
-          && ["send_not_confirmed", "temporary_unavailable"].includes(statusCode)) {
+          && GEMINI_IN_PLACE_RECOVERY_CODES.has(statusCode)) {
           slot.errorCode = statusCode;
           slot.state = "opening";
           await persistPool();
@@ -894,7 +903,7 @@
             if (response?.ok === false) {
               const responseCode = response.error?.code || "warm_setup_failed";
               if (options.inPlaceRecovery
-                && ["send_not_confirmed", "temporary_unavailable"].includes(responseCode)) {
+                && GEMINI_IN_PLACE_RECOVERY_CODES.has(responseCode)) {
                 // Keep the physical tab for the recovery loop. The caller will
                 // open another Temporary Chat and replay READY on this same tab.
                 slot.errorCode = responseCode;
@@ -1046,7 +1055,17 @@
             return reclaimPreparedLease();
           }
           if (options.inPlaceRecovery
-            && ["send_not_confirmed", "temporary_unavailable"].includes(slot.errorCode)) {
+            && GEMINI_IN_PLACE_RECOVERY_CODES.has(slot.errorCode)) {
+            if (slot.errorCode === "provider_busy") {
+              // Another preparation continuation still owns the content
+              // script. Wait for it to settle; navigating the chat underneath
+              // that send is what produced the READY/1095 race seen in Cốc Cốc.
+              await retrySleep(Math.max(250, Number(providerReadyDelayMs) || 1_000));
+              await new Promise(resolve => setTimeout(resolve, 25));
+              if (cancelled()) return false;
+              slot.errorCode = "";
+              continue;
+            }
             // 1095 rejected this chat. Re-open Temporary Chat on the same
             // physical tab and replay READY without handing the batch back here.
             let nextReset;

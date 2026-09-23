@@ -592,6 +592,14 @@
           state: {
             ...adapter.getStatus(),
             prepared: preparedEvidence ? { ...preparedEvidence } : null,
+            operation: activeJob ? {
+              active: true,
+              phase: ["setup", "batch", "repair"].includes(activeJob.phase) ? activeJob.phase : "idle"
+            } : { active: false, phase: "idle" },
+            runtime: {
+              stage: String(diagnosticState.stage || "idle"),
+              errorCode: String(diagnosticState.errorCode || "none")
+            },
             ...(setup ? { setup: { ...setup } } : {})
           }
         };
@@ -663,12 +671,23 @@
         if (defaults.provider !== "gemini" || typeof adapter.restartTemporaryChat !== "function") {
           return { ok: false, error: { code: "unsupported" } };
         }
+        // Evidence belongs to the conversation that is about to be discarded.
+        // Clear it before navigation starts, including when Gemini rejects the
+        // reset, so a later STATUS probe cannot revive this tab as READY.
+        preparedEvidence = null;
+        resetReadyDiagnostic({ phase: "setup", setupIndex: 0 });
+        setDiagnosticState("preparing", "setup", "none");
         try {
-          return await adapter.restartTemporaryChat({
+          const result = await adapter.restartTemporaryChat({
             signal: activeJob?.controller?.signal,
             timeoutMs: message.timeoutMs
           });
+          if (result?.ok) setDiagnosticState("idle", "setup", "none");
+          else setDiagnosticState("error", "setup", result?.error?.code || "temporary_unavailable");
+          return result;
         } catch (error) {
+          setDiagnosticState("error", "setup",
+            typeof error?.code === "string" ? error.code : "temporary_unavailable");
           return { ok: false, error: serializeError(error) };
         }
       }
