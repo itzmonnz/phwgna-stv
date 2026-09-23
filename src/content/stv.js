@@ -553,6 +553,7 @@
         next_chapter_timeout: 'STV tải nguồn quá lâu',
         next_chapter_fetch_failed: 'không tải được nguồn STV',
         next_chapter_source_unavailable: 'STV chưa cung cấp nguồn Trung',
+        next_chapter_source_unstable: 'nguồn STV trả về chưa ổn định',
         next_chapter_identity_mismatch: 'nguồn không khớp chương kế',
         next_chapter_redirect_invalid: 'STV chuyển hướng sang trang khác',
         prefetch_not_allowed: 'chưa được phép hoặc đang có tác vụ khác',
