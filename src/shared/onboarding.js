@@ -1,8 +1,10 @@
 (function attachOnboarding(root, factory) {
-  const api = factory();
+  const configFiles = root.STVAIConfigFileStore
+    || (typeof require === "function" ? require("./config-file-store.js") : null);
+  const api = factory(configFiles);
   if (typeof module === "object" && module.exports) module.exports = api;
   root.STVAIOnboarding = api;
-})(typeof globalThis !== "undefined" ? globalThis : this, function createOnboardingApi() {
+})(typeof globalThis !== "undefined" ? globalThis : this, function createOnboardingApi(configFiles) {
   "use strict";
 
   const STORAGE_KEY = "stvaiOnboarding";
@@ -40,11 +42,31 @@
     });
   }
 
+  function readPackageText(runtime, filename) {
+    if (typeof runtime?.getPackageDirectoryEntry !== "function") return Promise.resolve(null);
+    return new Promise((resolve) => {
+      runtime.getPackageDirectoryEntry((directory) => {
+        if (!directory?.getFile) { resolve(null); return; }
+        directory.getFile(filename, {}, (entry) => {
+          if (!entry?.file) { resolve(null); return; }
+          entry.file((file) => {
+            if (typeof file?.text !== "function") { resolve(null); return; }
+            Promise.resolve(file.text()).then(resolve, () => resolve(null));
+          }, () => resolve(null));
+        }, () => resolve(null));
+      });
+    });
+  }
+
   function createOnboardingService(options = {}) {
     const core = options.core;
     const storage = options.storage;
     const tabs = options.tabs;
     const runtime = options.runtime;
+    const readBundledConfig = options.readBundledConfig || (async () => {
+      if (!configFiles?.CONFIG_FILENAME) return null;
+      return readPackageText(runtime, configFiles.CONFIG_FILENAME);
+    });
     const version = Math.max(1, Number(options.version || DEFAULT_VERSION));
     if (!core || !storage?.local || !tabs || !runtime?.getURL) {
       throw new TypeError("core, storage.local, tabs, and runtime are required");
@@ -72,7 +94,14 @@
           [STORAGE_KEY]: { version, completed: false }
         };
         if (!stored?.settings || typeof stored.settings !== "object") {
-          patch.settings = core.normalizeSettings({ ...core.DEFAULT_SETTINGS, provider: "gemini" });
+          let restored = null;
+          try { restored = await readBundledConfig(); } catch (_) { restored = null; }
+          const safeConfig = configFiles?.parseConfigPayload?.(restored);
+          patch.settings = core.normalizeSettings({
+            ...core.DEFAULT_SETTINGS,
+            provider: "gemini",
+            ...(safeConfig || {})
+          });
         }
         await writeState(patch);
         await openOnboarding();

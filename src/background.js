@@ -22,7 +22,7 @@ if (typeof importScripts === "function") {
   if (globalThis.STVAIDistribution?.usesExternalUpdater?.() !== false) {
     backgroundImports.push("shared/update-check.js");
   }
-  backgroundImports.push("shared/onboarding.js", "shared/error-journal.js", "background/controller.js");
+  backgroundImports.push("shared/config-file-store.js", "shared/onboarding.js", "shared/error-journal.js", "background/controller.js");
   importScripts(...backgroundImports);
 }
 

@@ -9,6 +9,25 @@
   const DB_NAME = "phwgna-stv-local-config";
   const STORE_NAME = "handles";
   const HANDLE_KEY = "config";
+  const CONFIG_FORMAT = "phwgna-stv-prompts-name";
+  const MAX_CONFIG_BYTES = 2 * 1024 * 1024;
+
+  function parseConfigPayload(input) {
+    let payload = input;
+    if (typeof input === "string") {
+      if (new TextEncoder().encode(input).byteLength > MAX_CONFIG_BYTES) return null;
+      try { payload = JSON.parse(input); } catch (_) { return null; }
+    }
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)
+      || payload.format !== CONFIG_FORMAT || payload.version !== 1) return null;
+    const limits = Object.freeze({ systemPrompt: 250_000, userPrompt: 250_000, nameGuide: 1_000_000, ttsPronunciationGuide: 20_000 });
+    const result = {};
+    for (const [key, limit] of Object.entries(limits)) {
+      if (typeof payload[key] !== "string" || payload[key].length > limit) return null;
+      result[key] = payload[key];
+    }
+    return result;
+  }
 
   function codedError(code, message) {
     const error = new Error(message);
@@ -116,5 +135,5 @@
     return Object.freeze({ prepare, write, filename: CONFIG_FILENAME });
   }
 
-  return Object.freeze({ CONFIG_FILENAME, createConfigFileStore });
+  return Object.freeze({ CONFIG_FILENAME, CONFIG_FORMAT, MAX_CONFIG_BYTES, parseConfigPayload, createConfigFileStore });
 });
