@@ -314,43 +314,45 @@
         await waitForSourceRetry(retryDelays[attempt], signal);
         trace?.update({ stage: "request_source_api" });
       }
-      // Ciweimao identifies only the book and host in readchapter responses.
-      // The same requested URL can therefore receive source from another
-      // chapter in that book. Confirm the extracted source once more before
-      // spending AI work or writing it to cache.
-      if (host === 'ciweimao') {
-        let confirmationResponse;
-        const confirmationOptions = payloadTransport === 'GET'
-          ? { ...fetchOptions, method: 'GET', body: undefined, headers: undefined }
-          : { ...fetchOptions, method: 'POST', body: '', headers: { 'Content-Type': 'application/x-www-form-urlencoded' } };
-        try {
-          confirmationResponse = await options.request(endpoint.href, confirmationOptions);
-        } catch (_) {
-          if (signal.aborted) throw prefetchError('next_chapter_cancelled');
-          throw prefetchError('next_chapter_source_unstable', true);
-        }
-        if (!confirmationResponse?.ok || (confirmationResponse.url && confirmationResponse.url !== endpoint.href)) {
-          throw prefetchError('next_chapter_source_unstable', true);
-        }
-        const confirmationPayload = parseReadChapterPayload(await confirmationResponse.text()).payload;
-        const confirmationIdentityMatch = String(confirmationPayload?.bookid) === bookId
-          && confirmationPayload?.bookhost === host;
-        const confirmationCodeOk = [0, '0'].includes(confirmationPayload?.code)
-          && typeof confirmationPayload?.data === 'string' && Boolean(confirmationPayload.data.trim());
-        if (!confirmationIdentityMatch || !confirmationCodeOk) {
-          throw prefetchError('next_chapter_source_unstable', true);
-        }
-        let primaryChapter;
-        let confirmationChapter;
-        try {
-          primaryChapter = extractPayloadChapter(options, url, chapterId, payload.data);
-          confirmationChapter = extractPayloadChapter(options, url, chapterId, confirmationPayload.data);
-        } catch (_) {
-          throw prefetchError('next_chapter_source_unstable', true);
-        }
-        if (primaryChapter.sourceText !== confirmationChapter.sourceText) {
-          throw prefetchError('next_chapter_source_unstable', true);
-        }
+      // Readchapter responses identify only the book and host, not the exact
+      // chapter. STV can therefore return a stale or different chapter while
+      // keeping otherwise valid metadata. Confirm every endpoint-sourced
+      // chapter once more before spending AI work or writing it to cache.
+      let primaryChapter;
+      try {
+        primaryChapter = extractPayloadChapter(options, url, chapterId, payload.data);
+      } catch (_) {
+        throw new Error('next_chapter_source_unavailable');
+      }
+      let confirmationResponse;
+      const confirmationOptions = payloadTransport === 'GET'
+        ? { ...fetchOptions, method: 'GET', body: undefined, headers: undefined }
+        : { ...fetchOptions, method: 'POST', body: '', headers: { 'Content-Type': 'application/x-www-form-urlencoded' } };
+      try {
+        confirmationResponse = await options.request(endpoint.href, confirmationOptions);
+      } catch (_) {
+        if (signal.aborted) throw prefetchError('next_chapter_cancelled');
+        throw prefetchError('next_chapter_source_unstable', true);
+      }
+      if (!confirmationResponse?.ok || (confirmationResponse.url && confirmationResponse.url !== endpoint.href)) {
+        throw prefetchError('next_chapter_source_unstable', true);
+      }
+      const confirmationPayload = parseReadChapterPayload(await confirmationResponse.text()).payload;
+      const confirmationIdentityMatch = String(confirmationPayload?.bookid) === bookId
+        && confirmationPayload?.bookhost === host;
+      const confirmationCodeOk = [0, '0'].includes(confirmationPayload?.code)
+        && typeof confirmationPayload?.data === 'string' && Boolean(confirmationPayload.data.trim());
+      if (!confirmationIdentityMatch || !confirmationCodeOk) {
+        throw prefetchError('next_chapter_source_unstable', true);
+      }
+      let confirmationChapter;
+      try {
+        confirmationChapter = extractPayloadChapter(options, url, chapterId, confirmationPayload.data);
+      } catch (_) {
+        throw prefetchError('next_chapter_source_unstable', true);
+      }
+      if (primaryChapter.sourceText !== confirmationChapter.sourceText) {
+        throw prefetchError('next_chapter_source_unstable', true);
       }
       // Match the line-break preprocessing observed on STV. Parsing stays inert.
       const html = payload.data.replace(/<br\s*\/?>/gi, '<br><br>').replace(/\r?\n+/g, '<br><br>');
