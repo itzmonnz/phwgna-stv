@@ -1035,7 +1035,13 @@
         navigationInterruptedReply = true;
       }
       if ((!reset?.ok && !navigationInterruptedReply) || !warmPool.slots.includes(slot)
-        || cancelled()) return false;
+        || cancelled()) {
+        if (options.inPlaceRecovery && warmPool.slots.includes(slot) && !cancelled()) {
+          slot.errorCode = String(reset?.error?.code || reset?.reason || "provider_unreachable");
+          await persistPool();
+        }
+        return false;
+      }
       if (!await resetSlotState()) return false;
 
       // A navigation event and this continuation race each other. Whichever
@@ -1161,6 +1167,22 @@
         return true;
       }
       if (warmPool.slots.includes(slot)) {
+        if (!slot.recoveryCancelled && GEMINI_IN_PLACE_RECOVERY_CODES.has(String(slot.errorCode || ""))) {
+          // A rejected Gemini conversation is not evidence that its physical
+          // tab is bad. Keep retrying New chat -> Temporary Chat -> READY on
+          // this exact tab. Opening a successor here caused the visible tab
+          // churn observed after every completed prefetch job.
+          slot.state = "recovering";
+          slot.jobId = "";
+          slot.recoveryJobId ||= createId("setup-recovery");
+          await persistPool();
+          await notifyPoolStatus();
+          const retryTimer = setTimeout(() => {
+            void recoverGeminiSlotInPlace(slot, settings);
+          }, Math.max(250, Number(providerReadyDelayMs) || 1_000));
+          retryTimer?.unref?.();
+          return false;
+        }
         slot.state = "failed";
         slot.errorCode ||= "recovery_blocked";
         slot.recoveryJobId = "";
@@ -1789,6 +1811,26 @@
               if (!options.deferDrain) await drainWarmWaiters();
               return;
             }
+          }
+          // Do not fall through to the legacy handoff that opens a successor
+          // and deletes this tab. A failed reset belongs to the conversation,
+          // so release the completed job and recover READY 1/2 in place.
+          if (warmPool.slots.includes(reusable)
+            && Number.isInteger(reusable.providerTabId)) {
+            reusable.state = "recovering";
+            reusable.jobId = "";
+            reusable.errorCode ||= "temporary_unavailable";
+            reusable.recoveryJobId ||= createId("setup-recovery");
+            reusable.recoveryCancelled = false;
+            await persistPool();
+            job.poolSlotId = "";
+            const recoveryTimer = setTimeout(() => {
+              void recoverGeminiSlotInPlace(reusable, settings);
+            }, 0);
+            recoveryTimer?.unref?.();
+            await notifyPoolStatus();
+            if (!options.deferDrain) await drainWarmWaiters();
+            return;
           }
         }
       }
