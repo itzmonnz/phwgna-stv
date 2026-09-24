@@ -255,6 +255,78 @@ function Get-PhwgnaPerformanceArguments {
     '--disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows'
 }
 
+function Get-PhwgnaDedicatedChromeArguments {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$ProfileRoot,
+        [Parameter(Mandatory)][string]$ExtensionDirectory,
+        [string]$StartUrl = 'https://sangtacviet.com/mybook/'
+    )
+    $profile = [IO.Path]::GetFullPath($ProfileRoot)
+    $extension = [IO.Path]::GetFullPath($ExtensionDirectory)
+    if (-not (Test-Path -LiteralPath $extension -PathType Container)) { throw 'extension_missing' }
+    if ([string]::IsNullOrWhiteSpace($StartUrl) -or $StartUrl -notmatch '^https://sangtacviet\.(?:app|com|vip)/') {
+        throw 'invalid_start_url'
+    }
+    $quotedProfile = '"' + $profile + '"'
+    $quotedExtension = '"' + $extension + '"'
+    $quotedStartUrl = '"' + $StartUrl + '"'
+    @(
+        "--user-data-dir=$quotedProfile",
+        '--no-first-run',
+        '--no-default-browser-check',
+        '--disable-background-timer-throttling',
+        '--disable-renderer-backgrounding',
+        '--disable-backgrounding-occluded-windows',
+        '--disable-features=CalculateNativeWinOcclusion',
+        "--disable-extensions-except=$quotedExtension",
+        "--load-extension=$quotedExtension",
+        '--new-window',
+        $quotedStartUrl
+    ) -join ' '
+}
+
+function New-PhwgnaDedicatedChromeShortcut {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][psobject]$Browser,
+        [Parameter(Mandatory)][string]$ExtensionDirectory,
+        [Parameter(Mandatory)][string]$StateRoot,
+        [string]$DesktopPath = [Environment]::GetFolderPath('Desktop'),
+        [string]$StartUrl = 'https://sangtacviet.com/mybook/',
+        [switch]$DryRun
+    )
+    if ($Browser.id -ne 'chrome') { throw 'dedicated_chrome_required' }
+    $browserPath = [IO.Path]::GetFullPath([string]$Browser.path)
+    $extension = [IO.Path]::GetFullPath($ExtensionDirectory)
+    $state = [IO.Path]::GetFullPath($StateRoot)
+    $desktop = [IO.Path]::GetFullPath($DesktopPath)
+    if (-not (Test-Path -LiteralPath $browserPath -PathType Leaf)) { throw 'browser_missing' }
+    if (-not (Test-Path -LiteralPath $extension -PathType Container)) { throw 'extension_missing' }
+    if (-not (Test-Path -LiteralPath $desktop -PathType Container)) { throw 'desktop_missing' }
+    $profile = Join-Path $state 'profile'
+    $arguments = Get-PhwgnaDedicatedChromeArguments -ProfileRoot $profile -ExtensionDirectory $extension -StartUrl $StartUrl
+    $shortcutPath = Join-Path $desktop 'Phwgna STV - Chrome Max.lnk'
+    $description = 'Phwgna STV - Chrome rieng cho STV, uu tien AI toi da'
+    if ($DryRun) {
+        return [pscustomobject]@{ ok=$true; code='dedicated_shortcut_ready'; browser='chrome'; path=$shortcutPath; profile=$profile; arguments=$arguments; dryRun=$true }
+    }
+    New-Item -ItemType Directory -Path $profile -Force | Out-Null
+    $shell = New-Object -ComObject WScript.Shell
+    if (Test-Path -LiteralPath $shortcutPath -PathType Leaf) {
+        $existing = $shell.CreateShortcut($shortcutPath)
+        if ($existing.Description -ne $description -or $existing.TargetPath -ne $browserPath) { throw 'shortcut_conflict' }
+    }
+    $shortcut = $shell.CreateShortcut($shortcutPath)
+    $shortcut.TargetPath = $browserPath
+    $shortcut.Arguments = $arguments
+    $shortcut.WorkingDirectory = Split-Path -Parent $browserPath
+    $shortcut.IconLocation = "$browserPath,0"
+    $shortcut.Description = $description
+    $shortcut.Save()
+    [pscustomobject]@{ ok=$true; code='dedicated_shortcut_created'; browser='chrome'; path=$shortcutPath; profile=$profile; arguments=$arguments; dryRun=$false }
+}
+
 function New-PhwgnaPerformanceShortcut {
     [CmdletBinding()]
     param(
