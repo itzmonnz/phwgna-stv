@@ -862,6 +862,19 @@
         if (error?.code === "cancelled") throw error;
       }
 
+      if (reconcileExistingRequest()) return { alreadySent: true };
+      if (setupPrompt) {
+        const rejectedComposer = findComposer();
+        if (rejectedComposer
+          && comparableComposerText(readComposerText(rejectedComposer)) === comparablePrompt) {
+          // READY prompts are technical setup data, never chapter content. If
+          // Gemini/Coc Coc ignores the click without first clearing the editor,
+          // leaving this text behind prevents restartTemporaryChat() from
+          // proving that New chat opened and the recovery loop stalls forever.
+          common.setComposerText(rejectedComposer, "", { focus: false });
+          submissionDiagnostic.composerState = "cleared_returned_prompt";
+        }
+      }
       submissionDiagnostic.sendButtonState = "click_unconfirmed";
       throw new common.ProviderError(
         "send_not_confirmed",
