@@ -38,6 +38,10 @@
       "sha256": "8b6912dab811754633acb6e349fecc38264e22845a585e6d2ef0ec38c2431b8d"
     },
     {
+      "path": "Tao-Chrome-STV-Max-Clone.bat",
+      "sha256": "417e3d5d4f375f669cd3af59de787d4c29343cf360942f0522ebbab0c561b166"
+    },
+    {
       "path": "Tao-Chrome-STV-Max.bat",
       "sha256": "324bbcb74b480f38821f988478680f03160d3467b7aeff50ad2ad441f001bf59"
     },
@@ -322,12 +326,16 @@
       "sha256": "c9f8a1d082265b715ba41ab289448e4e04afb9dd4c2d64de409eaffc8b8102c7"
     },
     {
+      "path": "windows/phwgna-chrome-max-clone.ps1",
+      "sha256": "3d953d6ccecfa7609ebd9972c2a0b08b93f76c2231e6e4e486548842561a18c2"
+    },
+    {
       "path": "windows/phwgna-chrome-max.ps1",
       "sha256": "cd4f7de3ccfb318aa54506952efb1d8e7a576b9a50e51f7dea0787a6aed47c42"
     },
     {
       "path": "windows/phwgna-setup-core.ps1",
-      "sha256": "b7e2f5f3a07b4b78c3bb15c074a1fb08cd534b9f4493db68e7337d3c17b0e9f1"
+      "sha256": "dc46d84f305ad3e9b89f9152f4471e8cbf6cef428248ad8768c364d56b8c7128"
     },
     {
       "path": "windows/phwgna-setup-wizard.ps1",
@@ -339,7 +347,7 @@
     }
   ],
   "product": "Phwgna Stv",
-  "sourceCommit": "16bb36f9c2322a40dccfc4f72624122fa02ee320",
+  "sourceCommit": "050d4267c2c736dc3870f3033cbbe1e935fbc6e2",
   "officialRepository": "https://github.com/itzmonnz/phwgna-stv",
   "officialReleaseUrl": "https://github.com/itzmonnz/phwgna-stv/releases/tag/v0.2.8",
   "publicKeyFingerprint": "85ac74c199d0a6028bce843d6f68d7632317912b460aad1a7431193767ec9871"
