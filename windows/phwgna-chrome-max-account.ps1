@@ -16,8 +16,21 @@ if (-not $LaunchOnly) {
 }
 
 if ($Launch -or $LaunchOnly) {
-    if (@(Get-Process -Name 'chrome' -ErrorAction SilentlyContinue).Count -gt 0) {
-        throw 'Hãy đóng hoàn toàn mọi cửa sổ Chrome rồi mở lại shortcut Chrome Max Tài Khoản.'
+    $launchState = Get-PhwgnaChromeLaunchState -UserDataRoot $userDataRoot -ExtensionDirectory $installed.path
+    if ($launchState -eq 'max_running') {
+        $openArguments = '--profile-directory="' + $profile + '" --new-tab "' + $StartUrl + '"'
+        Start-Process -FilePath $browser.path -ArgumentList $openArguments
+        exit 0
+    }
+    if ($launchState -eq 'browser_running') {
+        Add-Type -AssemblyName PresentationFramework
+        [void][System.Windows.MessageBox]::Show(
+            'Chrome thường đang mở. Hãy đóng hoàn toàn Chrome rồi mở lại Chrome Max Tài Khoản.',
+            'Phwgna STV',
+            [System.Windows.MessageBoxButton]::OK,
+            [System.Windows.MessageBoxImage]::Information
+        )
+        exit 2
     }
     $arguments = Get-PhwgnaDedicatedChromeArguments -ProfileRoot $userDataRoot -ProfileDirectory $profile -ExtensionDirectory $installed.path -StartUrl $StartUrl
     Start-Process -FilePath $browser.path -ArgumentList $arguments

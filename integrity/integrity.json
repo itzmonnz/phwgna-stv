@@ -327,7 +327,7 @@
     },
     {
       "path": "windows/phwgna-chrome-max-account.ps1",
-      "sha256": "acc86521dbc20a6fd892472d6cddce3081e8eace56226de89e0641e74cf5d81c"
+      "sha256": "11930726235a074c07cac980eb48af19c0f9b52b12e3ecfdcf4273db45c7208b"
     },
     {
       "path": "windows/phwgna-chrome-max.ps1",
@@ -335,7 +335,7 @@
     },
     {
       "path": "windows/phwgna-setup-core.ps1",
-      "sha256": "05b20313b34880bc38f34ee34fe800277ea418db07488c7dd4a0c720fe6994f4"
+      "sha256": "f3a28b27dd11ef2378a81b4a2f25b837595b8cc30766da5745dc8ff12f309e68"
     },
     {
       "path": "windows/phwgna-setup-wizard.ps1",
@@ -347,7 +347,7 @@
     }
   ],
   "product": "Phwgna Stv",
-  "sourceCommit": "0a9f8f6523cd0bb9d9301871a37be2469e80ec9e",
+  "sourceCommit": "04db6956aeaf54602a79cbcffab4f29fb5cd649f",
   "officialRepository": "https://github.com/itzmonnz/phwgna-stv",
   "officialReleaseUrl": "https://github.com/itzmonnz/phwgna-stv/releases/tag/v0.2.8",
   "publicKeyFingerprint": "85ac74c199d0a6028bce843d6f68d7632317912b460aad1a7431193767ec9871"

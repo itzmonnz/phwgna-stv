@@ -356,6 +356,27 @@ function Get-PhwgnaChromeProfileDirectory {
     $profile
 }
 
+function Get-PhwgnaChromeLaunchState {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$UserDataRoot,
+        [Parameter(Mandatory)][string]$ExtensionDirectory,
+        [object[]]$ChromeProcesses = @(Get-CimInstance Win32_Process -Filter "Name='chrome.exe'" -ErrorAction SilentlyContinue)
+    )
+    $profile = [IO.Path]::GetFullPath($UserDataRoot)
+    $extension = [IO.Path]::GetFullPath($ExtensionDirectory)
+    foreach ($process in @($ChromeProcesses)) {
+        $commandLine = [string]$process.CommandLine
+        if ($commandLine.IndexOf($profile, [StringComparison]::OrdinalIgnoreCase) -ge 0 `
+            -and $commandLine.IndexOf($extension, [StringComparison]::OrdinalIgnoreCase) -ge 0 `
+            -and $commandLine -match '--load-extension=') {
+            return 'max_running'
+        }
+    }
+    if (@($ChromeProcesses).Count -gt 0) { return 'browser_running' }
+    'closed'
+}
+
 function New-PhwgnaAccountChromeShortcut {
     [CmdletBinding()]
     param(
@@ -377,7 +398,7 @@ function New-PhwgnaAccountChromeShortcut {
     $escapedStartUrl = $StartUrl.Replace("'", "''")
     $command = "& '$escapedLauncher' -LaunchOnly -StartUrl '$escapedStartUrl'"
     $encodedCommand = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
-    $arguments = '-NoProfile -ExecutionPolicy Bypass -EncodedCommand ' + $encodedCommand
+    $arguments = '-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -EncodedCommand ' + $encodedCommand
     $shortcutPath = Join-Path $desktop 'Phwgna STV - Chrome Max Tai Khoan.lnk'
     $description = 'Phwgna STV - Chrome Max dung tai khoan Chrome hien tai'
     if ($DryRun) {
