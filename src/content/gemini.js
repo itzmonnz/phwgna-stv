@@ -799,6 +799,19 @@
           "Gemini đã rời Temporary Chat trước khi gửi. Prompt đã được xóa."
         );
       }
+      // Gemini can replace its icon-button component after the editor settles.
+      // An element retained across the awaits above can therefore be detached
+      // (and have its framework listener removed) even though it still looks
+      // enabled to JavaScript. Resolve the live control again immediately
+      // before activation, with no await between this lookup and click.
+      const liveSendButton = updateSendButtonState();
+      if (!common.buttonIsEnabled(liveSendButton)) {
+        throw new common.ProviderError(
+          "provider_busy_timeout",
+          "Nút Gửi Gemini đã thay đổi trước khi bấm; nội dung chưa được gửi."
+        );
+      }
+      settledButton = liveSendButton;
       submissionDiagnostic.clickAttempted = true;
       submissionDiagnostic.sendButtonState = "clicked";
       settledButton.click();
