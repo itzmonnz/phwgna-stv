@@ -918,6 +918,7 @@
       // retire another slot while this recovery is in progress.
       job.workState = "queued";
       job.recoveryStage = "switching_ready";
+      job.recoveryExcludedSlotId = oldSlotId || "";
       job.batchSwitched = true;
       await notifyStatus(job, "running", "switching_busy_tab");
       if (job.status !== "running" || job.activeRequestId !== requestId) {
@@ -949,30 +950,33 @@
         requestId
       });
 
-      let closed = false;
       if (slot) {
         await withPoolLock(async () => {
           if (!warmPool.slots.includes(slot) || slot.jobId !== job.id) return;
+          // A busy timeout means the conversation is stuck, not that the
+          // physical tab is unusable. Keep it visible and recover it in place
+          // while the unchanged request is handed to another READY slot.
+          slot.state = "recovering";
+          slot.jobId = "";
+          slot.errorCode = "provider_busy_timeout";
+          slot.recoveryJobId = job.id;
+          slot.recoveryCancelled = false;
           job.providerTabId = null;
-          closed = await removeOwnedSlot(slot, { errorReason: "provider_busy_timeout" });
+          job.poolSlotId = "";
+          job.warmSessionId = "";
+          job.settingsHash = "";
+          job.activeRequestId = "";
+          await persistPool();
         });
+        void recoverGeminiSlotInPlace?.(slot, warmPool.settings || job.settings);
       } else if (Number.isInteger(oldTabId)) {
         await closeLegacyProviderTab(job);
-        closed = !Number.isInteger(job.providerTabId);
+        job.providerTabId = null;
+        job.poolSlotId = "";
+        job.warmSessionId = "";
+        job.settingsHash = "";
+        job.activeRequestId = "";
       }
-      if (!closed) return pause(job, "provider_tab_close_failed");
-      await errorJournal?.append?.(incidentKey, {
-        kind: "tab_retired",
-        errorCode: "provider_busy_timeout",
-        recoveryStage: job.recoveryStage,
-        tabClosed: true
-      });
-
-      job.providerTabId = null;
-      job.poolSlotId = "";
-      job.warmSessionId = "";
-      job.settingsHash = "";
-      job.activeRequestId = "";
       job.unsentRequestId = requestId;
       await persistJob(job);
       return acquireRecoverySlot(job);

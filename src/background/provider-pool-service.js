@@ -52,7 +52,7 @@
     let geminiSetupCooldownOperation = null;
     let geminiSetupRefillOperation = null;
     const GEMINI_IN_PLACE_RECOVERY_CODES = new Set([
-      "send_not_confirmed", "temporary_unavailable", "provider_busy"
+      "send_not_confirmed", "temporary_unavailable", "provider_busy", "provider_busy_timeout"
     ]);
 
     function isGeminiSetupRejection(slot) {
