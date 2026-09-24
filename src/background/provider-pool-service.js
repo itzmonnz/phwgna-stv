@@ -439,7 +439,18 @@
       for (const slot of warmPool.slots.slice()) {
         if (slot.state !== "ready" || slot.provider !== provider || slot.settingsHash !== settingsHash
           || slot.slotId === excludedSlotId || !slotMatchesPurpose(slot, purpose)) continue;
-        if (await verifyPreparedSlot(slot)) return slot;
+        const verificationAttempts = slot.provider === "gemini" ? 3 : 1;
+        let verified = false;
+        for (let attempt = 0; attempt < verificationAttempts; attempt += 1) {
+          if (await verifyPreparedSlot(slot)) {
+            verified = true;
+            break;
+          }
+          if (attempt + 1 < verificationAttempts) {
+            await retrySleep(Math.max(25, Math.min(150, Number(providerReadyDelayMs) || 100)));
+          }
+        }
+        if (verified) return slot;
         await removeOwnedSlot(slot, { errorReason: "warm_evidence_missing" });
       }
       return null;
