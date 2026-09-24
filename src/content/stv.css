@@ -2675,3 +2675,19 @@
     min-height: 44px;
   }
 }
+
+/* STV dark mode applies html { filter: invert(0.9) } to the whole page.
+   Restore extension-owned colors without changing the site's own dark theme. */
+:is(
+  .stvai-toolbar,
+  .stvai-navigation,
+  .stvai-consent-backdrop,
+  .stvai-automation-consent-backdrop,
+  .stvai-tts-consent-backdrop,
+  .stvai-name-editor,
+  .stvai-name-manager,
+  .stvai-tts-pronunciation,
+  .stvai-reader-host
+)[data-stvai-filter-compensation="invert-0.9"] {
+  filter: invert(1) contrast(1.25) !important;
+}

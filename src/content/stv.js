@@ -67,6 +67,53 @@
     ".stvai-name-manager",
     ".stvai-tts-pronunciation"
   ].join(",");
+  const FILTER_COMPENSATION_SELECTOR = [
+    ".stvai-toolbar",
+    ".stvai-navigation",
+    ".stvai-consent-backdrop",
+    ".stvai-automation-consent-backdrop",
+    ".stvai-tts-consent-backdrop",
+    ".stvai-name-editor",
+    ".stvai-name-manager",
+    ".stvai-tts-pronunciation",
+    ".stvai-reader-host"
+  ].join(",");
+
+  // STV's dark stylesheet uses html { filter: invert(0.9) }, which is applied
+  // after the page has composited every descendant. That also inverts the
+  // extension UI, so changing its own palette cannot fix the result. The
+  // inverse transform is invert(1) + contrast(1.25): after the page's
+  // invert(0.9), the original colors are restored (including the blue/pink
+  // progress animation). Keep this scoped to extension-owned roots only.
+  function installPageFilterCompensation(document) {
+    if (!document?.documentElement?.querySelectorAll) return () => {};
+    const view = document.defaultView;
+    const roots = () => document.querySelectorAll(FILTER_COMPENSATION_SELECTOR);
+    const isInvertedPage = () => {
+      const filter = view?.getComputedStyle?.(document.documentElement)?.filter || "none";
+      return /^invert\(0?\.9\)$/i.test(filter.trim());
+    };
+    const refresh = () => {
+      const active = isInvertedPage();
+      for (const root of roots()) {
+        if (active) root.setAttribute("data-stvai-filter-compensation", "invert-0.9");
+        else root.removeAttribute("data-stvai-filter-compensation");
+      }
+    };
+    refresh();
+    const Observer = view?.MutationObserver;
+    const observer = Observer ? new Observer(refresh) : null;
+    observer?.observe(document.documentElement, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["href", "disabled", "media", "rel", "class", "style"]
+    });
+    return () => {
+      observer?.disconnect();
+      for (const root of roots()) root.removeAttribute("data-stvai-filter-compensation");
+    };
+  }
 
   function isTrustedUserGesture(event, view) {
     if (event?.isTrusted !== true) return false;
@@ -392,6 +439,7 @@
       controllerGeneration,
       createJobId = createDefaultJobId
     } = dependencies;
+    const removePageFilterCompensation = installPageFilterCompensation(document);
 
     const state = {
       status: "idle",
@@ -2144,6 +2192,7 @@
       if (toolbar?.announcementTimer) document.defaultView?.clearTimeout?.(toolbar.announcementTimer);
       if (messageListener) runtime.onMessage.removeListener(messageListener);
       toolbar?.root.remove();
+      removePageFilterCompensation();
       copyrightGuard?.destroy();
       copyrightGuard = undefined;
       nameEditorInstance?.destroy();
@@ -2409,6 +2458,7 @@
     isTrustedUserGesture,
     isTrustedNativeInput,
     installSharedDomEventGuard,
+    installPageFilterCompensation,
     setDiagnosticState,
     waitForChapterRoot,
     bootstrap
