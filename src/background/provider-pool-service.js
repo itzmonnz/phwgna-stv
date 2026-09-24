@@ -519,12 +519,6 @@
       slot.errorCode = String(code || "warm_failed");
       slot.failedAt = now();
       const geminiSessionRejected = isGeminiSetupRejection(slot);
-      if (geminiSessionRejected) {
-        geminiSetupReopenNotBefore = Math.max(
-          geminiSetupReopenNotBefore,
-          slot.failedAt + geminiSetupRejectionCooldownMs
-        );
-      }
       slot.errorIncidentKey ||= `setup:${slot.slotId}:${slot.openedAt || slot.failedAt}`;
       await errorJournal?.append?.(slot.errorIncidentKey, {
         kind: "setup_failed",
@@ -557,6 +551,27 @@
       exposeSlotFailureToPool(slot);
       await persistPool();
       if (geminiSessionRejected) {
+        // A Gemini setup rejection (including 1095/send_not_confirmed) is a
+        // conversation failure, not a physical-tab failure. Keep the tab in
+        // the pool, open a fresh conversation on that same tab, re-enable
+        // Temporary Chat and replay READY 1/2. Closing here caused the first
+        // startup failure to remove every tab before the delayed refill.
+        const settings = warmPool.settings;
+        if (settings?.provider === "gemini"
+          && Number.isInteger(slot.providerTabId)
+          && warmPool.slots.includes(slot)
+          && !slot.recoveryCancelled) {
+          slot.state = "recovering";
+          slot.recoveryJobId ||= createId("setup-recovery");
+          slot.recoveryCancelled = false;
+          slot.retryNotBefore = 0;
+          await persistPool();
+          setTimeout(() => {
+            void recoverGeminiSlotInPlace(slot, settings);
+          }, 0);
+          await notifyPoolStatus();
+          return;
+        }
         const shouldRefill = !slot.suppressAutomaticReplacement
           && REPLACEABLE_WARM_FAILURES.has(slot.errorCode)
           && (slot.recoveryAttempts || 0) < MAX_WARM_REPLACEMENTS;
