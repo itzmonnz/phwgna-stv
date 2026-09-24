@@ -377,6 +377,36 @@ function Get-PhwgnaChromeLaunchState {
     'closed'
 }
 
+function Test-PhwgnaChromeExtensionInstalled {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$UserDataRoot,
+        [Parameter(Mandatory)][string]$ProfileDirectory,
+        [Parameter(Mandatory)][string]$ExtensionDirectory
+    )
+    if ($ProfileDirectory -ne 'Default' -and $ProfileDirectory -notmatch '^Profile \d+$') { return $false }
+    $expected = [IO.Path]::GetFullPath($ExtensionDirectory).TrimEnd([IO.Path]::DirectorySeparatorChar)
+    $profileRoot = Join-Path ([IO.Path]::GetFullPath($UserDataRoot)) $ProfileDirectory
+    foreach ($fileName in @('Preferences', 'Secure Preferences')) {
+        $file = Join-Path $profileRoot $fileName
+        if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { continue }
+        try {
+            $preferences = Get-Content -Raw -LiteralPath $file | ConvertFrom-Json
+            foreach ($entry in @($preferences.extensions.settings.PSObject.Properties)) {
+                $path = [string]$entry.Value.path
+                if ([string]::IsNullOrWhiteSpace($path)) { continue }
+                try { $candidate = [IO.Path]::GetFullPath($path).TrimEnd([IO.Path]::DirectorySeparatorChar) } catch { continue }
+                if ($candidate.Equals($expected, [StringComparison]::OrdinalIgnoreCase) -and [int]$entry.Value.state -eq 1) {
+                    return $true
+                }
+            }
+        } catch {
+            continue
+        }
+    }
+    $false
+}
+
 function New-PhwgnaAccountChromeShortcut {
     [CmdletBinding()]
     param(
