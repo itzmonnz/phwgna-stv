@@ -373,7 +373,11 @@ function New-PhwgnaAccountChromeShortcut {
     if (-not (Test-Path -LiteralPath $launcher -PathType Leaf)) { throw 'launcher_missing' }
     if (-not (Test-Path -LiteralPath $desktop -PathType Container)) { throw 'desktop_missing' }
     $powershell = Join-Path $PSHOME 'powershell.exe'
-    $arguments = '-NoProfile -ExecutionPolicy Bypass -File "' + $launcher + '" -LaunchOnly -StartUrl "' + $StartUrl + '"'
+    $escapedLauncher = $launcher.Replace("'", "''")
+    $escapedStartUrl = $StartUrl.Replace("'", "''")
+    $command = "& '$escapedLauncher' -LaunchOnly -StartUrl '$escapedStartUrl'"
+    $encodedCommand = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
+    $arguments = '-NoProfile -ExecutionPolicy Bypass -EncodedCommand ' + $encodedCommand
     $shortcutPath = Join-Path $desktop 'Phwgna STV - Chrome Max Tai Khoan.lnk'
     $description = 'Phwgna STV - Chrome Max dung tai khoan Chrome hien tai'
     if ($DryRun) {
