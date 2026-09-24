@@ -1553,6 +1553,10 @@
       if (!job) return { ok: false, reason: "stale-job" };
       if (sender?.tab?.id !== job.sourceTabId) return { ok: false, reason: "wrong-source-tab" };
       if (job.status === "cancelled") return { ok: true, cancelled: true };
+      // A departed chapter can deliver its navigation cleanup after a prefetch
+      // has already committed every batch. Completion is terminal: never spend
+      // or recycle the provider slot a second time for this stale cancellation.
+      if (job.status === "completed") return { ok: true, cancelled: false, completed: true };
       if (!job.prefetch) await clearPrefetchParent(job.sourceTabId);
       if (!job.prefetch && core.isWebProvider(job.provider) && message.reason !== "chapter_changed") {
         warmPool.suspendedStvTabs.add(job.sourceTabId);

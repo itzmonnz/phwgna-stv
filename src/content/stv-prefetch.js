@@ -228,6 +228,7 @@
       container.append(root);
     }
     if (root.getAttribute('cid') !== chapterId) throw new Error("next_chapter_identity_mismatch");
+    let renderedChapter = null;
     if (!root.querySelector('i[t]:not([t=""])')) {
       // Observed STV readchapter endpoints. Never rescan, copy dynamic challenge
       // values, or execute scripts from the fetched page.
@@ -354,16 +355,44 @@
       if (primaryChapter.sourceText !== confirmationChapter.sourceText) {
         throw prefetchError('next_chapter_source_unstable', true);
       }
-      // Match the line-break preprocessing observed on STV. Parsing stays inert.
-      const html = payload.data.replace(/<br\s*\/?>/gi, '<br><br>').replace(/\r?\n+/g, '<br><br>');
-      const content = options.parse(html, url);
-      content.querySelectorAll('script, style, noscript, iframe, object, embed').forEach(node => node.remove());
-      root.replaceChildren(...Array.from(content.body.childNodes));
-      trace?.update({ pageDom: { initialSourceMarkers: markerBucket(root.querySelectorAll('i[t]:not([t=""])').length) } });
+      // The readchapter payload does not identify its chapter. In production STV
+      // can return a stable, successful payload for another chapter until a real
+      // document navigation has initialized the requested one. Confirm the
+      // endpoint source against a hidden same-origin rendered page before any AI
+      // work or cache write. The rendered page is authoritative when they differ.
+      if (typeof options.loadRenderedChapter === 'function') {
+        trace?.update({ stage: 'validate_rendered_source', renderedSource: { attempted: true, state: 'loading' } });
+        try {
+          renderedChapter = prepareChapter(await options.loadRenderedChapter({ url, signal }));
+        } catch (error) {
+          if (signal.aborted || error?.message === 'next_chapter_cancelled') {
+            throw prefetchError('next_chapter_cancelled');
+          }
+          throw prefetchError(error?.message === 'next_chapter_identity_mismatch'
+            ? 'next_chapter_identity_mismatch' : 'next_chapter_source_unstable', true);
+        }
+        if (renderedChapter?.chapterId !== chapterId || !renderedChapter?.translatableBlocks?.length) {
+          throw prefetchError('next_chapter_identity_mismatch');
+        }
+        trace?.update({ renderedSource: {
+          attempted: true,
+          state: 'ok',
+          endpointMatch: renderedChapter.sourceText === primaryChapter.sourceText
+        } });
+      }
+      if (!renderedChapter) {
+        // Test/fallback environments without a rendered loader keep the inert
+        // endpoint parser. Browser production always provides the loader above.
+        const html = payload.data.replace(/<br\s*\/?>/gi, '<br><br>').replace(/\r?\n+/g, '<br><br>');
+        const content = options.parse(html, url);
+        content.querySelectorAll('script, style, noscript, iframe, object, embed').forEach(node => node.remove());
+        root.replaceChildren(...Array.from(content.body.childNodes));
+        trace?.update({ pageDom: { initialSourceMarkers: markerBucket(root.querySelectorAll('i[t]:not([t=""])').length) } });
+      }
     }
     let chapter;
     trace?.update({ stage: "extract_source", extraction: { attempted: true, state: "running" } });
-    try { chapter = prepareChapter(options.extractor.extractChapter(document, { url })); }
+    try { chapter = renderedChapter || prepareChapter(options.extractor.extractChapter(document, { url })); }
     catch (error) {
       trace?.update({ extraction: { state: "failed", errorCode: ["SOURCE_NOT_FOUND", "SOURCE_NOT_CHINESE"].includes(error?.code) ? error.code : "UNEXPECTED" } });
       throw new Error('next_chapter_source_unavailable');

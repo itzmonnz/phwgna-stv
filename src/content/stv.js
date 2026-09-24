@@ -451,6 +451,7 @@
     let prefetchAbort = null;
     let prefetchGeneration = 0;
     let prefetchStatus = "";
+    let prefetchCompletedSuccessfully = false;
     let toolbarStatus = "Sẵn sàng";
     let sourceRecoveryAttempts = 0;
     let sourceRecoveryPending = false;
@@ -528,19 +529,21 @@
       };
     }
 
-    function stopPrefetch() {
+    function stopPrefetch(options = {}) {
       ++prefetchGeneration;
       prefetchAbort?.abort();
       prefetchAbort = null;
       const jobId = prefetchJobId;
+      const cancelJob = Boolean(jobId) && !(options.preserveCompleted === true && prefetchCompletedSuccessfully);
       prefetchJobId = "";
+      prefetchCompletedSuccessfully = false;
       prefetchStatus = "";
       state.prefetchCompleted = 0;
       state.prefetchTotal = 0;
       state.prefetchRunning = false;
       state.prefetchCacheable = true;
       if (active && toolbar) updateToolbar();
-      return jobId ? sendRuntime(runtime, { type: "STV_CANCEL_JOB", jobId, reason: "prefetch_superseded" }).catch(() => undefined) : Promise.resolve();
+      return cancelJob ? sendRuntime(runtime, { type: "STV_CANCEL_JOB", jobId, reason: "prefetch_superseded" }).catch(() => undefined) : Promise.resolve();
     }
 
     function reportPrefetch(label) {
@@ -598,6 +601,60 @@
         } catch (_error) { /* Try the next chapter link. */ }
       }
       return '';
+    }
+
+    async function loadRenderedPrefetchChapter({ url, signal: requestSignal }) {
+      const safeUrl = prefetch?.safeChapterUrl?.(url, location.href);
+      if (!safeUrl) throw new Error('next_chapter_identity_mismatch');
+      const expectedChapterId = new URL(safeUrl).pathname.split('/').filter(Boolean).at(-1) || '';
+      const frame = document.createElement('iframe');
+      frame.hidden = true;
+      frame.tabIndex = -1;
+      frame.setAttribute('aria-hidden', 'true');
+      frame.setAttribute('title', 'STV AI source probe');
+      let settled = false;
+      const cleanup = () => {
+        requestSignal?.removeEventListener('abort', aborted);
+        frame.remove();
+      };
+      let resolveLoad;
+      const aborted = () => {
+        if (settled) return;
+        settled = true;
+        resolveLoad?.(false);
+        cleanup();
+      };
+      requestSignal?.addEventListener('abort', aborted, { once: true });
+      if (requestSignal?.aborted) {
+        cleanup();
+        throw new Error('next_chapter_cancelled');
+      }
+      try {
+        const loaded = new Promise((resolve) => {
+          resolveLoad = resolve;
+          frame.addEventListener('load', () => resolve(true), { once: true });
+          frame.addEventListener('error', () => resolve(false), { once: true });
+        });
+        frame.src = `${safeUrl}${safeUrl.includes('#') ? '&' : '#'}stvai-source-probe`;
+        (document.body || document.documentElement).append(frame);
+        if (!await loaded || requestSignal?.aborted) throw new Error(requestSignal?.aborted
+          ? 'next_chapter_cancelled' : 'next_chapter_source_unstable');
+        const frameDocument = frame.contentDocument;
+        if (!frameDocument || !await waitForChapterRoot(frameDocument, 15_000, requestSignal, 500)) {
+          throw new Error(requestSignal?.aborted ? 'next_chapter_cancelled' : 'next_chapter_source_unstable');
+        }
+        const extracted = extractor.extractChapter(frameDocument, { url: safeUrl, preserveNative: false });
+        const prepared = prefetch.prepareChapter ? prefetch.prepareChapter(extracted) : extracted;
+        if (prepared.chapterId !== expectedChapterId) throw new Error('next_chapter_identity_mismatch');
+        return {
+          chapterId: prepared.chapterId,
+          sourceText: prepared.sourceText,
+          translatableBlocks: prepared.translatableBlocks.map(({ id, text, convert }) => ({ id, text, convert }))
+        };
+      } finally {
+        settled = true;
+        cleanup();
+      }
     }
 
     function enqueue(work) {
@@ -1173,6 +1230,7 @@
               parse: parseHtml,
               extractor,
               splitIntoBatches: core.splitIntoBatches,
+              loadRenderedChapter: loadRenderedPrefetchChapter,
               onTrace: setPrefetchDiagnostic
             });
             setPrefetchDiagnostic({ sourceWait: { state: retryCount ? 'resolved' : 'idle', retryCount, nextDelayBucket: 'none' } });
@@ -1208,6 +1266,7 @@
         });
         if (!active || generation !== prefetchGeneration || setupSnapshot !== core.stableSettingsPayload(settings)) return;
         prefetchJobId = jobId;
+        prefetchCompletedSuccessfully = false;
         state.prefetchCompleted = 0;
         state.prefetchTotal = Math.min(core.PREFETCH_BATCH_LIMIT, Math.max(1, result.batches.length));
         state.prefetchRunning = true;
@@ -1221,6 +1280,7 @@
             state.prefetchCompleted = state.prefetchTotal;
             state.prefetchRunning = false;
             state.prefetchCacheable = !response.fallbackCount;
+            prefetchCompletedSuccessfully = true;
             setPrefetchDiagnostic({ stage: "completed", failureCode: "none" });
             reportPrefetch(response.fallbackCount
               ? 'Dịch trước có câu Convert — không lưu cache chương kế.'
@@ -1567,6 +1627,8 @@
           state.prefetchCompleted = completed;
           state.prefetchCacheable = message.cacheable !== false;
           state.prefetchRunning = !failed && message.status !== 'completed' && state.prefetchCacheable;
+          if (message.status === 'completed') prefetchCompletedSuccessfully = true;
+          else if (failed) prefetchCompletedSuccessfully = false;
           if (message.cacheable === false) reportPrefetch('Dịch trước có câu Convert — không lưu cache chương kế.');
           else if (failed) reportPrefetchFailure(message.reason);
           else reportPrefetch(message.status === 'completed'
@@ -2072,7 +2134,7 @@
       if (destroyed) return;
       traceChapterFlow("controller_destroy", { reason: navigation ? "navigation" : "disabled" });
       destroyed = true;
-      void stopPrefetch();
+      void stopPrefetch({ preserveCompleted: navigation });
       active = false;
       ++ttsGeneration;
       unsubscribeTts?.();
