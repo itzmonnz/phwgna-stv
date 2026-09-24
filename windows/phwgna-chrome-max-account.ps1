@@ -19,35 +19,23 @@ if (-not $LaunchOnly) {
 }
 
 if ($Launch -or $LaunchOnly) {
+    # A running normal Chrome process can open a new tab in the same profile.
+    # Check the saved unpacked extension before deciding whether a new process
+    # is required; the old order incorrectly blocked this path and demanded
+    # that every Chrome window be closed first.
+    $installed = Install-PhwgnaExtension -SourceDirectory $packageRoot -DestinationRoot $stateRoot
+    $extensionSaved = Test-PhwgnaChromeExtensionInstalled -UserDataRoot $userDataRoot -ProfileDirectory $profile -ExtensionDirectory $installed.path
     $launchState = Get-PhwgnaChromeLaunchState -UserDataRoot $userDataRoot -ExtensionDirectory $installedPath
-    if ($launchState -eq 'max_running') {
+    if ($extensionSaved -and ($launchState -eq 'max_running' -or $launchState -eq 'browser_running')) {
         $openArguments = '--profile-directory="' + $profile + '" --new-tab "' + $StartUrl + '"'
         Start-Process -FilePath $browser.path -ArgumentList $openArguments
         exit 0
     }
-    if ($launchState -eq 'browser_running') {
-        Add-Type -AssemblyName PresentationFramework
-        [void][System.Windows.MessageBox]::Show(
-            'Chrome thường đang mở. Hãy đóng hoàn toàn Chrome rồi mở lại Chrome Max Tài Khoản.',
-            'Phwgna STV',
-            [System.Windows.MessageBoxButton]::OK,
-            [System.Windows.MessageBoxImage]::Information
-        )
-        exit 2
-    }
-    $installed = Install-PhwgnaExtension -SourceDirectory $packageRoot -DestinationRoot $stateRoot
-    $extensionSaved = Test-PhwgnaChromeExtensionInstalled -UserDataRoot $userDataRoot -ProfileDirectory $profile -ExtensionDirectory $installed.path
     if (-not $extensionSaved) {
         $setupArguments = '--profile-directory="' + $profile + '" --new-window "chrome://extensions/"'
         Start-Process -FilePath $browser.path -ArgumentList $setupArguments
         Start-Process -FilePath 'explorer.exe' -ArgumentList ('/select,"' + (Join-Path $installed.path 'manifest.json') + '"')
-        Add-Type -AssemblyName PresentationFramework
-        [void][System.Windows.MessageBox]::Show(
-            "Chrome chưa lưu extension STV.`n`n1. Bật Chế độ nhà phát triển.`n2. Chọn Tải tiện ích đã giải nén.`n3. Chọn thư mục:`n$($installed.path)`n`nCài xong, đóng Chrome rồi mở lại shortcut Chrome Max Tài Khoản.",
-            'Cài extension Phwgna STV một lần',
-            [System.Windows.MessageBoxButton]::OK,
-            [System.Windows.MessageBoxImage]::Information
-        )
+        Write-Warning "Chrome chưa lưu extension STV. Hãy bật Chế độ nhà phát triển, chọn Tải tiện ích đã giải nén và chọn thư mục: $($installed.path). Không cần đóng Chrome; sau khi tải xong chỉ cần reload trang STV."
         exit 3
     }
     $arguments = Get-PhwgnaDedicatedChromeArguments -ProfileRoot $userDataRoot -ProfileDirectory $profile -ExtensionDirectory $installed.path -StartUrl $StartUrl
