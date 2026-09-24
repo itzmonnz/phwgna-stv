@@ -96,6 +96,8 @@
     let submittedSetupPrompt = false;
     let lastSubmittedSetupPrompt = "";
     let pendingSubmittedPrompt = "";
+    let lastOwnedComposerPrompt = "";
+    let lastOwnedComposerPhase = "";
     let activeBatchRequestId = "";
     let learnedCurrentDocument = false;
     const verifiedReadySteps = new Set();
@@ -383,6 +385,38 @@
       }
     }
 
+    function clearOwnedComposerForRecovery() {
+      const composer = findComposer();
+      if (!composer) {
+        submissionDiagnostic.recoveryComposerState = "not_found";
+        throw new common.ProviderError("ui_changed", "Không tìm thấy ô nhập Gemini để phục hồi.");
+      }
+      const current = comparableComposerText(readComposerText(composer));
+      if (!current) {
+        submissionDiagnostic.recoveryComposerState = "empty";
+        return "empty";
+      }
+      const ownedCandidates = [
+        { prompt: lastOwnedComposerPrompt, phase: lastOwnedComposerPhase },
+        { prompt: pendingSubmittedPrompt, phase: lastOwnedComposerPhase },
+        { prompt: lastSubmittedSetupPrompt, phase: "setup" }
+      ];
+      const owned = ownedCandidates.find((candidate) => candidate.prompt && candidate.prompt === current);
+      if (!owned) {
+        submissionDiagnostic.recoveryComposerState = "foreign";
+        throw new common.ProviderError(
+          "foreign_composer_content",
+          "Ô nhập Gemini có nội dung không thuộc phiên dịch hiện tại; tool không tự xóa."
+        );
+      }
+      common.setComposerText(composer, "", { focus: false });
+      submissionDiagnostic.composerState = "cleared_returned_prompt";
+      submissionDiagnostic.recoveryComposerState = owned.phase === "batch"
+        ? "owned_batch_cleared"
+        : "owned_setup_cleared";
+      return submissionDiagnostic.recoveryComposerState;
+    }
+
     async function waitForPostSetupTemporaryStability(signal, timeoutMs) {
       const requiredMs = Math.max(0, Number(options.temporaryPostSetupStableMs ?? 750) || 0);
       if (!requiredMs) return;
@@ -581,6 +615,7 @@
     }
 
     async function restartTemporaryChat({ signal, timeoutMs } = {}) {
+      clearOwnedComposerForRecovery();
       const control = findNewChatControl();
       if (!control) {
         throw new common.ProviderError("temporary_unavailable", "Không tìm thấy nút Cuộc trò chuyện mới trên Gemini.");
@@ -596,6 +631,8 @@
       submittedSetupPrompt = false;
       lastSubmittedSetupPrompt = "";
       pendingSubmittedPrompt = "";
+      lastOwnedComposerPrompt = "";
+      lastOwnedComposerPhase = "";
       activeBatchRequestId = "";
       learnedCurrentDocument = false;
       verifiedReadySteps.clear();
@@ -765,6 +802,8 @@
       if (comparableComposerText(after) !== comparablePrompt) {
         throw new common.ProviderError("ui_changed", "Gemini không nhận đủ nội dung trong ô nhập.");
       }
+      lastOwnedComposerPrompt = comparablePrompt;
+      lastOwnedComposerPhase = setupPrompt ? "setup" : "batch";
       const initialSend = await waitForSafeSendButton(remaining());
       if (initialSend.alreadySent) return { alreadySent: true };
       const settleMs = Math.max(0, Number(options.sendSettleMs ?? 500) || 0);

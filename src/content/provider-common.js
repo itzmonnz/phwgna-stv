@@ -569,6 +569,7 @@
       temporary_unavailable: "Không thể bật chế độ trò chuyện tạm thời trên giao diện hiện tại.",
       provider_busy: "Một tác vụ dịch khác đang chạy trong tab này.",
       provider_busy_timeout: "Gemini vẫn đang sinh phản hồi sau thời gian chờ.",
+      foreign_composer_content: "Ô nhập Gemini có nội dung không thuộc phiên dịch hiện tại; tool không tự xóa.",
       job_not_active: "Không có tác vụ đang chạy tương ứng.",
       warm_session_mismatch: "Phiên AI đã chuẩn bị không khớp với cài đặt dịch hiện tại.",
       content_refused: "AI đã từ chối xử lý nội dung này.",
