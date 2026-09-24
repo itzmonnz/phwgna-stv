@@ -260,6 +260,7 @@ function Get-PhwgnaDedicatedChromeArguments {
     param(
         [Parameter(Mandatory)][string]$ProfileRoot,
         [Parameter(Mandatory)][string]$ExtensionDirectory,
+        [string]$ProfileDirectory = '',
         [string]$StartUrl = 'https://sangtacviet.com/mybook/'
     )
     $profile = [IO.Path]::GetFullPath($ProfileRoot)
@@ -271,7 +272,7 @@ function Get-PhwgnaDedicatedChromeArguments {
     $quotedProfile = '"' + $profile + '"'
     $quotedExtension = '"' + $extension + '"'
     $quotedStartUrl = '"' + $StartUrl + '"'
-    @(
+    $items = @(
         "--user-data-dir=$quotedProfile",
         '--no-first-run',
         '--no-default-browser-check',
@@ -281,9 +282,14 @@ function Get-PhwgnaDedicatedChromeArguments {
         '--disable-features=CalculateNativeWinOcclusion',
         "--disable-extensions-except=$quotedExtension",
         "--load-extension=$quotedExtension",
-        '--new-window',
-        $quotedStartUrl
-    ) -join ' '
+        '--new-window'
+    )
+    if (-not [string]::IsNullOrWhiteSpace($ProfileDirectory)) {
+        if ($ProfileDirectory -ne 'Default' -and $ProfileDirectory -notmatch '^Profile \d+$') { throw 'invalid_profile_directory' }
+        $items += '--profile-directory="' + $ProfileDirectory + '"'
+    }
+    $items += $quotedStartUrl
+    $items -join ' '
 }
 
 function New-PhwgnaDedicatedChromeShortcut {
@@ -327,106 +333,65 @@ function New-PhwgnaDedicatedChromeShortcut {
     [pscustomobject]@{ ok=$true; code='dedicated_shortcut_created'; browser='chrome'; path=$shortcutPath; profile=$profile; arguments=$arguments; dryRun=$false }
 }
 
-function Copy-PhwgnaChromeUserData {
+function Get-PhwgnaChromeProfileDirectory {
     [CmdletBinding()]
     param(
-        [Parameter(Mandatory)][string]$SourceRoot,
-        [Parameter(Mandatory)][string]$DestinationRoot,
-        [object[]]$RunningChromeProcesses = @(Get-Process -Name 'chrome' -ErrorAction SilentlyContinue)
+        [Parameter(Mandatory)][string]$UserDataRoot
     )
-    $source = [IO.Path]::GetFullPath($SourceRoot).TrimEnd([IO.Path]::DirectorySeparatorChar)
-    $destination = [IO.Path]::GetFullPath($DestinationRoot).TrimEnd([IO.Path]::DirectorySeparatorChar)
-    if (-not (Test-Path -LiteralPath $source -PathType Container)) { throw 'chrome_profile_source_missing' }
-    if ($source -eq $destination -or $destination.StartsWith($source + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
-        throw 'unsafe_profile_destination'
-    }
-    if (@($RunningChromeProcesses).Count -gt 0) { throw 'chrome_must_be_closed' }
-    $localState = Join-Path $source 'Local State'
+    $root = [IO.Path]::GetFullPath($UserDataRoot)
+    if (-not (Test-Path -LiteralPath $root -PathType Container)) { throw 'chrome_profile_source_missing' }
+    $localState = Join-Path $root 'Local State'
     if (-not (Test-Path -LiteralPath $localState -PathType Leaf)) { throw 'chrome_local_state_missing' }
-    $profiles = @(Get-ChildItem -LiteralPath $source -Directory | Where-Object { $_.Name -eq 'Default' -or $_.Name -like 'Profile *' })
-    if ($profiles.Count -eq 0) { throw 'chrome_profile_missing' }
-
-    $parent = Split-Path -Parent $destination
-    if ([string]::IsNullOrWhiteSpace($parent)) { throw 'unsafe_profile_destination' }
-    New-Item -ItemType Directory -Path $parent -Force | Out-Null
-    $staging = Join-Path $parent ((Split-Path -Leaf $destination) + '.staging-' + [guid]::NewGuid().ToString('N'))
-    New-Item -ItemType Directory -Path $staging | Out-Null
-    Copy-Item -LiteralPath $localState -Destination (Join-Path $staging 'Local State')
-    foreach ($optionalFile in @('First Run', 'Last Version')) {
-        $optionalPath = Join-Path $source $optionalFile
-        if (Test-Path -LiteralPath $optionalPath -PathType Leaf) {
-            Copy-Item -LiteralPath $optionalPath -Destination (Join-Path $staging $optionalFile)
+    $profile = 'Default'
+    try {
+        $state = Get-Content -Raw -LiteralPath $localState | ConvertFrom-Json
+        $candidate = [string]$state.profile.last_used
+        if (($candidate -eq 'Default' -or $candidate -match '^Profile \d+$') -and (Test-Path -LiteralPath (Join-Path $root $candidate) -PathType Container)) {
+            $profile = $candidate
         }
+    } catch {
+        $profile = 'Default'
     }
-    foreach ($profile in $profiles) {
-        $targetProfile = Join-Path $staging $profile.Name
-        New-Item -ItemType Directory -Path $targetProfile | Out-Null
-        $robocopyArgs = @(
-            $profile.FullName,
-            $targetProfile,
-            '/E', '/COPY:DAT', '/DCOPY:DAT', '/R:1', '/W:1', '/XJ',
-            '/XD', 'Cache', 'Code Cache', 'GPUCache', 'DawnGraphiteCache', 'DawnWebGPUCache', 'GrShaderCache', 'ShaderCache',
-            '/NFL', '/NDL', '/NJH', '/NJS', '/NP'
-        )
-        & robocopy.exe @robocopyArgs | Out-Null
-        if ($LASTEXITCODE -gt 7) { throw "chrome_profile_copy_failed:$($profile.Name):$LASTEXITCODE" }
-    }
-    if (-not (Test-Path -LiteralPath (Join-Path $staging 'Local State') -PathType Leaf)) { throw 'chrome_clone_validation_failed' }
-
-    $backup = ''
-    if (Test-Path -LiteralPath $destination) {
-        $backup = $destination + '.backup-' + (Get-Date -Format 'yyyyMMdd-HHmmss')
-        if ([IO.Path]::GetFullPath((Split-Path -Parent $backup)) -ne [IO.Path]::GetFullPath($parent)) { throw 'unsafe_profile_backup' }
-        Move-Item -LiteralPath $destination -Destination $backup
-    }
-    Move-Item -LiteralPath $staging -Destination $destination
-    [pscustomobject]@{
-        ok = $true
-        code = 'chrome_profile_cloned'
-        destination = $destination
-        profileCount = $profiles.Count
-        backup = $backup
-    }
+    if (-not (Test-Path -LiteralPath (Join-Path $root $profile) -PathType Container)) { throw 'chrome_profile_missing' }
+    $profile
 }
 
-function New-PhwgnaClonedChromeShortcut {
+function New-PhwgnaAccountChromeShortcut {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)][psobject]$Browser,
-        [Parameter(Mandatory)][string]$ExtensionDirectory,
-        [Parameter(Mandatory)][string]$ProfileRoot,
+        [Parameter(Mandatory)][string]$LauncherScript,
         [string]$DesktopPath = [Environment]::GetFolderPath('Desktop'),
         [string]$StartUrl = 'https://sangtacviet.com/mybook/',
         [switch]$DryRun
     )
     if ($Browser.id -ne 'chrome') { throw 'dedicated_chrome_required' }
     $browserPath = [IO.Path]::GetFullPath([string]$Browser.path)
-    $extension = [IO.Path]::GetFullPath($ExtensionDirectory)
-    $profile = [IO.Path]::GetFullPath($ProfileRoot)
+    $launcher = [IO.Path]::GetFullPath($LauncherScript)
     $desktop = [IO.Path]::GetFullPath($DesktopPath)
     if (-not (Test-Path -LiteralPath $browserPath -PathType Leaf)) { throw 'browser_missing' }
-    if (-not (Test-Path -LiteralPath $extension -PathType Container)) { throw 'extension_missing' }
-    if (-not (Test-Path -LiteralPath $profile -PathType Container)) { throw 'cloned_profile_missing' }
+    if (-not (Test-Path -LiteralPath $launcher -PathType Leaf)) { throw 'launcher_missing' }
     if (-not (Test-Path -LiteralPath $desktop -PathType Container)) { throw 'desktop_missing' }
-    $arguments = Get-PhwgnaDedicatedChromeArguments -ProfileRoot $profile -ExtensionDirectory $extension -StartUrl $StartUrl
-    $shortcutPath = Join-Path $desktop 'Phwgna STV - Chrome Max Clone.lnk'
-    $description = 'Phwgna STV - Chrome Max dung ban sao profile ca nhan'
+    $powershell = Join-Path $PSHOME 'powershell.exe'
+    $arguments = '-NoProfile -ExecutionPolicy Bypass -File "' + $launcher + '" -LaunchOnly -StartUrl "' + $StartUrl + '"'
+    $shortcutPath = Join-Path $desktop 'Phwgna STV - Chrome Max Tai Khoan.lnk'
+    $description = 'Phwgna STV - Chrome Max dung tai khoan Chrome hien tai'
     if ($DryRun) {
-        return [pscustomobject]@{ ok=$true; code='cloned_shortcut_ready'; browser='chrome'; path=$shortcutPath; profile=$profile; arguments=$arguments; dryRun=$true }
+        return [pscustomobject]@{ ok=$true; code='account_shortcut_ready'; browser='chrome'; path=$shortcutPath; arguments=$arguments; dryRun=$true }
     }
     $shell = New-Object -ComObject WScript.Shell
     if (Test-Path -LiteralPath $shortcutPath -PathType Leaf) {
         $existing = $shell.CreateShortcut($shortcutPath)
-        if ($existing.Description -ne $description -or $existing.TargetPath -ne $browserPath) { throw 'shortcut_conflict' }
+        if ($existing.Description -ne $description -or $existing.TargetPath -ne $powershell) { throw 'shortcut_conflict' }
     }
     $shortcut = $shell.CreateShortcut($shortcutPath)
-    $shortcut.TargetPath = $browserPath
+    $shortcut.TargetPath = $powershell
     $shortcut.Arguments = $arguments
     $shortcut.WorkingDirectory = Split-Path -Parent $browserPath
     $shortcut.IconLocation = "$browserPath,0"
     $shortcut.Description = $description
     $shortcut.Save()
-    [pscustomobject]@{ ok=$true; code='cloned_shortcut_created'; browser='chrome'; path=$shortcutPath; profile=$profile; arguments=$arguments; dryRun=$false }
+    [pscustomobject]@{ ok=$true; code='account_shortcut_created'; browser='chrome'; path=$shortcutPath; arguments=$arguments; dryRun=$false }
 }
 
 function New-PhwgnaPerformanceShortcut {
