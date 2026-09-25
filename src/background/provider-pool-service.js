@@ -1515,6 +1515,10 @@
         || hasInvalidRole
       );
       if (rolesMismatch && !warmPool.reconfiguring) return reconfigureWarmPool(config);
+      // Restore jobs before taking the pool lock. A running job may resume
+      // immediately and ask this pool for a slot; doing that under the same
+      // lock deadlocks service-worker startup.
+      await restoreJobs();
       return withPoolLock(async () => {
         if (!config.consented || !config.enabled || !hasEligibleStvTab()) {
           await notifyPoolStatus();
@@ -1534,7 +1538,6 @@
         warmPool.settingsHash = settingsHash;
         warmPool.settings = config.settings;
 
-        await restoreJobs();
         for (const slot of [...warmPool.slots]) {
           const owner = slot.jobId ? jobs.get(slot.jobId) : null;
           const wasLeased = slot.state === "leased"

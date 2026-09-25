@@ -1185,6 +1185,27 @@
 
     let restorePromise;
     let jobsRestoredSuccessfully = false;
+    let autoResumingRestoredJobs = false;
+
+    async function autoResumeRestoredJobs(candidates) {
+      for (const job of candidates) {
+        if (!job.resumeAfterRestore || job.status !== "paused") continue;
+        let sourceUrl = "";
+        try {
+          const sourceTab = typeof tabs?.get === "function"
+            ? await tabs.get(job.sourceTabId)
+            : null;
+          sourceUrl = String(sourceTab?.url || "");
+        } catch (_error) {
+          sourceUrl = "";
+        }
+        job.resumeAfterRestore = false;
+        await translationJobs.resumeJob(
+          { jobId: job.id },
+          { tab: { id: job.sourceTabId, url: sourceUrl } }
+        );
+      }
+    }
 
     async function restoreStoredJob(record) {
       if (!record || ![1, JOB_RECORD_VERSION].includes(record.version) || typeof record.id !== "string") return null;
@@ -1300,6 +1321,10 @@
         stableReads: 0,
         apiAbortController: null,
         apiTemperatureFallback: record.apiTemperatureFallback === true,
+        // A running job was interrupted by the MV3 worker lifecycle. Keep this
+        // separate from `status`: restored jobs start paused until their
+        // provider/session has been checked, then resume automatically below.
+        resumeAfterRestore: !legacyRecovery && ["running", "waiting-provider"].includes(record.status),
         pauseReason: legacyRecovery ? "legacy_recovery_discarded" : record.status === "paused" && record.pauseReason
           ? String(record.pauseReason)
           : "service_worker_restarted"
@@ -1311,6 +1336,10 @@
 
     async function restoreJobs() {
       if (!sessionStorage?.get) return 0;
+      // The resume path may ask the provider pool to restore metadata, which
+      // calls back into this function. The jobs are already present at that
+      // point, so return immediately instead of waiting on our own promise.
+      if (autoResumingRestoredJobs) return 0;
       if (restorePromise) return restorePromise;
       restorePromise = (async () => {
         let stored;
@@ -1320,11 +1349,24 @@
           return 0;
         }
         let restored = 0;
+        const resumeCandidates = [];
         for (const [key, record] of Object.entries(stored || {})) {
           if (!key.startsWith(JOB_STORAGE_PREFIX) || jobs.has(record?.id)) continue;
-          if (await restoreStoredJob(record)) restored += 1;
+          const restoredJob = await restoreStoredJob(record);
+          if (restoredJob) {
+            restored += 1;
+            if (restoredJob.resumeAfterRestore) resumeCandidates.push(restoredJob);
+          }
         }
         jobsRestoredSuccessfully = true;
+        if (resumeCandidates.length && translationJobs) {
+          autoResumingRestoredJobs = true;
+          try {
+            await autoResumeRestoredJobs(resumeCandidates);
+          } finally {
+            autoResumingRestoredJobs = false;
+          }
+        }
         return restored;
       })();
       return restorePromise;
