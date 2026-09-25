@@ -641,6 +641,10 @@
           slot.recoveryCancelled = false;
           slot.retryNotBefore = 0;
           await persistPool();
+          // The zero-delay callback is only an optimization. A Manifest V3
+          // worker may be suspended before it runs, so persist and arm the
+          // durable watchdog first.
+          await scheduleGeminiRecoveryAlarm(slot);
           setTimeout(() => {
             void recoverGeminiSlotInPlace(slot, settings);
           }, 0);
@@ -1977,6 +1981,10 @@
             reusable.recoveryJobId ||= createId("setup-recovery");
             reusable.recoveryCancelled = false;
             await persistPool();
+            // Completion can hand the event loop back before this detached
+            // callback starts. Arm the alarm while the persisted slot still
+            // proves which physical tab must be recovered.
+            await scheduleGeminiRecoveryAlarm(reusable);
             job.poolSlotId = "";
             const recoveryTimer = setTimeout(() => {
               void recoverGeminiSlotInPlace(reusable, settings);
