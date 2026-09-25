@@ -73,6 +73,18 @@
       return slot?.slotId ? `${GEMINI_RECOVERY_ALARM_PREFIX}${slot.slotId}` : "";
     }
 
+    function isResumableGeminiRecoverySlot(slot) {
+      if (slot?.provider !== "gemini" || !Number.isInteger(slot?.providerTabId)
+        || slot?.recoveryCancelled === true) return false;
+      if (slot.state === "recovering"
+        && GEMINI_IN_PLACE_RECOVERY_CODES.has(String(slot.errorCode || ""))) return true;
+      const recoveryStage = String(slot.recoveryStage || "");
+      return Boolean(slot.recoveryJobId)
+        && ["recovering", "opening", "preparing"].includes(String(slot.state || ""))
+        && ["handoff_batch", "clear_owned_prompt", "open_new_chat", "activate_temporary", "ready_1", "ready_2"]
+          .includes(recoveryStage);
+    }
+
     async function scheduleGeminiRecoveryAlarm(slot) {
       const name = geminiRecoveryAlarmName(slot);
       if (!name || typeof alarms?.create !== "function") return false;
@@ -376,8 +388,7 @@
           for (const slot of recordedSlots) {
             const resumableChatGPT = slot?.provider === "chatgpt" && slot?.state === "preparing"
               && typeof slot?.setupSessionId === "string" && slot.setupSessionId;
-            const resumableGeminiRecovery = slot?.provider === "gemini" && slot?.state === "recovering"
-              && GEMINI_IN_PLACE_RECOVERY_CODES.has(String(slot?.errorCode || ""));
+            const resumableGeminiRecovery = isResumableGeminiRecoverySlot(slot);
             if (["ready", "leased", "retiring", "handoff_standby"].includes(slot?.state)
               || resumableChatGPT || resumableGeminiRecovery
               || !Number.isInteger(slot?.providerTabId)) continue;
@@ -387,46 +398,48 @@
           }
           warmPool.slots = recordedSlots.filter((slot) => ["ready", "leased", "retiring", "handoff_standby"].includes(slot?.state)
             || (slot?.provider === "chatgpt" && slot?.state === "preparing" && slot?.setupSessionId)
-            || (slot?.provider === "gemini" && slot?.state === "recovering"
-              && GEMINI_IN_PLACE_RECOVERY_CODES.has(String(slot?.errorCode || "")))).map((slot) => ({
-            slotId: String(slot?.slotId || createId("slot")),
-            providerTabId: Number.isInteger(slot?.providerTabId) ? slot.providerTabId : null,
-            provider: slot?.provider === "gemini" ? "gemini" : "chatgpt",
-            purpose: ["shared", "general", "prefetch"].includes(slot?.purpose)
-              ? slot.purpose : warmPool.targetCount <= MIN_POOL_TABS ? "shared" : "general",
-            state: slot?.state === "retiring" ? "retiring"
-              : slot?.state === "recovering" ? "recovering" : "restoring",
-            restoreState: slot?.state === "leased" ? "leased"
-              : slot?.state === "preparing" ? "preparing" : "ready",
-            warmSessionId: String(slot?.warmSessionId || ""),
-            settingsHash: String(slot?.settingsHash || ""),
-            setupId: String(slot?.setupId || ""),
-            setupSessionId: String(slot?.setupSessionId || ""),
-            warmJobId: String(slot?.warmJobId || ""),
-            setupCheckpoint: Math.max(0, Math.min(SETUP_PARTS.length, Number(slot?.setupCheckpoint) || 0)),
-            setupState: String(slot?.setupState || "idle"),
-            setupLastProgressAt: Math.max(0, Number(slot?.setupLastProgressAt) || 0),
-            setupProgressRevision: Math.max(0, Number(slot?.setupProgressRevision) || 0),
-            setupLastFailureRevision: Math.max(0, Number(slot?.setupLastFailureRevision) || 0),
-            setupResumeCount: Math.max(0, Number(slot?.setupResumeCount) || 0),
-            setupServiceWorkerRestarts: Math.max(0, Number(slot?.setupServiceWorkerRestarts) || 0) + 1,
-            setupResumeAttempts: Math.max(0, Number(slot?.setupResumeAttempts) || 0),
-            setupErrorCode: String(slot?.setupErrorCode || ""),
-            firstBatchDispatchedAt: Math.max(0, Number(slot?.firstBatchDispatchedAt) || 0),
-            errorCode: slot?.state === "recovering" ? String(slot?.errorCode || "temporary_unavailable") : "",
-            jobId: slot?.state === "leased" ? String(slot?.jobId || "") : "",
-            recoveryJobId: slot?.state === "recovering" ? String(slot?.recoveryJobId || "") : "",
-            recoveryGeneration: slot?.state === "recovering"
-              ? Math.max(0, Number(slot?.recoveryGeneration) || 0) : 0,
-            inPlaceRecoveryAttempts: slot?.state === "recovering"
-              ? Math.max(0, Number(slot?.inPlaceRecoveryAttempts) || 0) : 0,
-            recoveryStage: slot?.state === "recovering"
-              ? String(slot?.recoveryStage || "clear_owned_prompt") : "",
-            recoveryCancelled: false,
-            restored: true,
-            handoffPredecessorSlotId: String(slot?.handoffPredecessorSlotId || ""),
-            handoffSuccessorSlotId: String(slot?.handoffSuccessorSlotId || "")
-          })).filter((slot) => (
+            || isResumableGeminiRecoverySlot(slot)).map((slot) => {
+            const resumableGeminiRecovery = isResumableGeminiRecoverySlot(slot);
+            return {
+              slotId: String(slot?.slotId || createId("slot")),
+              providerTabId: Number.isInteger(slot?.providerTabId) ? slot.providerTabId : null,
+              provider: slot?.provider === "gemini" ? "gemini" : "chatgpt",
+              purpose: ["shared", "general", "prefetch"].includes(slot?.purpose)
+                ? slot.purpose : warmPool.targetCount <= MIN_POOL_TABS ? "shared" : "general",
+              state: slot?.state === "retiring" ? "retiring"
+                : resumableGeminiRecovery ? "recovering" : "restoring",
+              restoreState: slot?.state === "leased" ? "leased"
+                : slot?.state === "preparing" ? "preparing" : "ready",
+              warmSessionId: String(slot?.warmSessionId || ""),
+              settingsHash: String(slot?.settingsHash || ""),
+              setupId: String(slot?.setupId || ""),
+              setupSessionId: String(slot?.setupSessionId || ""),
+              warmJobId: String(slot?.warmJobId || ""),
+              setupCheckpoint: Math.max(0, Math.min(SETUP_PARTS.length, Number(slot?.setupCheckpoint) || 0)),
+              setupState: String(slot?.setupState || "idle"),
+              setupLastProgressAt: Math.max(0, Number(slot?.setupLastProgressAt) || 0),
+              setupProgressRevision: Math.max(0, Number(slot?.setupProgressRevision) || 0),
+              setupLastFailureRevision: Math.max(0, Number(slot?.setupLastFailureRevision) || 0),
+              setupResumeCount: Math.max(0, Number(slot?.setupResumeCount) || 0),
+              setupServiceWorkerRestarts: Math.max(0, Number(slot?.setupServiceWorkerRestarts) || 0) + 1,
+              setupResumeAttempts: Math.max(0, Number(slot?.setupResumeAttempts) || 0),
+              setupErrorCode: String(slot?.setupErrorCode || ""),
+              firstBatchDispatchedAt: Math.max(0, Number(slot?.firstBatchDispatchedAt) || 0),
+              errorCode: resumableGeminiRecovery ? String(slot?.errorCode || "temporary_unavailable") : "",
+              jobId: slot?.state === "leased" ? String(slot?.jobId || "") : "",
+              recoveryJobId: resumableGeminiRecovery ? String(slot?.recoveryJobId || "") : "",
+              recoveryGeneration: resumableGeminiRecovery
+                ? Math.max(0, Number(slot?.recoveryGeneration) || 0) : 0,
+              inPlaceRecoveryAttempts: resumableGeminiRecovery
+                ? Math.max(0, Number(slot?.inPlaceRecoveryAttempts) || 0) : 0,
+              recoveryStage: resumableGeminiRecovery
+                ? String(slot?.recoveryStage || "clear_owned_prompt") : "",
+              recoveryCancelled: false,
+              restored: true,
+              handoffPredecessorSlotId: String(slot?.handoffPredecessorSlotId || ""),
+              handoffSuccessorSlotId: String(slot?.handoffSuccessorSlotId || "")
+            };
+          }).filter((slot) => (
             Number.isInteger(slot.providerTabId)
             && slot.warmSessionId
             && slot.settingsHash
@@ -1305,8 +1318,7 @@
       if (!slotId) return true;
       await restorePoolMetadata();
       const slot = warmPool.slots.find((candidate) => candidate.slotId === slotId);
-      if (!slot || slot.provider !== "gemini" || slot.state !== "recovering"
-        || !GEMINI_IN_PLACE_RECOVERY_CODES.has(String(slot.errorCode || ""))) {
+      if (!slot || !isResumableGeminiRecoverySlot(slot)) {
         if (slot) await clearGeminiRecoveryAlarm(slot);
         return true;
       }
