@@ -1330,6 +1330,12 @@
       warmPool.provider = "gemini";
       warmPool.settings = config.settings;
       warmPool.settingsHash ||= await hashSettings(config.settings);
+      // Alarms are one-shot. If this watchdog fires while the previous
+      // recovery promise is still waiting on Gemini, recoverGeminiSlotInPlace
+      // returns that same promise and its own startup alarm has already been
+      // consumed. Rearm before joining the in-flight operation so a later MV3
+      // suspension cannot strand the slot in normal chat forever.
+      await scheduleGeminiRecoveryAlarm(slot);
       await recoverGeminiSlotInPlace(slot, config.settings);
       return true;
     }
