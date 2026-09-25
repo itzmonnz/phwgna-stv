@@ -9,7 +9,7 @@
 
   function createProviderPoolService(options = {}) {
     const {
-      core, tabs, windows, storage, sessionStorage, runtime, debuggerApi, now,
+      core, tabs, windows, storage, sessionStorage, runtime, debuggerApi, alarms, now,
       warmTemporaryTimeoutMs, providerReadyAttempts, providerReadyDelayMs,
       providerReadyPasses, poolCleanupDelayMs, poolCleanupSleep, jobs, warmPool,
       activeJapaneseLookups, activeNamePreviews, errorJournal, createId,
@@ -53,6 +53,8 @@
     let geminiSetupRefillOperation = null;
     const geminiRecoveryOperations = new Map();
     const GEMINI_RECOVERY_BACKOFF_MS = Object.freeze([1_000, 2_000, 5_000, 10_000]);
+    const GEMINI_RECOVERY_ALARM_PREFIX = "stvai-gemini-recovery:";
+    const GEMINI_RECOVERY_ALARM_DELAY_MINUTES = 0.5;
     const GEMINI_IN_PLACE_RECOVERY_CODES = new Set([
       "send_not_confirmed", "temporary_unavailable", "provider_busy", "provider_busy_timeout"
     ]);
@@ -65,6 +67,33 @@
     function geminiRecoveryBackoffMs(attempt) {
       const index = Math.max(0, Math.trunc(Number(attempt) || 1) - 1);
       return GEMINI_RECOVERY_BACKOFF_MS[Math.min(index, GEMINI_RECOVERY_BACKOFF_MS.length - 1)];
+    }
+
+    function geminiRecoveryAlarmName(slot) {
+      return slot?.slotId ? `${GEMINI_RECOVERY_ALARM_PREFIX}${slot.slotId}` : "";
+    }
+
+    async function scheduleGeminiRecoveryAlarm(slot) {
+      const name = geminiRecoveryAlarmName(slot);
+      if (!name || typeof alarms?.create !== "function") return false;
+      try {
+        await Promise.resolve(alarms.create(name, {
+          delayInMinutes: GEMINI_RECOVERY_ALARM_DELAY_MINUTES
+        }));
+        return true;
+      } catch (_error) {
+        return false;
+      }
+    }
+
+    async function clearGeminiRecoveryAlarm(slot) {
+      const name = geminiRecoveryAlarmName(slot);
+      if (!name || typeof alarms?.clear !== "function") return false;
+      try {
+        return await Promise.resolve(alarms.clear(name));
+      } catch (_error) {
+        return false;
+      }
     }
 
     function providerUrlFor(provider, temporaryChat) {
@@ -193,6 +222,7 @@
 
     async function removeOwnedSlot(slot, options = {}) {
       if (!slot) return;
+      await clearGeminiRecoveryAlarm(slot);
       const removalReason = String(options.errorReason || options.removalReason
         || (slot.state === "failed" ? slot.errorCode : "automatic_cleanup"));
       if (!options.force && await developerKeepsFailedTabs()) {
@@ -1187,6 +1217,11 @@
       if (geminiRecoveryOperations.has(operationKey)) return geminiRecoveryOperations.get(operationKey);
       const operation = (async () => {
         if (slot.recoveryCancelled) return false;
+        // Detached setTimeout callbacks are not durable in a Manifest V3
+        // service worker. Keep one persisted browser alarm as a watchdog so a
+        // suspended worker resumes this exact physical tab instead of leaving
+        // every pending batch waiting forever for READY 2.
+        await scheduleGeminiRecoveryAlarm(slot);
         slot.state = "recovering";
         slot.recoveryGeneration = Math.max(0, Number(slot.recoveryGeneration) || 0) + 1;
         slot.inPlaceRecoveryAttempts = Math.max(0, Number(slot.inPlaceRecoveryAttempts) || 0) + 1;
@@ -1206,6 +1241,7 @@
             slot.recoveryJobId = "";
             await persistPool();
           }
+          await clearGeminiRecoveryAlarm(slot);
           return false;
         }
         if (recovered && warmPool.slots.includes(slot) && slot.state === "ready") {
@@ -1216,6 +1252,7 @@
           slot.recoveryStage = "ready";
           slot.lastRecoveryAttempts = Math.max(1, Number(slot.inPlaceRecoveryAttempts) || 1);
           slot.inPlaceRecoveryAttempts = 0;
+          await clearGeminiRecoveryAlarm(slot);
           await markWarmSlotRecovered(slot);
           await persistPool();
           await notifyPoolStatus();
@@ -1234,6 +1271,7 @@
             slot.recoveryStage = "clear_owned_prompt";
             await persistPool();
             await notifyPoolStatus();
+            await scheduleGeminiRecoveryAlarm(slot);
             const retryTimer = setTimeout(() => {
               void recoverGeminiSlotInPlace(slot, settings);
             }, geminiRecoveryBackoffMs(slot.inPlaceRecoveryAttempts));
@@ -1244,6 +1282,7 @@
           slot.errorCode ||= "recovery_blocked";
           slot.recoveryStage = `blocked:${slot.errorCode}`;
           slot.recoveryJobId = "";
+          await clearGeminiRecoveryAlarm(slot);
           await persistPool();
           await notifyPoolStatus();
         }
@@ -1257,6 +1296,30 @@
           geminiRecoveryOperations.delete(operationKey);
         }
       }
+    }
+
+    async function handleGeminiRecoveryAlarm(alarm) {
+      const name = String(alarm?.name || "");
+      if (!name.startsWith(GEMINI_RECOVERY_ALARM_PREFIX)) return false;
+      const slotId = name.slice(GEMINI_RECOVERY_ALARM_PREFIX.length);
+      if (!slotId) return true;
+      await restorePoolMetadata();
+      const slot = warmPool.slots.find((candidate) => candidate.slotId === slotId);
+      if (!slot || slot.provider !== "gemini" || slot.state !== "recovering"
+        || !GEMINI_IN_PLACE_RECOVERY_CODES.has(String(slot.errorCode || ""))) {
+        if (slot) await clearGeminiRecoveryAlarm(slot);
+        return true;
+      }
+      const config = await readAutomationConfig();
+      if (!config?.consented || !config?.enabled || config.settings?.provider !== "gemini") {
+        await clearGeminiRecoveryAlarm(slot);
+        return true;
+      }
+      warmPool.provider = "gemini";
+      warmPool.settings = config.settings;
+      warmPool.settingsHash ||= await hashSettings(config.settings);
+      await recoverGeminiSlotInPlace(slot, config.settings);
+      return true;
     }
 
     async function createWarmSlot(settings, settingsHash, recoveryAttempts = 0, purpose = "shared", createOptions = {}) {
@@ -2019,7 +2082,7 @@
       verifiedReadySlotByPriority, acquireJapaneseLookupSlot,
       releaseJapaneseLookupSlot, cancelJapaneseLookup, markWarmSlotFailed,
       markWarmSlotRecovered, validateSetupProviderResult, recheckSetupMarker,
-      prepareWarmSlot, restartLeasedGeminiSlot, recoverGeminiSlotInPlace, cancelGeminiRecovery, createWarmSlot, replaceFailedWarmSlot, fillWarmPool,
+      prepareWarmSlot, restartLeasedGeminiSlot, recoverGeminiSlotInPlace, cancelGeminiRecovery, handleGeminiRecoveryAlarm, createWarmSlot, replaceFailedWarmSlot, fillWarmPool,
       ensureWarmPool, performWarmPoolReconfiguration, reconfigureWarmPool,
       cleanupWarmPool, scheduleLastStvCleanup, assignWarmSlot, acquireWarmSlot,
       drainWarmWaiters, spendJobSlot, closeLegacyProviderTab, openProvider

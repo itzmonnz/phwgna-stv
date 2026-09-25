@@ -45,6 +45,7 @@
     const tabs = options.tabs;
     const windows = options.windows;
     const debuggerApi = options.debuggerApi;
+    const alarms = options.alarms;
     const storage = options.storage;
     const runtime = options.runtime;
     const updateChecker = options.updateChecker;
@@ -1380,7 +1381,7 @@
 
     let translationJobs;
     const providerPool = providerPoolApi.createProviderPoolService({
-      core, tabs, windows, storage, sessionStorage, runtime, debuggerApi, now,
+      core, tabs, windows, storage, sessionStorage, runtime, debuggerApi, alarms, now,
       warmTemporaryTimeoutMs, providerReadyAttempts, providerReadyDelayMs,
       providerReadyPasses, poolCleanupDelayMs, poolCleanupSleep, jobs, warmPool,
       activeJapaneseLookups, activeNamePreviews, errorJournal, createId,
@@ -1418,7 +1419,7 @@
       verifiedReadySlotByPriority, acquireJapaneseLookupSlot,
       releaseJapaneseLookupSlot, cancelJapaneseLookup, markWarmSlotFailed,
       markWarmSlotRecovered, validateSetupProviderResult, recheckSetupMarker,
-      prepareWarmSlot, restartLeasedGeminiSlot, recoverGeminiSlotInPlace, cancelGeminiRecovery, createWarmSlot, replaceFailedWarmSlot, fillWarmPool,
+      prepareWarmSlot, restartLeasedGeminiSlot, recoverGeminiSlotInPlace, cancelGeminiRecovery, handleGeminiRecoveryAlarm, createWarmSlot, replaceFailedWarmSlot, fillWarmPool,
       ensureWarmPool, performWarmPoolReconfiguration, reconfigureWarmPool,
       cleanupWarmPool, scheduleLastStvCleanup, assignWarmSlot, acquireWarmSlot,
       drainWarmWaiters, spendJobSlot, closeLegacyProviderTab, openProvider
@@ -2203,6 +2204,7 @@
       handleZoomChanged: clientService.handleZoomChanged,
       handleDebuggerDetached,
       handleStorageChanged,
+      handleAlarm: handleGeminiRecoveryAlarm,
       handleInstalled(details) {
         return onboardingService?.handleInstalled(details) || Promise.resolve({ ok: false, reason: "onboarding-unavailable" });
       },
@@ -2237,6 +2239,7 @@
       tabs: chromeApi.tabs,
       windows: chromeApi.windows,
       debuggerApi: chromeApi.debugger,
+      alarms: chromeApi.alarms,
       storage: chromeApi.storage,
       runtime: chromeApi.runtime,
       apiClient: defaultApiProviders?.createApiClient?.(),
@@ -2261,6 +2264,9 @@
     });
     chromeApi.debugger?.onDetach?.addListener((source, reason) => {
       void controller.handleDebuggerDetached(source, reason);
+    });
+    chromeApi.alarms?.onAlarm?.addListener((alarm) => {
+      void controller.handleAlarm(alarm);
     });
     chromeApi.storage?.onChanged?.addListener((changes, areaName) => {
       void controller.handleStorageChanged(changes, areaName);
