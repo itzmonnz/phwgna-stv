@@ -165,6 +165,7 @@
     const input = safeObject(value);
     const page = safeObject(input.page);
     const adapter = safeObject(input.adapter);
+    const session = safeObject(input.session);
     const selectors = safeObject(input.selectors);
     const interaction = safeObject(input.interaction);
     const interactionComposer = safeObject(interaction.composer);
@@ -187,8 +188,20 @@
         state: safeEnum(adapter.state, new Set(["ready", "paused", "unknown"]), "unknown"),
         code: safeEnum(adapter.code, new Set([
           "none", "captcha", "login_required", "rate_limited", "ui_changed", "ab_comparison",
-          "temporary_unavailable", "unknown"
+          "temporary_unavailable", "temporary_session_lost", "unknown"
         ]), "unknown")
+      },
+      session: {
+        state: safeEnum(session.state, new Set([
+          "temporary_active", "normal_chat", "navigation_in_progress", "blocked", "unknown"
+        ]), "unknown"),
+        temporaryActive: session.temporaryActive === true,
+        composerContent: safeEnum(session.composerContent, new Set([
+          "empty", "owned_setup", "owned_batch", "foreign", "unavailable"
+        ]), "unavailable"),
+        ...(session.blocker ? {
+          blocker: /^[a-z0-9_-]{1,64}$/i.test(String(session.blocker)) ? String(session.blocker) : "unknown"
+        } : {})
       },
       selectors: {
         composer: count("composer"),
@@ -230,7 +243,7 @@
         phase: safeEnum(runtime.phase, new Set(["idle", "setup", "batch", "repair"]), "idle"),
         errorCode: safeEnum(runtime.errorCode, new Set([
           "none", "response_timeout", "send_not_confirmed", "provider_busy", "provider_unreachable", "captcha",
-          "login_required", "rate_limited", "ui_changed", "ab_comparison", "temporary_unavailable",
+          "login_required", "rate_limited", "ui_changed", "ab_comparison", "temporary_unavailable", "temporary_session_lost",
           "provider_error", "cancelled", "content_refused", "incomplete_response", "recovering_response", "fallback_unavailable"
         ]), "none"),
         readyStep: safeEnum(runtime.readyStep, new Set(["idle", "ready_1", "ready_2", "ready_3"]), "idle"),
@@ -270,11 +283,11 @@
     const jobStates = new Set(["idle", "waiting-provider", "running", "paused", "completed", "cancelled", "failed", "error"]);
     const phases = new Set(["idle", "setup", "batch", "repair", "completed"]);
     const workStates = new Set(["queued", "sending", "settled"]);
-    const slotStates = new Set(["opening", "preparing", "ready", "leased", "name_lookup", "retiring", "restoring", "spent", "failed"]);
+    const slotStates = new Set(["opening", "preparing", "recovering", "ready", "leased", "name_lookup", "retiring", "restoring", "spent", "failed"]);
     const bounded = (value, max = 10_000) => Math.max(0, Math.min(max, Number(value) || 0));
     return {
       schemaVersion: 1,
-      targetCount: Math.min(5, Math.max(2, Math.trunc(Number(input.targetCount)) || 2)),
+      targetCount: Math.min(10, Math.max(2, Math.trunc(Number(input.targetCount)) || 2)),
       reconfiguring: input.reconfiguring === true,
       jobs: Array.isArray(input.jobs) ? input.jobs.slice(0, 3).map(raw => {
         const job = safeObject(raw);
@@ -290,16 +303,26 @@
           lastError: /^[a-z0-9_-]{1,64}$/i.test(String(job.lastError || "")) ? String(job.lastError) : "other"
         };
       }) : [],
-      slots: Array.isArray(input.slots) ? input.slots.slice(0, 5).map(raw => {
+      slots: Array.isArray(input.slots) ? input.slots.slice(0, 10).map(raw => {
         const slot = safeObject(raw);
         const watchdog = safeObject(slot.readyWatchdog);
         const lease = safeObject(slot.performanceLease);
+        const recovery = safeObject(slot.recovery);
         return {
           provider: safeEnum(slot.provider, new Set(["gemini", "chatgpt"]), "gemini"),
           purpose: safeEnum(slot.purpose, new Set(["shared", "general", "prefetch"]), "shared"),
           state: safeEnum(slot.state, slotStates, "failed"),
           errorCode: /^[a-z0-9_-]{1,64}$/i.test(String(slot.errorCode || "")) ? String(slot.errorCode) : "other",
           hasJob: slot.hasJob === true,
+          desiredSession: safeEnum(slot.desiredSession, new Set(["temporary", "regular"]), "regular"),
+          sessionState: safeEnum(slot.sessionState, new Set([
+            "unknown", "temporary_active", "normal_chat", "navigation_in_progress", "blocked"
+          ]), "unknown"),
+          recovery: {
+            generation: bounded(recovery.generation, 1_000_000),
+            stage: /^[a-z0-9_:-]{1,64}$/i.test(String(recovery.stage || "")) ? String(recovery.stage) : "idle",
+            attempts: bounded(recovery.attempts, 1_000)
+          },
           readyWatchdog: {
             step: safeEnum(watchdog.step, new Set(["idle", "ready_1", "ready_2", "ready_3"]), "idle"),
             state: safeEnum(watchdog.state, new Set(["idle", "waiting_marker", "marker_seen", "grace", "confirmed", "failed"]), "idle"),
@@ -395,7 +418,7 @@
     const errorCodes = new Set([
       "line_count_mismatch", "response_id_mismatch", "invalid_response", "incomplete_response",
       "response_timeout", "send_not_confirmed", "content_refused", "provider_unreachable",
-      "provider_unavailable", "network_error", "provider_error", "ui_changed", "temporary_unavailable",
+      "provider_unavailable", "network_error", "provider_error", "ui_changed", "temporary_unavailable", "temporary_session_lost",
       "login_required", "login_window_open", "captcha", "security_verification", "login_browser_rejected",
       "batch_recovery_exhausted", "provider_tab_close_failed", "provider_origin_mismatch",
       "invalid_setup_response", "warm_setup_failed", "provider_tab_failed", "provider_tab_closed", "provider_tab_limit",

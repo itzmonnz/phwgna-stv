@@ -377,6 +377,33 @@
         || TEMPORARY_ACTIVE_INDICATORS.some((selector) => document.querySelector(selector));
     }
 
+    function getSessionState() {
+      const status = getStatus();
+      const composer = findComposer();
+      if (!composer) {
+        return {
+          state: document.readyState === "loading" ? "navigation_in_progress" : "blocked",
+          temporaryActive: false,
+          composerContent: "unavailable",
+          ...(status?.code && status.code !== "none" ? { blocker: status.code } : {})
+        };
+      }
+      const current = comparableComposerText(readComposerText(composer));
+      let composerContent = "empty";
+      if (current) {
+        if (current === lastSubmittedSetupPrompt || current === lastOwnedComposerPrompt
+          || current === pendingSubmittedPrompt) {
+          composerContent = lastOwnedComposerPhase === "batch" ? "owned_batch" : "owned_setup";
+        } else composerContent = "foreign";
+      }
+      const temporaryActive = temporaryPageIsActive();
+      return {
+        state: temporaryActive ? "temporary_active" : "normal_chat",
+        temporaryActive,
+        composerContent
+      };
+    }
+
     function clearReturnedSetupPrompt() {
       if (!lastSubmittedSetupPrompt) return;
       const composer = findComposer();
@@ -1047,6 +1074,7 @@
       getSubmissionDiagnostic,
       getPerformanceState,
       getDomDiagnostic: () => domResolver.probe?.() || domResolver.getDiagnosticSnapshot(),
+      getSessionState,
       getStatus,
       hasResponseMarker,
       onAccepted,

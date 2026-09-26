@@ -1,43 +1,81 @@
-﻿param([switch]$Launch, [switch]$LaunchOnly, [string]$StartUrl = 'https://sangtacviet.com/mybook/')
+﻿param(
+    [switch]$Launch,
+    [switch]$LaunchOnly,
+    [switch]$RefreshProfile,
+    [string]$StartUrl = 'https://sangtacviet.com/mybook/'
+)
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'phwgna-setup-core.ps1')
 
 $packageRoot = Split-Path -Parent $PSScriptRoot
 $browser = @(Find-PhwgnaBrowsers) | Where-Object { $_.id -eq 'chrome' } | Select-Object -First 1
 if (-not $browser) { throw 'Không tìm thấy Google Chrome trên máy này.' }
-$userDataRoot = Join-Path $env:LOCALAPPDATA 'Google\Chrome\User Data'
+
+$sourceUserDataRoot = Join-Path $env:LOCALAPPDATA 'Google\Chrome\User Data'
 $stateRoot = Join-Path $env:LOCALAPPDATA 'phwgna-stv-chrome-max'
-$installedPath = Join-Path $stateRoot 'extension'
-$profile = Get-PhwgnaChromeProfileDirectory -UserDataRoot $userDataRoot
+$maxProfileRoot = Join-Path $stateRoot 'profile'
+$metadataPath = Join-Path $stateRoot 'profile-clone.json'
 
 if (-not $LaunchOnly) {
-    if (-not $Launch) {
-        $installed = Install-PhwgnaExtension -SourceDirectory $packageRoot -DestinationRoot $stateRoot
-    }
+    $installed = Install-PhwgnaExtension -SourceDirectory $packageRoot -DestinationRoot $stateRoot
     $result = New-PhwgnaAccountChromeShortcut -Browser $browser -LauncherScript $MyInvocation.MyCommand.Path -StartUrl $StartUrl
-    Write-Host "Đã tạo Chrome STV dùng tài khoản hiện có: $($result.path)"
+    Write-Host "Đã tạo Chrome STV Max dùng bản clone tài khoản hiện tại: $($result.path)"
 }
 
-if ($Launch -or $LaunchOnly) {
-    # A running normal Chrome process can open a new tab in the same profile.
-    # Check the saved unpacked extension before deciding whether a new process
-    # is required; the old order incorrectly blocked this path and demanded
-    # that every Chrome window be closed first.
-    $installed = Install-PhwgnaExtension -SourceDirectory $packageRoot -DestinationRoot $stateRoot
-    $extensionSaved = Test-PhwgnaChromeExtensionInstalled -UserDataRoot $userDataRoot -ProfileDirectory $profile -ExtensionDirectory $installed.path
-    $launchState = Get-PhwgnaChromeLaunchState -UserDataRoot $userDataRoot -ExtensionDirectory $installedPath
-    if ($extensionSaved -and ($launchState -eq 'max_running' -or $launchState -eq 'browser_running')) {
-        $openArguments = '--profile-directory="' + $profile + '" --new-tab "' + $StartUrl + '"'
-        Start-Process -FilePath $browser.path -ArgumentList $openArguments
-        exit 0
-    }
-    if (-not $extensionSaved) {
-        $setupArguments = '--profile-directory="' + $profile + '" --new-window "chrome://extensions/"'
-        Start-Process -FilePath $browser.path -ArgumentList $setupArguments
-        Start-Process -FilePath 'explorer.exe' -ArgumentList ('/select,"' + (Join-Path $installed.path 'manifest.json') + '"')
-        Write-Warning "Chrome chưa lưu extension STV. Hãy bật Chế độ nhà phát triển, chọn Tải tiện ích đã giải nén và chọn thư mục: $($installed.path). Không cần đóng Chrome; sau khi tải xong chỉ cần reload trang STV."
-        exit 3
-    }
-    $arguments = Get-PhwgnaDedicatedChromeArguments -ProfileRoot $userDataRoot -ProfileDirectory $profile -ExtensionDirectory $installed.path -StartUrl $StartUrl
-    Start-Process -FilePath $browser.path -ArgumentList $arguments
+if (-not ($Launch -or $LaunchOnly)) { exit 0 }
+
+$installed = Install-PhwgnaExtension -SourceDirectory $packageRoot -DestinationRoot $stateRoot
+$maxState = Get-PhwgnaChromeLaunchState -UserDataRoot $maxProfileRoot -ExtensionDirectory $installed.path
+$cloneReady = (Test-Path -LiteralPath (Join-Path $maxProfileRoot 'Local State') -PathType Leaf) `
+    -and (Test-Path -LiteralPath $metadataPath -PathType Leaf)
+
+if ($RefreshProfile -or -not $cloneReady) {
+    # Copy-PhwgnaChromeProfile refuses every live chrome.exe process. This is
+    # deliberate: copying SQLite cookies or extension state from a live profile
+    # can silently produce a half-valid clone.
+    $sourceProfile = Get-PhwgnaChromeProfileDirectory -UserDataRoot $sourceUserDataRoot
+    $chromeVersion = [string](Get-Item -LiteralPath $browser.path).VersionInfo.ProductVersion
+    Copy-PhwgnaChromeProfile `
+        -SourceUserDataRoot $sourceUserDataRoot `
+        -DestinationUserDataRoot $maxProfileRoot `
+        -ProfileDirectory $sourceProfile `
+        -ChromeVersion $chromeVersion | Out-Null
+    $maxState = 'closed'
 }
+
+try {
+    $maxProfile = Get-PhwgnaChromeProfileDirectory -UserDataRoot $maxProfileRoot
+} catch {
+    throw 'Chrome STV Max chưa có profile clone hợp lệ. Hãy đóng toàn bộ Chrome rồi chạy lại một lần.'
+}
+
+if ($maxState -eq 'max_running') {
+    $verification = Test-PhwgnaChromeMaxProcess -ProfileRoot $maxProfileRoot -ExtensionDirectory $installed.path
+    if (-not $verification.ok) {
+        throw ('Chrome STV Max đang chạy nhưng thiếu cờ: ' + ($verification.missingFlags -join ', '))
+    }
+    $reuseArguments = '--user-data-dir="' + $maxProfileRoot + '" --profile-directory="' + $maxProfile + '" --new-tab "' + $StartUrl + '"'
+    Start-Process -FilePath $browser.path -ArgumentList $reuseArguments
+    exit 0
+}
+
+# Preferences are only edited while the cloned browser is closed. Unrelated
+# keys are retained and both JSON files are replaced atomically.
+Set-PhwgnaChromeMaxPreferences -UserDataRoot $maxProfileRoot -ProfileDirectory $maxProfile | Out-Null
+$arguments = Get-PhwgnaDedicatedChromeArguments `
+    -ProfileRoot $maxProfileRoot `
+    -ProfileDirectory $maxProfile `
+    -ExtensionDirectory $installed.path `
+    -StartUrl $StartUrl
+Start-Process -FilePath $browser.path -ArgumentList $arguments
+
+$verification = $null
+for ($attempt = 0; $attempt -lt 30; $attempt++) {
+    Start-Sleep -Milliseconds 250
+    $verification = Test-PhwgnaChromeMaxProcess -ProfileRoot $maxProfileRoot -ExtensionDirectory $installed.path
+    if ($verification.ok) { break }
+}
+if (-not $verification.ok) {
+    throw ('Chrome đã mở nhưng chưa chạy đúng chế độ Max. Cờ còn thiếu: ' + ($verification.missingFlags -join ', '))
+}
+Write-Host 'Chrome STV Max đã chạy bằng profile clone và đủ cờ hiệu năng nền.'

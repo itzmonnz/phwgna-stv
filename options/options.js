@@ -187,7 +187,7 @@
     return {
       provider: PROVIDERS.includes(candidate.provider) ? candidate.provider : "gemini",
       webAiTabCount: Number.isFinite(Number(candidate.webAiTabCount))
-        ? Math.min(5, Math.max(2, Math.trunc(Number(candidate.webAiTabCount))))
+        ? Math.min(10, Math.max(2, Math.trunc(Number(candidate.webAiTabCount))))
         : FALLBACK_DEFAULTS.webAiTabCount,
       temporaryChat: true,
       warmPoolEnabled: true,
@@ -230,8 +230,8 @@
       throw new Error("Giá trị temporaryChat phải là true hoặc false.");
     }
     if (strict && Object.hasOwn(candidate, "webAiTabCount")
-      && (!Number.isInteger(Number(candidate.webAiTabCount)) || Number(candidate.webAiTabCount) < 2 || Number(candidate.webAiTabCount) > 5)) {
-      throw new Error("Số tab AI phải là số nguyên từ 2 đến 5.");
+      && (!Number.isInteger(Number(candidate.webAiTabCount)) || Number(candidate.webAiTabCount) < 2 || Number(candidate.webAiTabCount) > 10)) {
+      throw new Error("Số tab AI phải là số nguyên từ 2 đến 10.");
     }
     for (const key of ["warmPoolEnabled", "autoTranslateOnChapter"]) {
       if (strict && Object.hasOwn(candidate, key) && typeof candidate[key] !== "boolean") {
@@ -241,7 +241,7 @@
 
     const result = copySettings(DEFAULT_SETTINGS);
     if (PROVIDERS.includes(candidate.provider)) result.provider = candidate.provider;
-    if (Number.isInteger(Number(candidate.webAiTabCount)) && Number(candidate.webAiTabCount) >= 2 && Number(candidate.webAiTabCount) <= 5) {
+    if (Number.isInteger(Number(candidate.webAiTabCount)) && Number(candidate.webAiTabCount) >= 2 && Number(candidate.webAiTabCount) <= 10) {
       result.webAiTabCount = Number(candidate.webAiTabCount);
     }
     if (typeof candidate.geminiSafetyOff === "boolean") result.geminiSafetyOff = candidate.geminiSafetyOff;

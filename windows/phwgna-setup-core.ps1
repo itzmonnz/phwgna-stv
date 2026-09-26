@@ -252,7 +252,7 @@ function Open-PhwgnaExtensionLoader {
 }
 
 function Get-PhwgnaPerformanceArguments {
-    '--disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows'
+    '--disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows --disable-features=CalculateNativeWinOcclusion,IntensiveWakeUpThrottling'
 }
 
 function Get-PhwgnaDedicatedChromeArguments {
@@ -279,7 +279,7 @@ function Get-PhwgnaDedicatedChromeArguments {
         '--disable-background-timer-throttling',
         '--disable-renderer-backgrounding',
         '--disable-backgrounding-occluded-windows',
-        '--disable-features=CalculateNativeWinOcclusion',
+        '--disable-features=CalculateNativeWinOcclusion,IntensiveWakeUpThrottling',
         "--disable-extensions-except=$quotedExtension",
         "--load-extension=$quotedExtension",
         '--new-window'
@@ -354,6 +354,208 @@ function Get-PhwgnaChromeProfileDirectory {
     }
     if (-not (Test-Path -LiteralPath (Join-Path $root $profile) -PathType Container)) { throw 'chrome_profile_missing' }
     $profile
+}
+
+function Set-PhwgnaJsonPathValue {
+    param(
+        [Parameter(Mandatory)][psobject]$Root,
+        [Parameter(Mandatory)][string[]]$Path,
+        [Parameter(Mandatory)][AllowNull()][object]$Value
+    )
+    $cursor = $Root
+    for ($index = 0; $index -lt $Path.Count - 1; $index++) {
+        $name = $Path[$index]
+        $property = $cursor.PSObject.Properties[$name]
+        if (-not $property -or $null -eq $property.Value -or $property.Value -isnot [psobject]) {
+            $child = [pscustomobject]@{}
+            $cursor | Add-Member -MemberType NoteProperty -Name $name -Value $child -Force
+            $cursor = $child
+        } else {
+            $cursor = $property.Value
+        }
+    }
+    $cursor | Add-Member -MemberType NoteProperty -Name $Path[-1] -Value $Value -Force
+}
+
+function Write-PhwgnaJsonAtomic {
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][psobject]$Value
+    )
+    $target = [IO.Path]::GetFullPath($Path)
+    $temporary = "$target.staging-$([Guid]::NewGuid().ToString('N'))"
+    $encoding = New-Object Text.UTF8Encoding($false)
+    try {
+        [IO.File]::WriteAllText($temporary, ($Value | ConvertTo-Json -Depth 100), $encoding)
+        Move-Item -LiteralPath $temporary -Destination $target -Force
+    } finally {
+        if (Test-Path -LiteralPath $temporary -PathType Leaf) { Remove-Item -LiteralPath $temporary -Force }
+    }
+}
+
+function Set-PhwgnaChromeMaxPreferences {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$UserDataRoot,
+        [Parameter(Mandatory)][string]$ProfileDirectory
+    )
+    if ($ProfileDirectory -ne 'Default' -and $ProfileDirectory -notmatch '^Profile \d+$') { throw 'invalid_profile_directory' }
+    $root = [IO.Path]::GetFullPath($UserDataRoot)
+    $localStatePath = Join-Path $root 'Local State'
+    $preferencesPath = Join-Path (Join-Path $root $ProfileDirectory) 'Preferences'
+    if (-not (Test-Path -LiteralPath $localStatePath -PathType Leaf)) { throw 'chrome_local_state_missing' }
+    if (-not (Test-Path -LiteralPath $preferencesPath -PathType Leaf)) { throw 'chrome_preferences_missing' }
+    try {
+        $localState = Get-Content -Raw -LiteralPath $localStatePath | ConvertFrom-Json
+        $preferences = Get-Content -Raw -LiteralPath $preferencesPath | ConvertFrom-Json
+    } catch {
+        throw 'chrome_preferences_invalid'
+    }
+
+    Set-PhwgnaJsonPathValue -Root $localState -Path @('performance_tuning','high_efficiency_mode','state') -Value 0
+    Set-PhwgnaJsonPathValue -Root $localState -Path @('performance_tuning','high_efficiency_mode','enabled') -Value $false
+    Set-PhwgnaJsonPathValue -Root $localState -Path @('performance_tuning','battery_saver_mode','state') -Value 0
+    Set-PhwgnaJsonPathValue -Root $localState -Path @('performance_tuning','tab_freezing','enabled') -Value $false
+    Set-PhwgnaJsonPathValue -Root $preferences -Path @('performance_tuning','force_foreground_priority_for_urls') -Value ([object]@(
+        'https://gemini.google.com/*',
+        'https://chatgpt.com/*'
+    ))
+    Set-PhwgnaJsonPathValue -Root $preferences -Path @('performance_tuning','tab_discarding','exceptions') -Value ([object]@(
+        'gemini.google.com',
+        'chatgpt.com',
+        'sangtacviet.com'
+    ))
+    Write-PhwgnaJsonAtomic -Path $localStatePath -Value $localState
+    Write-PhwgnaJsonAtomic -Path $preferencesPath -Value $preferences
+    [pscustomobject]@{ ok=$true; code='max_preferences_applied'; profileDirectory=$ProfileDirectory }
+}
+
+function Copy-PhwgnaProfileTree {
+    param(
+        [Parameter(Mandatory)][string]$Source,
+        [Parameter(Mandatory)][string]$Destination
+    )
+    $excludedDirectories = @(
+        'Cache', 'Code Cache', 'GPUCache', 'DawnCache', 'DawnGraphiteCache',
+        'GrShaderCache', 'ShaderCache', 'Crashpad', 'Crash Reports', 'BrowserMetrics',
+        'component_crx_cache', 'Safe Browsing', 'Sessions'
+    )
+    New-Item -ItemType Directory -Path $Destination -Force | Out-Null
+    foreach ($item in Get-ChildItem -LiteralPath $Source -Force) {
+        if ($item.PSIsContainer -and $item.Name -in $excludedDirectories) { continue }
+        if (-not $item.PSIsContainer -and ($item.Name -like 'Singleton*' -or $item.Name -eq 'lockfile')) { continue }
+        $target = Join-Path $Destination $item.Name
+        if ($item.PSIsContainer) {
+            Copy-PhwgnaProfileTree -Source $item.FullName -Destination $target
+        } else {
+            Copy-Item -LiteralPath $item.FullName -Destination $target -Force
+        }
+    }
+}
+
+function Copy-PhwgnaChromeProfile {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$SourceUserDataRoot,
+        [Parameter(Mandatory)][string]$DestinationUserDataRoot,
+        [Parameter(Mandatory)][string]$ProfileDirectory,
+        [Parameter(Mandatory)][string]$ChromeVersion,
+        [object[]]$ChromeProcesses = @(Get-CimInstance Win32_Process -Filter "Name='chrome.exe'" -ErrorAction SilentlyContinue)
+    )
+    if (@($ChromeProcesses).Count -gt 0) { throw 'source_browser_running' }
+    if ($ProfileDirectory -ne 'Default' -and $ProfileDirectory -notmatch '^Profile \d+$') { throw 'invalid_profile_directory' }
+    $source = [IO.Path]::GetFullPath($SourceUserDataRoot).TrimEnd('\')
+    $destination = [IO.Path]::GetFullPath($DestinationUserDataRoot).TrimEnd('\')
+    $sourcePrefix = $source + [IO.Path]::DirectorySeparatorChar
+    $samePath = $source.Equals($destination, [StringComparison]::OrdinalIgnoreCase)
+    $nestedPath = $destination.StartsWith($sourcePrefix, [StringComparison]::OrdinalIgnoreCase)
+    if ($samePath -or $nestedPath) {
+        throw 'unsafe_profile_destination'
+    }
+    $sourceLocalState = Join-Path $source 'Local State'
+    $sourceProfile = Join-Path $source $ProfileDirectory
+    if (-not (Test-Path -LiteralPath $sourceLocalState -PathType Leaf)) { throw 'chrome_local_state_missing' }
+    if (-not (Test-Path -LiteralPath (Join-Path $sourceProfile 'Preferences') -PathType Leaf)) { throw 'chrome_preferences_missing' }
+
+    $destinationParent = Split-Path -Parent $destination
+    New-Item -ItemType Directory -Path $destinationParent -Force | Out-Null
+    $nonce = [Guid]::NewGuid().ToString('N')
+    $staging = Join-Path $destinationParent "profile.staging-$nonce"
+    $backup = Join-Path $destinationParent "profile.backup-$nonce"
+    foreach ($candidate in @($staging, $backup)) {
+        $resolved = [IO.Path]::GetFullPath($candidate)
+        $resolvedParent = [IO.Path]::GetFullPath($destinationParent).TrimEnd('\')
+        $resolvedParentPrefix = $resolvedParent + [IO.Path]::DirectorySeparatorChar
+        if (-not $resolved.StartsWith($resolvedParentPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+            throw 'unsafe_profile_staging_path'
+        }
+    }
+    try {
+        New-Item -ItemType Directory -Path $staging -Force | Out-Null
+        Copy-Item -LiteralPath $sourceLocalState -Destination (Join-Path $staging 'Local State') -Force
+        Copy-PhwgnaProfileTree -Source $sourceProfile -Destination (Join-Path $staging $ProfileDirectory)
+        if (Test-Path -LiteralPath $destination -PathType Container) {
+            Move-Item -LiteralPath $destination -Destination $backup
+        }
+        Move-Item -LiteralPath $staging -Destination $destination
+        if (Test-Path -LiteralPath $backup -PathType Container) { Remove-Item -LiteralPath $backup -Recurse -Force }
+    } catch {
+        if (Test-Path -LiteralPath $staging -PathType Container) { Remove-Item -LiteralPath $staging -Recurse -Force }
+        if (-not (Test-Path -LiteralPath $destination) -and (Test-Path -LiteralPath $backup -PathType Container)) {
+            Move-Item -LiteralPath $backup -Destination $destination
+        }
+        throw
+    }
+
+    $metadata = [pscustomobject]@{
+        schemaVersion = 1
+        profileDirectory = $ProfileDirectory
+        chromeVersion = [string]$ChromeVersion
+        clonedAt = [DateTime]::UtcNow.ToString('o')
+    }
+    Write-PhwgnaJsonAtomic -Path (Join-Path $destinationParent 'profile-clone.json') -Value $metadata
+    [pscustomobject]@{
+        ok = $true
+        code = 'profile_cloned'
+        profileDirectory = $ProfileDirectory
+        metadataPath = (Join-Path $destinationParent 'profile-clone.json')
+    }
+}
+
+function Test-PhwgnaChromeMaxProcess {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$ProfileRoot,
+        [Parameter(Mandatory)][string]$ExtensionDirectory,
+        [object[]]$ChromeProcesses = @(Get-CimInstance Win32_Process -Filter "Name='chrome.exe'" -ErrorAction SilentlyContinue)
+    )
+    $profile = [IO.Path]::GetFullPath($ProfileRoot)
+    $extension = [IO.Path]::GetFullPath($ExtensionDirectory)
+    $process = @($ChromeProcesses) | Where-Object {
+        $commandLine = [string]$_.CommandLine
+        $commandLine.IndexOf($profile, [StringComparison]::OrdinalIgnoreCase) -ge 0 `
+            -and $commandLine.IndexOf($extension, [StringComparison]::OrdinalIgnoreCase) -ge 0 `
+            -and $commandLine -notmatch '(?:^|\s)--type='
+    } | Select-Object -First 1
+    $command = [string]$process.CommandLine
+    $required = [ordered]@{
+        'disable-background-timer-throttling' = '--disable-background-timer-throttling'
+        'disable-renderer-backgrounding' = '--disable-renderer-backgrounding'
+        'disable-backgrounding-occluded-windows' = '--disable-backgrounding-occluded-windows'
+        'CalculateNativeWinOcclusion' = 'CalculateNativeWinOcclusion'
+        'IntensiveWakeUpThrottling' = 'IntensiveWakeUpThrottling'
+    }
+    $missing = @()
+    foreach ($entry in $required.GetEnumerator()) {
+        if (-not $process -or $command.IndexOf([string]$entry.Value, [StringComparison]::OrdinalIgnoreCase) -lt 0) {
+            $missing += [string]$entry.Key
+        }
+    }
+    [pscustomobject]@{
+        ok = [bool]($process -and $missing.Count -eq 0)
+        processFound = [bool]$process
+        missingFlags = @($missing)
+    }
 }
 
 function Get-PhwgnaChromeLaunchState {

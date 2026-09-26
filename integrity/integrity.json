@@ -83,11 +83,11 @@
     },
     {
       "path": "options/options.html",
-      "sha256": "48610f48a7f47d9950f4bc1df76cfa76c01f39daab090f175dd4b11f4d967b1f"
+      "sha256": "a4edb381b664e9935217aa3b59fb0ddf91df9ea7f960c78bdb716881b824c8e5"
     },
     {
       "path": "options/options.js",
-      "sha256": "b8d04a3cdabee562577ba06c0b67c75eb5fd4f4653f53af718233bd867bf3a68"
+      "sha256": "da85c8a3026f96724a8b0ae12a32dc9976d6f759ea86a0f371e7e3ee2a03863b"
     },
     {
       "path": "popup/popup.css",
@@ -99,7 +99,7 @@
     },
     {
       "path": "popup/popup.js",
-      "sha256": "68477839a7814dcdf1f1f5d703a589e94e3e174748dd16d50520881ea4f623ae"
+      "sha256": "92f5a6fe4f453cb0c5296f0725092c59e7e9bc61a8a16952b92b0b72d2cbc246"
     },
     {
       "path": "security/OWNER-FINGERPRINT.txt",
@@ -119,11 +119,11 @@
     },
     {
       "path": "src/background/contracts.js",
-      "sha256": "eff4c718ad5ab99c13dedea03330b7a37f0777f4657663defdbe9a7eb2cc8796"
+      "sha256": "131bdb20cc7a68f7690eb898d095b79bf99ff624090e53e7ccc8c009ca0615bf"
     },
     {
       "path": "src/background/controller.js",
-      "sha256": "140bd2a2a7a885cbfd5b47a17e976d0c24f09c0cd0b1e4708ff892dc482e6174"
+      "sha256": "46d306f74bb8c3124bbd9a19d54ec8c872cd86d27deb0cb3a2bfcfb29cc8d9c7"
     },
     {
       "path": "src/background/message-router.js",
@@ -131,7 +131,7 @@
     },
     {
       "path": "src/background/provider-pool-service.js",
-      "sha256": "d2941e76e891a8c0f117c7ab5678aaa80113edce19e3ece021f0894525ff4c7f"
+      "sha256": "2285628bc6d5d537faf885b728b97f63889025185a41e3965f46c6c08668e52e"
     },
     {
       "path": "src/background/translation-job-service.js",
@@ -159,15 +159,15 @@
     },
     {
       "path": "src/content/gemini.js",
-      "sha256": "b4844386de3098f829c1c17a59645caf8ae01f14856f39f12d31080f058383a4"
+      "sha256": "be4696b2ffbf1261936a54e885fcf9fdf9d47ba9bb2c01f2f5e2d772a25527b6"
     },
     {
       "path": "src/content/provider-common.js",
-      "sha256": "9c439b09aed3f5f495d06ecf11a924b69049230154ddc1e348f2afd79f5b1d2e"
+      "sha256": "5a15067e4a1da0a9e203182b66de67d8ba6f0e02678cc5d534064efe2fdbc51f"
     },
     {
       "path": "src/content/provider-diagnostics.js",
-      "sha256": "e180dfed26aa2fb00e666d13808d7c7920e95fe883e20cc3c6c9380520998eec"
+      "sha256": "d6a075a9a245a93d32193747b0805f00f2af77d5fd1177484d60df731fea9552"
     },
     {
       "path": "src/content/stv-account.js",
@@ -191,7 +191,7 @@
     },
     {
       "path": "src/content/stv-name-editor.js",
-      "sha256": "3bd99f278537442f456dcb7b00e613c9b6b6f7e1c9e4a2bfc5788368a6de4ae7"
+      "sha256": "403487d6a5d841069820ac21bce3cad44e31f364e8ac679d852e153de2de8694"
     },
     {
       "path": "src/content/stv-name-manager.js",
@@ -219,7 +219,7 @@
     },
     {
       "path": "src/content/stv-ui.js",
-      "sha256": "98e48afb1e099e9042f05db79afae1e56f1b5ff3fa82f6aa6e9af296c0b5e916"
+      "sha256": "af5d76e74edd0d08153262e0bfb339b0c68a4bef22747fc98e8fa4bf9d192930"
     },
     {
       "path": "src/content/stv.css",
@@ -227,7 +227,7 @@
     },
     {
       "path": "src/content/stv.js",
-      "sha256": "7ffc9e47e689cd8ba1af10006caf0a5d242a216a45959f68e21c888e1c642591"
+      "sha256": "a7adc8c94eca370303808f57a135b69db48bfb9a4224b96029c8860922d80f8a"
     },
     {
       "path": "src/shared/account-history-sync.js",
@@ -251,7 +251,7 @@
     },
     {
       "path": "src/shared/core.js",
-      "sha256": "e4e80fd98c1dfb4f0b5aff4b0240999640ebf997e3af960281baba19683c2638"
+      "sha256": "f5a7501a461a926f5f8d2220aeed9c3e9702baf66fa9923ce23883db94e81e87"
     },
     {
       "path": "src/shared/data-backup.js",
@@ -263,7 +263,7 @@
     },
     {
       "path": "src/shared/error-journal.js",
-      "sha256": "5eaccb2da60a81df8bd71d2afcc78f241fcde4a225d8ee2879088fb571fac6a1"
+      "sha256": "7746511e8470c6b7ec89c8534e1bbbb9ff99fd02ec9645e81fb3fd92e5bf2bc7"
     },
     {
       "path": "src/shared/history-sync.js",
@@ -327,7 +327,7 @@
     },
     {
       "path": "windows/phwgna-chrome-max-account.ps1",
-      "sha256": "b38845f29c9902684374ecc537ce69d57e430892355f3d77ed8bc070efc3995d"
+      "sha256": "bd1866cdd91d4226832340cee80f41ee007b8fff312c0ae2ec39365f0176b749"
     },
     {
       "path": "windows/phwgna-chrome-max.ps1",
@@ -335,7 +335,7 @@
     },
     {
       "path": "windows/phwgna-setup-core.ps1",
-      "sha256": "2b6296f4c97dd8828f906f3495592059e27060e453832892564564aa709de87b"
+      "sha256": "adf5adbb1eec14365179a00b8eeb9350af6c053ccda2db2ca2c656bd13805494"
     },
     {
       "path": "windows/phwgna-setup-wizard.ps1",
@@ -347,7 +347,7 @@
     }
   ],
   "product": "Phwgna Stv",
-  "sourceCommit": "e780350d417550c967dd926aaec57fe6940a3f7a",
+  "sourceCommit": "387bb7c1ccf069766d7300194caae1bc64594988",
   "officialRepository": "https://github.com/itzmonnz/phwgna-stv",
   "officialReleaseUrl": "https://github.com/itzmonnz/phwgna-stv/releases/tag/v0.2.8",
   "publicKeyFingerprint": "85ac74c199d0a6028bce843d6f68d7632317912b460aad1a7431193767ec9871"

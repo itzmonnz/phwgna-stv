@@ -221,7 +221,7 @@ Chỉ trả kết quả dịch. Cấm giải thích, chú thích, giải nghĩa 
     return {
       provider: PROVIDERS.includes(value.provider) ? value.provider : "gemini",
       webAiTabCount: Number.isFinite(Number(value.webAiTabCount))
-        ? Math.min(5, Math.max(2, Math.trunc(Number(value.webAiTabCount))))
+        ? Math.min(10, Math.max(2, Math.trunc(Number(value.webAiTabCount))))
         : DEFAULT_SETTINGS.webAiTabCount,
       temporaryChat: true,
       warmPoolEnabled: true,

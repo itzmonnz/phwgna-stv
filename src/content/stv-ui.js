@@ -2322,7 +2322,7 @@
     const label = labels[provider] || "dịch vụ AI";
     const apiMode = String(provider || "").endsWith("_api");
     const autoTranslate = options.autoTranslate !== false;
-    const tabCount = Math.min(5, Math.max(2, Math.trunc(Number(options.tabCount)) || 2));
+    const tabCount = Math.min(10, Math.max(2, Math.trunc(Number(options.tabCount)) || 2));
     const root = element(document, "div", "stvai-consent-backdrop stvai-automation-consent-backdrop");
     root.setAttribute("role", "dialog");
     root.setAttribute("aria-modal", "true");

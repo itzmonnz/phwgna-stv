@@ -19,7 +19,7 @@
   const TTS_SESSION_PREFIX = "stvai-tts-session:";
   const AUTOMATION_CONSENT_VERSION = 2;
   const MIN_POOL_TABS = 2;
-  const MAX_POOL_TABS = 5;
+  const MAX_POOL_TABS = 10;
   const READY_TIMEOUT_MS = 30_000;
   const GEMINI_SETUP_HARD_TIMEOUT_MS = 90_000;
   const CHATGPT_READY_TIMEOUT_MS = 13_000;
@@ -35,14 +35,15 @@
   const MAX_WARM_REPLACEMENTS = 2;
   const PERFORMANCE_HEARTBEAT_MS = 2_000;
   const JOB_RECORD_VERSION = 2;
-  const POOL_RECORD_VERSION = 6;
+  const POOL_RECORD_VERSION = 7;
   const OWNED_TABS_RECORD_VERSION = 1;
   const DOM_PROFILE_RECORD_VERSION = 1;
   const AUTHENTICATION_BLOCKERS = new Set([
     "login_required", "login_window_open", "captcha", "security_verification", "login_browser_rejected"
   ]);
   const REPLACEABLE_WARM_FAILURES = new Set([
-    "content_refused", "ui_changed", "temporary_unavailable", "provider_unreachable",
+    "content_refused", "ui_changed", "temporary_unavailable", "temporary_session_lost", "provider_unreachable",
+    "background_performance_degraded",
     "provider_tab_failed", "warm_evidence_missing", "invalid_setup_response",
     "send_not_confirmed", "response_timeout"
   ]);

@@ -213,6 +213,9 @@
     const adapterStatus = options.adapterStatus && typeof options.adapterStatus === "object"
       ? options.adapterStatus
       : {};
+    const session = options.sessionState && typeof options.sessionState === "object"
+      ? options.sessionState
+      : {};
     return {
       schemaVersion: 3,
       component: "provider-content",
@@ -228,8 +231,23 @@
         state: safeEnum(adapterStatus.state, ["ready", "paused"], "unknown"),
         code: safeEnum(adapterStatus.code, [
           "none", "captcha", "login_required", "security_verification", "login_browser_rejected", "rate_limited", "ui_changed", "ab_comparison",
-          "temporary_unavailable"
+          "temporary_unavailable", "temporary_session_lost", "background_performance_degraded"
         ], adapterStatus.state === "ready" ? "none" : "unknown")
+      },
+      session: {
+        state: safeEnum(session.state, [
+          "temporary_active", "normal_chat", "navigation_in_progress", "blocked"
+        ], "unknown"),
+        temporaryActive: session.temporaryActive === true,
+        composerContent: safeEnum(session.composerContent, [
+          "empty", "owned_setup", "owned_batch", "foreign", "unavailable"
+        ], "unavailable"),
+        ...(session.blocker ? {
+          blocker: safeEnum(session.blocker, [
+            "captcha", "login_required", "security_verification", "login_browser_rejected",
+            "rate_limited", "ui_changed"
+          ], "unknown")
+        } : {})
       },
       selectors: {
         composer: countSelectors(document, COMPOSERS),
@@ -250,7 +268,7 @@
         phase: safeEnum(runtime.phase, ["idle", "setup", "batch", "repair"], "idle"),
         errorCode: safeEnum(runtime.errorCode, [
           "none", "response_timeout", "send_not_confirmed", "provider_busy", "provider_busy_timeout", "provider_unreachable", "captcha",
-          "login_required", "security_verification", "login_browser_rejected", "rate_limited", "ui_changed", "ab_comparison", "temporary_unavailable",
+          "login_required", "security_verification", "login_browser_rejected", "rate_limited", "ui_changed", "ab_comparison", "temporary_unavailable", "temporary_session_lost", "background_performance_degraded",
           "provider_error", "cancelled", "content_refused", "incomplete_response",
           "recovering_response", "fallback_unavailable"
         ], "none"),
@@ -300,6 +318,7 @@
         const provider = providerFor(options.location);
         const adapterApi = provider === "chatgpt" ? rootObject.STVAIChatGPT : rootObject.STVAIGemini;
         let adapterStatus = { state: "paused", code: "ui_changed" };
+        let sessionState;
         let domResolution;
         try {
           const adapterOptions = provider === "gemini" && adapterApi?.createProfileStorage
@@ -311,6 +330,7 @@
           );
           await adapter?.ready?.();
           if (adapter?.getStatus) adapterStatus = adapter.getStatus();
+          if (adapter?.getSessionState) sessionState = adapter.getSessionState();
           if (adapter?.getDomDiagnostic) domResolution = adapter.getDomDiagnostic();
         } catch (_error) {
           // Snapshot remains structural and safe when an adapter cannot be created.
@@ -321,6 +341,7 @@
           extensionVersion: runtime.getManifest?.()?.version,
           adapterLoaded: Boolean(adapterApi),
           adapterStatus,
+          sessionState,
           domResolution,
           runtimeState: rootObject.STVAIProviderCommon?.getDiagnosticState?.()
         });

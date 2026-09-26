@@ -31,7 +31,8 @@
   const ERROR_CODES = new Set([
     "line_count_mismatch", "response_id_mismatch", "invalid_response", "incomplete_response",
     "response_timeout", "send_not_confirmed", "content_refused", "provider_unreachable",
-    "provider_unavailable", "network_error", "provider_error", "ui_changed", "temporary_unavailable",
+    "provider_unavailable", "network_error", "provider_error", "ui_changed", "temporary_unavailable", "temporary_session_lost",
+    "background_performance_degraded",
     "login_required", "login_window_open", "captcha", "security_verification", "login_browser_rejected",
     "batch_recovery_exhausted", "provider_tab_close_failed", "provider_origin_mismatch",
     "invalid_setup_response", "warm_setup_failed", "provider_tab_failed", "provider_tab_closed", "provider_tab_limit",

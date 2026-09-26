@@ -823,7 +823,7 @@
         }
       }).catch((error) => {
         if (lookupId === japaneseLookupRequest) {
-          const tabCount = Math.min(5, Math.max(2, Math.trunc(Number(error?.tabCount)) || 2));
+          const tabCount = Math.min(10, Math.max(2, Math.trunc(Number(error?.tabCount)) || 2));
           if (["lookup-consent-required", "lookup-automation-consent-required"].includes(error?.message)) {
             compareMessage.textContent = "Hãy bấm Dịch AI và xác nhận tự động một lần, rồi tra lại.";
           } else {

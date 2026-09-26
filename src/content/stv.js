@@ -311,6 +311,8 @@
       rate_limited: "Dịch vụ AI đang giới hạn lượt. Hãy chờ rồi bấm Tiếp tục.",
       "temporary-chat": "Temporary Chat chưa sẵn sàng. Kiểm tra tab AI rồi bấm Tiếp tục.",
       temporary_unavailable: "Temporary Chat chưa sẵn sàng. Kiểm tra tab AI rồi bấm Tiếp tục.",
+      temporary_session_lost: "Gemini đã rơi về chat thường — đang tự mở lại Temporary Chat…",
+      background_performance_degraded: "Tab Gemini vẫn bị Chrome giới hạn nền — chưa gửi prompt để tránh gửi trùng.",
       "ui-changed": "Không nhận diện được giao diện AI. Tiến độ đã được giữ lại.",
       ui_changed: "Không nhận diện được giao diện AI. Tiến độ đã được giữ lại.",
       ab_comparison: "ChatGPT đang yêu cầu chọn phản hồi. Hãy chọn thủ công rồi bấm Tiếp tục.",
@@ -378,7 +380,7 @@
     const readyCount = boundedCount(message?.readyCount);
     const leasedCount = boundedCount(message?.leasedCount);
     const totalCount = Math.max(readyCount, leasedCount, boundedCount(message?.totalCount));
-    const targetCount = Math.min(5, Math.max(2, boundedCount(message?.targetCount) || 2));
+    const targetCount = Math.min(10, Math.max(2, boundedCount(message?.targetCount) || 2));
     const bounded = (input, limit) => String(input || "").slice(0, limit);
     const rawDiagnostic = message?.uiDiagnostic;
     const uiDiagnostic = rawDiagnostic && typeof rawDiagnostic === "object" ? {

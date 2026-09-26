@@ -389,10 +389,25 @@
       return null;
     }
 
-    async function createOwnedProviderTab(url) {
+    async function createOwnedProviderTab(url, provider = "") {
+      if (provider === "gemini" && typeof windows?.create === "function") {
+        const providerWindow = await windows.create({
+          url,
+          type: "normal",
+          focused: false
+        });
+        const tab = Array.isArray(providerWindow?.tabs) ? providerWindow.tabs[0] : null;
+        if (!tab || !Number.isInteger(tab.id)) throw new Error("Provider window did not create a tab");
+        return {
+          ...tab,
+          active: true,
+          windowId: Number.isInteger(providerWindow.id) ? providerWindow.id : tab.windowId,
+          stvaiWindowMode: "isolated_normal"
+        };
+      }
       const tab = await tabs.create({ url, active: false });
       if (Number.isInteger(tab?.windowId)) warmPool.providerWindowId = tab.windowId;
-      return tab;
+      return tab ? { ...tab, stvaiWindowMode: "shared" } : tab;
     }
 
     function registerStvTab(tabId, url) {
@@ -554,9 +569,21 @@
       const slots = warmPool.slots.map((slot) => ({
         slotId: slot.slotId,
         providerTabId: slot.providerTabId,
+        providerWindowId: Number.isInteger(slot.providerWindowId) ? slot.providerWindowId : null,
+        windowMode: slot.windowMode === "isolated_normal" ? "isolated_normal" : "shared",
+        windowIdPresent: Number.isInteger(slot.providerWindowId),
+        tabActiveInWindow: slot.tabActiveInWindow === true,
+        pageVisibility: ["visible", "hidden", "prerender"].includes(slot.pageVisibility)
+          ? slot.pageVisibility : "unknown",
+        pageFocused: slot.pageFocused === true,
+        autoDiscardable: slot.autoDiscardable !== false,
+        maxProfileVerified: "unknown",
+        missingMaxFlags: [],
         provider: slot.provider,
         purpose: ["shared", "general", "prefetch"].includes(slot.purpose) ? slot.purpose : "shared",
         state: slot.state,
+        desiredSession: slot.desiredSession || (slot.provider === "gemini" ? "temporary" : "regular"),
+        sessionState: slot.sessionState || "unknown",
         warmSessionId: slot.warmSessionId,
         settingsHash: slot.settingsHash,
         setupSessionId: slot.setupSessionId || "",
@@ -569,6 +596,9 @@
         firstBatchDispatchedAt: Math.max(0, Number(slot.firstBatchDispatchedAt) || 0),
         errorCode: slot.errorCode || "",
         jobId: slot.jobId || "",
+        recoveryGeneration: Math.max(0, Number(slot.recoveryGeneration) || 0),
+        recoveryStage: slot.recoveryStage || "",
+        recoveryAttempts: Math.max(0, Number(slot.inPlaceRecoveryAttempts) || 0),
         uiDiagnostic: slot.uiDiagnostic,
         performanceLease: {
           state: slot.performanceLeaseState || "inactive",
@@ -706,6 +736,7 @@
         status: value.status === "ready" ? "ready" : "blocked",
         page: pick(value.page, ["readyState", "bodyPresent"]),
         adapter: pick(value.adapter, ["loaded", "state", "code"]),
+        session: pick(value.session, ["state", "temporaryActive", "composerContent", "blocker"]),
         selectors: pick(value.selectors, ["composer", "sendButton", "responses", "temporaryControl"]),
         interaction: {
           composer: pick(value.interaction?.composer, ["selector", "empty", "disabled"]),
@@ -764,6 +795,13 @@
           state: String(slot.state || "unknown"),
           errorCode: String(slot.errorCode || "none"),
           hasJob: Boolean(slot.jobId),
+          desiredSession: slot.desiredSession === "temporary" ? "temporary" : "regular",
+          sessionState: String(slot.sessionState || "unknown"),
+          recovery: {
+            generation: Math.max(0, Number(slot.recoveryGeneration) || 0),
+            stage: String(slot.recoveryStage || "idle"),
+            attempts: Math.max(0, Number(slot.inPlaceRecoveryAttempts) || 0)
+          },
           readyWatchdog: {
             step: String(slot.readyWatchdogStep || "idle"),
             state: String(slot.readyWatchdogState || "idle"),
@@ -824,9 +862,18 @@
         slots: warmPool.slots.map((slot) => ({
           slotId: slot.slotId,
           providerTabId: slot.providerTabId,
+          providerWindowId: Number.isInteger(slot.providerWindowId) ? slot.providerWindowId : null,
+          windowMode: slot.windowMode === "isolated_normal" ? "isolated_normal" : "shared",
+          tabActiveInWindow: slot.tabActiveInWindow === true,
+          pageVisibility: ["visible", "hidden", "prerender"].includes(slot.pageVisibility)
+            ? slot.pageVisibility : "unknown",
+          pageFocused: slot.pageFocused === true,
+          autoDiscardable: slot.autoDiscardable !== false,
           provider: slot.provider,
           purpose: ["shared", "general", "prefetch"].includes(slot.purpose) ? slot.purpose : "shared",
           state: slot.state,
+          desiredSession: slot.desiredSession || (slot.provider === "gemini" ? "temporary" : "regular"),
+          sessionState: slot.sessionState || "unknown",
           warmSessionId: slot.warmSessionId,
           settingsHash: slot.settingsHash,
           setupId: slot.setupId || "",
@@ -842,6 +889,11 @@
           firstBatchDispatchedAt: Math.max(0, Number(slot.firstBatchDispatchedAt) || 0),
           errorCode: slot.errorCode || "",
           jobId: slot.jobId || "",
+          recoveryJobId: slot.recoveryJobId || "",
+          recoveryGeneration: Math.max(0, Number(slot.recoveryGeneration) || 0),
+          inPlaceRecoveryAttempts: Math.max(0, Number(slot.inPlaceRecoveryAttempts) || 0),
+          recoveryStage: slot.recoveryStage || "",
+          recoveryCancelled: slot.recoveryCancelled === true,
           handoffPredecessorSlotId: slot.handoffPredecessorSlotId || "",
           handoffSuccessorSlotId: slot.handoffSuccessorSlotId || ""
         }))
@@ -1917,9 +1969,13 @@
         providerDebuggerBlockedTabs.delete(tabId);
         const loadingSlot = findPoolSlotByTab(tabId);
         if (loadingSlot && !loadingSlot.documentLoading && !["failed", "retiring"].includes(loadingSlot.state)) {
+          const keepsGeminiRecovery = loadingSlot.provider === "gemini"
+            && loadingSlot.desiredSession === "temporary"
+            && (loadingSlot.state === "recovering" || Boolean(loadingSlot.recoveryJobId));
           loadingSlot.documentGeneration = (loadingSlot.documentGeneration || 0) + 1;
           loadingSlot.documentLoading = true;
-          if (loadingSlot.state !== "leased") {
+          loadingSlot.sessionState = keepsGeminiRecovery ? "navigation_in_progress" : loadingSlot.sessionState;
+          if (loadingSlot.state !== "leased" && !keepsGeminiRecovery) {
             loadingSlot.state = "opening";
             loadingSlot.setupStageStartedAt = 0;
             loadingSlot.preparationRequested = false;
@@ -2003,8 +2059,32 @@
           await notifyPoolStatus();
           return;
         }
+        if (slot.provider === "gemini" && slot.desiredSession === "temporary"
+          && (slot.state === "recovering" || Boolean(slot.recoveryJobId))) {
+          slot.state = "recovering";
+          slot.sessionState = "navigation_in_progress";
+          slot.errorCode ||= "temporary_session_lost";
+          slot.recoveryJobId ||= createId("setup-recovery");
+          slot.recoveryStage ||= "open_new_chat";
+          await persistPool();
+          void recoverGeminiSlotInPlace(slot, warmPool.settings || (await loadSettings({ provider: "gemini" })));
+          await notifyPoolStatus();
+          return;
+        }
         if (slot.state === "ready") {
           if (await verifyPreparedSlot(slot)) return;
+          if (slot.provider === "gemini" && slot.desiredSession === "temporary") {
+            slot.state = "recovering";
+            slot.sessionState = "normal_chat";
+            slot.errorCode = "temporary_session_lost";
+            slot.recoveryJobId ||= createId("setup-recovery");
+            slot.recoveryCancelled = false;
+            slot.recoveryStage = "clear_owned_prompt";
+            await persistPool();
+            void recoverGeminiSlotInPlace(slot, warmPool.settings || (await loadSettings({ provider: "gemini" })));
+            await notifyPoolStatus();
+            return;
+          }
           slot.documentLoadedAt = now();
           slot.state = "opening";
           slot.errorCode = "";

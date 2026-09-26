@@ -328,6 +328,11 @@
     const generatingHardTimeoutMs = message?.phase === "setup"
       ? Math.max(timeoutMs, Number(options.generatingHardTimeoutMs) || timeoutMs)
       : timeoutMs;
+    // A recovered Gemini tab can acknowledge Send (the composer clears) while
+    // never creating either a response or a generation control. Waiting for
+    // the full 30-second READY deadline in that dead zone wastes one recovery
+    // cycle; only enable this fast path for callers that explicitly opt in.
+    const emptyResponseTimeoutMs = Math.max(0, Number(options.emptyResponseTimeoutMs) || 0);
     const generatingHardDeadline = start + generatingHardTimeoutMs;
     const markerGraceMs = message?.phase === "setup"
       ? Math.max(0, Number(options.markerGraceMs) || 0)
@@ -346,6 +351,7 @@
     let generationGraceActive = false;
     let generationStoppedAt = null;
     let reportedState = "";
+    let emptyResponseSince = null;
 
     function report(state) {
       if (state === reportedState && state !== "marker_seen") return;
@@ -375,6 +381,18 @@
         || Boolean(text && (text !== ignored || currentBatchResponse));
       const protocolValid = changed && responseMatchesMessage(text, message);
       const currentTime = now();
+      if (emptyResponseTimeoutMs > 0 && message?.phase === "setup"
+        && !text && state.generating !== true) {
+        emptyResponseSince ??= currentTime;
+        if (currentTime - emptyResponseSince >= emptyResponseTimeoutMs) {
+          throw new ProviderError(
+            "send_not_confirmed",
+            "Gemini đã nhận prompt nhưng chưa tạo phản hồi; chuyển sang phục hồi sớm."
+          );
+        }
+      } else {
+        emptyResponseSince = null;
+      }
       const staleStopCandidate = staleStopGraceMs > 0
         && protocolValid
         && state.generating === true
@@ -569,6 +587,8 @@
       temporary_unavailable: "Không thể bật chế độ trò chuyện tạm thời trên giao diện hiện tại.",
       provider_busy: "Một tác vụ dịch khác đang chạy trong tab này.",
       provider_busy_timeout: "Gemini vẫn đang sinh phản hồi sau thời gian chờ.",
+      temporary_session_lost: "Gemini đã rơi về chat thường; tool đang tự mở lại Temporary Chat.",
+      background_performance_degraded: "Tab Gemini vẫn bị Chrome giới hạn nền sau hai lần tự sửa cửa sổ.",
       foreign_composer_content: "Ô nhập Gemini có nội dung không thuộc phiên dịch hiện tại; tool không tự xóa.",
       job_not_active: "Không có tác vụ đang chạy tương ứng.",
       warm_session_mismatch: "Phiên AI đã chuẩn bị không khớp với cài đặt dịch hiện tại.",
@@ -588,10 +608,21 @@
       const type = message?.type;
       if (type === "STVAI_PROVIDER_STATUS") {
         const setup = typeof defaults.getSetupState === "function" ? defaults.getSetupState() : null;
+        const session = typeof adapter.getSessionState === "function" ? adapter.getSessionState() : null;
+        const rawPerformance = typeof adapter.getPerformanceState === "function"
+          ? adapter.getPerformanceState() : null;
+        const performance = rawPerformance ? {
+          visibility: ["visible", "hidden", "prerender"].includes(rawPerformance.visibility)
+            ? rawPerformance.visibility : "unknown",
+          focused: rawPerformance.focused === true,
+          mode: ["max", "stable"].includes(rawPerformance.mode) ? rawPerformance.mode : "off"
+        } : null;
         return {
           ok: true,
           state: {
             ...adapter.getStatus(),
+            ...(session ? { session } : {}),
+            ...(performance ? { performance } : {}),
             prepared: preparedEvidence ? { ...preparedEvidence } : null,
             operation: activeJob ? {
               active: true,
@@ -884,6 +915,7 @@
             ignoreValue: submission?.alreadySent ? "" : previousResponse,
             markerGraceMs: message.phase === "setup" ? (message.markerGraceMs ?? 2_000) : 0,
             generatingHardTimeoutMs: message.phase === "setup" ? message.generatingHardTimeoutMs : undefined,
+            emptyResponseTimeoutMs: message.phase === "setup" ? message.emptyResponseTimeoutMs : undefined,
             incompleteGraceMs: message.phase === "batch" ? defaults.incompleteGraceMs : 0,
             validGraceMs: message.phase === "batch" ? defaults.validGraceMs : 0,
             staleStopGraceMs: message.phase === "batch" ? defaults.staleStopGraceMs : 0,
