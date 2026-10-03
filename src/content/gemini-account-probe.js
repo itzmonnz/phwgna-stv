@@ -4,8 +4,6 @@
   if (root.chrome?.runtime?.onMessage && root.document) api.install(root);
 })(typeof globalThis !== "undefined" ? globalThis : this, function () {
   "use strict";
-  const sidebarsOpenedByProbe = new WeakSet();
-
   function openCollapsedSidebar(document) {
     const controls = [...document.querySelectorAll("button")];
     const toggle = controls.find(button => {
@@ -13,21 +11,6 @@
       return /^(?:Mở thanh bên|Open sidebar|Expand sidebar|Show navigation)$/i.test(label)
         && !button.disabled && button.getAttribute("aria-disabled") !== "true";
     });
-    if (!toggle) return false;
-    sidebarsOpenedByProbe.add(document);
-    toggle.click();
-    return true;
-  }
-
-  function restoreSidebar(document) {
-    if (!sidebarsOpenedByProbe.has(document)) return false;
-    const controls = [...document.querySelectorAll("button")];
-    const toggle = controls.find(button => {
-      const label = String(button.getAttribute("aria-label") || button.getAttribute("title") || "").trim();
-      return /^(?:\u0110\u00f3ng thanh b\u00ean|Close sidebar|Collapse sidebar|Hide navigation)$/i.test(label)
-        && !button.disabled && button.getAttribute("aria-disabled") !== "true";
-    });
-    sidebarsOpenedByProbe.delete(document);
     if (!toggle) return false;
     toggle.click();
     return true;
@@ -73,7 +56,9 @@
       busy: Boolean(document.querySelector('button[aria-label*="Stop"],button[aria-label*="Dừng"]')),
       chooserUrl
     };
-    restoreSidebar(document);
+    // Keep the sidebar open after account probing. The same physical tab may
+    // immediately enter Temporary Chat; closing it here races that navigation
+    // and leaves the provider in regular chat with no useful error.
     return snapshot;
   }
 
@@ -90,5 +75,5 @@
       return true;
     });
   }
-  return Object.freeze({ readAccountDom, openCollapsedSidebar, restoreSidebar, install });
+  return Object.freeze({ readAccountDom, openCollapsedSidebar, install });
 });

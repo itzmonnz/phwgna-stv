@@ -32,7 +32,8 @@
     "gem-icon-button.temp-chat-button:not(.temp-chat-on) button",
     "side-nav-sparkle-button > button[data-test-id='side-nav-sparkle-button']",
     "button[aria-label*='Temporary chat' i]",
-    "button[aria-label*='Cuộc trò chuyện tạm thời' i]"
+    "button[aria-label*='Cuộc trò chuyện tạm thời' i]",
+    "button[aria-label='Cuộc trò chuyện tạm thời' i]"
   ];
   const TEMPORARY_ACTIVE_INDICATORS = [
     "chat-window.is-temporary-chat",
