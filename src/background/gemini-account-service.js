@@ -156,7 +156,7 @@
       const selected = state.accounts.find(row => row.key === state.selectedKey && row.cooldownUntil <= now())
         || state.accounts.find(row => row.cooldownUntil <= now());
       if (!selected) throw fault("gemini_accounts_cooling_down");
-      const actual = await read(tabId);
+      const actual = await wait(tabId, "gemini", stopped);
       if (actual.busy) throw fault("provider_busy");
       if (actual.kind !== "gemini" || actual.key !== selected.key || !actual.paid) await select(tabId, selected, stopped);
       state.selectedKey = selected.key;
@@ -166,7 +166,7 @@
     return Object.freeze({
       verifyCurrent: tabId => locked(async () => {
         const state = await load();
-        const actual = await read(tabId);
+        const actual = await wait(tabId, "gemini");
         if (actual.kind !== "gemini" || !actual.paid || !state.accounts.some(row => row.key === actual.key)) {
           throw fault("gemini_paid_account_missing");
         }

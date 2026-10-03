@@ -4,6 +4,18 @@
   if (root.chrome?.runtime?.onMessage && root.document) api.install(root);
 })(typeof globalThis !== "undefined" ? globalThis : this, function () {
   "use strict";
+  function openCollapsedSidebar(document) {
+    const controls = [...document.querySelectorAll("button")];
+    const toggle = controls.find(button => {
+      const label = String(button.getAttribute("aria-label") || button.getAttribute("title") || "").trim();
+      return /^(?:Mở thanh bên|Open sidebar|Expand sidebar|Show navigation)$/i.test(label)
+        && !button.disabled && button.getAttribute("aria-disabled") !== "true";
+    });
+    if (!toggle) return false;
+    toggle.click();
+    return true;
+  }
+
   // Read only account controls. Personal labels never cross the page boundary.
   async function readAccountDom(document, location, crypto) {
     const digest = async value => [...new Uint8Array(await crypto.subtle.digest(
@@ -19,7 +31,14 @@
     if (location.origin !== "https://gemini.google.com") return { kind: "blocked" };
     const avatar = document.querySelector("a.mavatar-footer-left");
     const email = String(avatar?.getAttribute("aria-label") || "").match(/[^\s()]+@[^\s()]+/)?.[0];
-    const tier = String(document.querySelector(".mavatar-tier-label")?.textContent || "").trim();
+    const tierElement = document.querySelector(".mavatar-tier-label");
+    // Gemini removes the paid-tier label from the DOM while its sidebar is
+    // collapsed. Account rotation used to interpret that missing label as a
+    // Free account and reject every signed-in Pro account before Temporary
+    // Chat could start. Open the existing sidebar once and let the background
+    // probe retry after Gemini renders the trusted account controls.
+    if (!tierElement && openCollapsedSidebar(document)) return { kind: "loading" };
+    const tier = String(tierElement?.textContent || "").trim();
     const chooser = avatar?.getAttribute("href");
     let chooserUrl = "";
     try {
@@ -52,5 +71,5 @@
       return true;
     });
   }
-  return Object.freeze({ readAccountDom, install });
+  return Object.freeze({ readAccountDom, openCollapsedSidebar, install });
 });
