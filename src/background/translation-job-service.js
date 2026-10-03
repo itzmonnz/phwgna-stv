@@ -3092,6 +3092,39 @@
     async function providerStatus(message, sender) {
       await restoreJobs();
       const warmSlot = findPoolSlotByTab(sender?.tab?.id);
+      // Gemini can complete READY 2 in the content script after the original
+      // setup reply channel has disappeared.  The tab then sends a metadata-
+      // only READY heartbeat.  Reclaim the prepared evidence directly before
+      // starting another setup pass; this is what wakes a chapter otherwise
+      // stuck at "waiting for AI" with two visible READY replies.
+      if (warmSlot && warmSlot.provider === "gemini"
+        && warmSlot.state === "preparing" && message.status === "ready"
+        && message.type === "STVAI_PROVIDER_READY") {
+        try {
+          const live = await tabs.sendMessage(warmSlot.providerTabId, { type: "STVAI_PROVIDER_STATUS" });
+          const state = live?.state;
+          const prepared = state?.prepared;
+          const evidenceMatches = state?.state === "ready"
+            && state?.operation?.active !== true
+            && state?.runtime?.stage !== "error"
+            && prepared?.warmSessionId === warmSlot.warmSessionId
+            && prepared?.settingsHash === warmSlot.settingsHash;
+          if (evidenceMatches) {
+            warmSlot.state = "ready";
+            warmSlot.sessionState = String(state?.session?.state || "temporary_active");
+            warmSlot.setupState = "completed";
+            warmSlot.setupCheckpoint = SETUP_PARTS.length;
+            warmSlot.setupStage = "completed";
+            warmSlot.errorCode = "";
+            await persistPool();
+            await notifyPoolStatus();
+            await drainWarmWaiters();
+            return { ok: true, ready: true, recoveredSetup: true };
+          }
+        } catch (_error) {
+          // Fall through to the normal bounded preparation path below.
+        }
+      }
       if (warmSlot
         && warmSlot.state === "failed"
         && message.status === "ready"

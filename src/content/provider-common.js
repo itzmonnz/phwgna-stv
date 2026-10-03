@@ -992,6 +992,25 @@
             warmSessionId: message.warmSessionId,
             settingsHash: message.settingsHash
           };
+          // A Gemini setup can finish in the tab after the long-lived
+          // tabs.sendMessage response has been lost during an MV3 wake-up.
+          // Publish a metadata-only READY heartbeat so the background can
+          // reclaim this exact prepared tab instead of leaving STV waiting.
+          if (defaults.provider === "gemini" && message.setupPart === "system"
+            && typeof chromeApi?.runtime?.sendMessage === "function") {
+            setTimeout(() => {
+              try {
+                const delivery = chromeApi.runtime.sendMessage({
+                  type: "STVAI_PROVIDER_READY",
+                  provider: "gemini",
+                  status: "ready"
+                });
+                delivery?.catch?.(() => undefined);
+              } catch (_error) {
+                // The direct setup response remains the primary path.
+              }
+            }, 0);
+          }
         }
         if (typeof adapter.onAccepted === "function") {
           try {

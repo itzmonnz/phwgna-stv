@@ -572,7 +572,28 @@
           append(element, 50);
         }
       });
-      return candidates.sort((left, right) => right.score - left.score)[0]?.element || null;
+      // Gemini renders a second element with the same accessible label for
+      // the sparkle home/logo. Prefer a real /app conversation link whenever
+      // it exists so recovery never targets or focuses the logo.
+      const realConversation = candidates.filter(({ element }) => {
+        const href = String(element.getAttribute("href") || "");
+        return /^\/app(?:[/?#]|$)/i.test(href)
+          && !element.matches?.("[data-test-id='side-nav-sparkle-button'], .side-nav-sparkle-button");
+      });
+      const pool = realConversation.length ? realConversation : candidates;
+      return pool.sort((left, right) => right.score - left.score)[0]?.element || null;
+    }
+
+    function clickNavigationControl(control) {
+      if (!control) return;
+      control.click();
+      // A programmatic navigation click can leave Chromium's focus ring on
+      // Gemini's logo after Angular rebuilds the sidebar. Clear only focus
+      // created by this automated click; never focus the control beforehand.
+      if (document.activeElement === control
+        || document.activeElement?.matches?.("[data-test-id='side-nav-sparkle-button'], .side-nav-sparkle-button")) {
+        document.activeElement.blur?.();
+      }
     }
 
     function findSidebarToggle() {
@@ -693,8 +714,7 @@
           continue;
         }
         attempted.add(control);
-        control.focus?.();
-        control.click();
+        clickNavigationControl(control);
         try {
           await waitForStableTemporary(signal, Math.min(attemptTimeoutMs, remaining()));
           verifiedTemporaryOnce = true;
@@ -740,8 +760,7 @@
       // flashes the browser UI and creates needless login/CAPTCHA pressure.
       const originalTarget = control.matches?.("a[href]") ? control.getAttribute("target") : null;
       if (control.matches?.("a[href]")) control.setAttribute("target", "_self");
-      control.focus?.();
-      try { control.click(); }
+      try { clickNavigationControl(control); }
       finally {
         if (control.matches?.("a[href]")) {
           if (originalTarget === null) control.removeAttribute("target");
