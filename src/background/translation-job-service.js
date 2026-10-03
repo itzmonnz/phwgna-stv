@@ -384,9 +384,44 @@
     }
 
     async function recoverOrphanedReadyLease(slot) {
-      if (!slot?.jobId || slot.state !== "ready" || slot.laneRole === "rescue") return false;
+      if (!slot?.jobId || slot.state !== "ready") return false;
       await restoreJobs();
       const job = jobs.get(slot.jobId);
+      if (!job || ["completed", "cancelled"].includes(job.status)) {
+        await withPoolLock(async () => {
+          if (slot.state !== "ready" || !slot.jobId) return;
+          slot.jobId = "";
+          slot.laneRole = "";
+          await persistPool();
+        });
+        return false;
+      }
+      if (slot.laneRole === "rescue") {
+        const lane = job.rescueLane;
+        if (!lane || lane.slotId !== slot.slotId || lane.providerTabId !== slot.providerTabId
+          || !lane.queue?.length || lane.running
+          || !["running", "paused"].includes(job.status)
+          || (job.status === "paused" && !["service_worker_restarted", "temporary_unavailable"].includes(job.pauseReason))
+          || !await verifyPreparedSlot(slot)) return false;
+        let claimed = false;
+        await withPoolLock(async () => {
+          if (slot.state !== "ready" || slot.jobId !== job.id || job.rescueLane !== lane
+            || lane.running || !lane.queue.length) return;
+          slot.state = "leased";
+          lane.ready = true;
+          lane.warmSessionId = String(slot.warmSessionId || "");
+          lane.settingsHash = String(slot.settingsHash || "");
+          job.status = "running";
+          job.pauseReason = "";
+          job.resumeAfterRestore = false;
+          await persistPool();
+          await persistJob(job);
+          claimed = true;
+        });
+        if (!claimed) return false;
+        await runParallelRescueLane(job);
+        return true;
+      }
       if (!job || !["running", "paused"].includes(job.status)
         || (job.status === "paused" && job.pauseReason !== "service_worker_restarted")
         || job.provider !== "gemini"
@@ -1045,7 +1080,7 @@
       // one-step rescue chat; restarting a READY slot would fail and strand the
       // refused batch even though the same physical tab is prepared.
       if (slot.state === "ready" && slot.laneRole === "rescue"
-        && slot.setupCheckpoint === 1 && await verifyPreparedSlot(slot)) {
+        && await verifyPreparedSlot(slot)) {
         let adopted = false;
         await withPoolLock(async () => {
           if (slot.state !== "ready" || slot.jobId !== job.id || job.rescueLane !== lane) return;
@@ -2861,7 +2896,7 @@
         if (resetSlot?.state === "ready" && await wakeOrphanedReadyLease?.(resetSlot)) {
           return { ok: true, resumed: true, recoveredReset: true };
         }
-        if (resetSlot && ["opening", "preparing", "recovering"].includes(resetSlot.state)) {
+        if (resetSlot && ["opening", "preparing", "restoring", "recovering"].includes(resetSlot.state)) {
           return { ok: true, waitingReset: true };
         }
       }

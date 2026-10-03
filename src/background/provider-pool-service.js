@@ -588,7 +588,10 @@
               batchUseCount: Math.max(0, Math.min(GEMINI_SESSION_BATCH_LIMIT, Number(slot?.batchUseCount) || 0)),
               laneRole: ["normal", "rescue"].includes(slot?.laneRole) ? slot.laneRole : "",
               errorCode: resumableGeminiRecovery ? String(slot?.errorCode || "temporary_session_lost") : "",
-              jobId: slot?.state === "leased" || slot?.accountSwitching === true ? String(slot?.jobId || "") : "",
+              // A reset can finish READY just before MV3 suspends the worker.
+              // Keep the owner until its persisted job reclaims this exact tab.
+              jobId: ["leased", "ready"].includes(slot?.state) || slot?.accountSwitching === true
+                ? String(slot?.jobId || "") : "",
               recoveryJobId: resumableGeminiRecovery
                 ? String(slot?.recoveryJobId || createId("setup-recovery")) : "",
               recoveryGeneration: resumableGeminiRecovery
@@ -762,7 +765,7 @@
 
     async function verifiedReadySlot(provider, settingsHash, purpose = "shared", excludedSlotId = "") {
       for (const slot of warmPool.slots.slice()) {
-        if (slot.state !== "ready" || slot.provider !== provider || slot.settingsHash !== settingsHash
+        if (slot.state !== "ready" || slot.jobId || slot.provider !== provider || slot.settingsHash !== settingsHash
           || slot.slotId === excludedSlotId || !slotMatchesPurpose(slot, purpose)) continue;
         if (provider === "gemini" && warmPool.settings?.geminiAccountRotationEnabled === true && !slot.accountInitialized) {
           slot.accountNeedsReset = true;
@@ -1464,6 +1467,10 @@
               await failWarmSlot("invalid_setup_response");
               return false;
             }
+            slot.setupCheckpoint = setupIndex + 1;
+            slot.setupState = finalSetup ? "completed" : "running";
+            slot.setupLastProgressAt = now();
+            await persistPool();
             if (!finalSetup && geminiSetupStepDelayMs > 0) await retrySleep(geminiSetupStepDelayMs);
           }
           return true;
@@ -1860,6 +1867,18 @@
         warmPool.provider = "gemini";
         warmPool.settings = config.settings;
         warmPool.settingsHash ||= await hashSettings(config.settings);
+        if (slot.state === "restoring") {
+          // A restored READY checkpoint is not dispatchable until the same
+          // physical tab proves its warm identity. The alarm must drive this
+          // transition even when no STV event happens after worker restart.
+          await prepareWarmSlot(slot, config.settings);
+          if (slot.state === "ready") {
+            await wakeOrphanedReadyLease(slot);
+            await drainWarmWaiters();
+          }
+          await scheduleGeminiLivenessAlarm(slot);
+          return true;
+        }
         if (slot.state === "ready") {
           const inspection = await inspectPreparedSlot(slot);
           if (inspection.verified) {
