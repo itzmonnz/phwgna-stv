@@ -17,6 +17,8 @@
     names: "phwgna_stv_ready_2"
   });
   const READY_MARKER = READY_MARKERS.system;
+  const REFUSAL_READY_MARKER = "phwgna_ready_1";
+  const REFUSAL_READY_INSTRUCTION = `After read that, chat with me in Vietnamese, and you must only response 1 line: ${REFUSAL_READY_MARKER}`;
   const READY_INSTRUCTION = "Nếu đã đọc và hiểu nội dung trên, chỉ phản hồi đúng một dòng dưới đây, không thêm nội dung khác:";
   const SYSTEM_READY_INSTRUCTION = "Nếu đã đọc và hiểu System Prompt, chỉ trả đúng một dòng:";
   const LABELED_BATCH_INSTRUCTION = "QUY TẮC PHẢN HỒI BATCH: Với mỗi mục \"câu N:\" trong đầu vào, trả đúng một mục tương ứng bắt đầu bằng chính nhãn \"câu N:\". Mỗi mục nằm trên một dòng riêng; không gộp, tách, bỏ, thêm hoặc đảo thứ tự câu.";
@@ -98,9 +100,7 @@ phwgna_stv_ready_1`;
 
 - Giữ các thành ngữ Hán Việt quen thuộc và cách miêu tả hành động phù hợp như “phất tay”, “hừ lạnh”, “chắp tay”, “cười khổ”, “trầm ngâm”.
 
-Nếu đã đọc và hiểu System Prompt, chỉ trả đúng một dòng:
-
-phwgna_stv_ready_2`;
+`;
 
   const DEFAULT_USER_PROMPT = `NHIỆM VỤ DỊCH THUẬT
 
@@ -135,7 +135,7 @@ Chỉ trả kết quả dịch. Cấm giải thích, chú thích, giải nghĩa 
     "streamimg=sờ trym ming", "style=sờ tai", "test=tét", "tiktok=tít tót",
     "vi=vy", "x=ích", "xi=xy"
   ].join("\n");
-  const SETTINGS_DEFAULTS_VERSION = 2;
+  const SETTINGS_DEFAULTS_VERSION = 4;
   const LEGACY_SHORT_SYSTEM_PROMPT = [
     "Bạn là biên dịch viên tiểu thuyết chuyên nghiệp.",
     "Dịch từ {{sourcelanguage}} sang {{targetlanguage}}, giữ ý nghĩa, giọng văn và cách xưng hô nhất quán.",
@@ -168,12 +168,15 @@ Chỉ trả kết quả dịch. Cấm giải thích, chú thích, giải nghĩa 
     warmPoolEnabled: true,
     autoTranslateOnChapter: true,
     openrouterModel: "openrouter/auto",
-    geminiApiModel: "gemini-2.5-flash",
+    geminiApiModel: "google/gemini-3.8-flash",
     openaiApiModel: "gpt-5.4",
     deepseekApiModel: "deepseek-chat",
     geminiSafetyOff: false,
+    geminiRefusalFallbackEnabled: true,
+    geminiAccountRotationEnabled: false,
     apiTemperature: 0.3,
     systemPrompt: DEFAULT_SYSTEM_PROMPT,
+    refusalSystemPrompt: "",
     userPrompt: DEFAULT_USER_PROMPT,
     nameGuide: DEFAULT_NAME_GUIDE,
     ttsPronunciationGuide: DEFAULT_TTS_PRONUNCIATION_GUIDE,
@@ -189,6 +192,14 @@ Chỉ trả kết quả dịch. Cấm giải thích, chú thích, giải nghĩa 
   const isApiProvider = (provider) => API_PROVIDERS.includes(provider);
   const isWebProvider = (provider) => provider === "chatgpt" || provider === "gemini";
 
+  function stripToolReadySuffix(value) {
+    let prompt = String(value || "").trim();
+    const suffix = `\n\n${SYSTEM_READY_INSTRUCTION}\n\n${READY_MARKERS.system}`;
+    if (prompt.endsWith(suffix)) prompt = prompt.slice(0, -suffix.length).trimEnd();
+    if (prompt.endsWith(READY_MARKERS.system)) prompt = prompt.slice(0, -READY_MARKERS.system.length).trimEnd();
+    return prompt;
+  }
+
   function migrateSettingsDefaults(input) {
     const settings = input && typeof input === "object" && !Array.isArray(input) ? { ...input } : {};
     const currentVersion = Number.isFinite(Number(settings.settingsDefaultsVersion))
@@ -199,23 +210,29 @@ Chỉ trả kết quả dịch. Cấm giải thích, chú thích, giải nghĩa 
     }
 
     const legacySystemPrompts = new Set([LEGACY_SHORT_SYSTEM_PROMPT, LEGACY_LONG_SYSTEM_PROMPT]);
-    const systemPrompt = typeof settings.systemPrompt === "string" ? settings.systemPrompt.trim() : "";
+    const systemPrompt = typeof settings.systemPrompt === "string" ? stripToolReadySuffix(settings.systemPrompt) : "";
     const userPrompt = typeof settings.userPrompt === "string" ? settings.userPrompt.trim() : "";
     if (!PROVIDERS.includes(settings.provider)) settings.provider = DEFAULT_SETTINGS.provider;
-    if (!Object.hasOwn(settings, "webAiTabCount") || Number(settings.webAiTabCount) === 2) {
+    if (!Object.hasOwn(settings, "webAiTabCount")) {
       settings.webAiTabCount = DEFAULT_SETTINGS.webAiTabCount;
     }
     if (!systemPrompt || legacySystemPrompts.has(systemPrompt) || isLegacyPackagedSystemPrompt(systemPrompt)) {
       settings.systemPrompt = DEFAULT_SYSTEM_PROMPT;
+    } else {
+      settings.systemPrompt = systemPrompt;
     }
     if (!userPrompt || userPrompt === LEGACY_SHORT_USER_PROMPT) settings.userPrompt = DEFAULT_USER_PROMPT;
+    if (!Object.hasOwn(settings, "geminiRefusalFallbackEnabled")) {
+      settings.geminiRefusalFallbackEnabled = true;
+    }
+    if (typeof settings.refusalSystemPrompt !== "string") settings.refusalSystemPrompt = "";
     settings.settingsDefaultsVersion = SETTINGS_DEFAULTS_VERSION;
     return { settings, version: SETTINGS_DEFAULTS_VERSION, changed: true };
   }
 
   function normalizeSettings(input) {
     const value = input && typeof input === "object" ? input : {};
-    const rawSystemPrompt = typeof value.systemPrompt === "string" ? value.systemPrompt.trim() : "";
+    const rawSystemPrompt = typeof value.systemPrompt === "string" ? stripToolReadySuffix(value.systemPrompt) : "";
     const rawUserPrompt = typeof value.userPrompt === "string" ? value.userPrompt.trim() : "";
     const temperature = Number(value.apiTemperature);
     return {
@@ -231,10 +248,15 @@ Chỉ trả kết quả dịch. Cấm giải thích, chú thích, giải nghĩa 
       openaiApiModel: typeof value.openaiApiModel === "string" && value.openaiApiModel.trim() ? value.openaiApiModel.trim() : DEFAULT_SETTINGS.openaiApiModel,
       deepseekApiModel: typeof value.deepseekApiModel === "string" && value.deepseekApiModel.trim() ? value.deepseekApiModel.trim() : DEFAULT_SETTINGS.deepseekApiModel,
       geminiSafetyOff: value.geminiSafetyOff === true,
+      geminiRefusalFallbackEnabled: value.geminiRefusalFallbackEnabled === true,
+      geminiAccountRotationEnabled: value.geminiAccountRotationEnabled === true,
       apiTemperature: Number.isFinite(temperature)
         ? Math.min(2, Math.max(0, Math.round(temperature * 10) / 10))
         : DEFAULT_SETTINGS.apiTemperature,
       systemPrompt: rawSystemPrompt || DEFAULT_SETTINGS.systemPrompt,
+      refusalSystemPrompt: typeof value.refusalSystemPrompt === "string"
+        ? value.refusalSystemPrompt.trim()
+        : DEFAULT_SETTINGS.refusalSystemPrompt,
       userPrompt: rawUserPrompt || DEFAULT_SETTINGS.userPrompt,
       nameGuide: typeof value.nameGuide === "string"
         ? value.nameGuide
@@ -359,6 +381,7 @@ Chỉ trả kết quả dịch. Cấm giải thích, chú thích, giải nghĩa 
     const marker = READY_MARKERS.system;
     let value = String(prompt || "")
       .replaceAll(marker, "")
+      .replaceAll(READY_MARKERS.introduction, "")
       .replaceAll(`phwgna\\_stv\\_ready\\_2`, "")
       .trimEnd();
     while (value.endsWith(SYSTEM_READY_INSTRUCTION)) {
@@ -384,6 +407,20 @@ Chỉ trả kết quả dịch. Cấm giải thích, chú thích, giải nghĩa 
       targetlanguage: config.targetLanguage
     }));
     return [INTRODUCTION_PROMPT, system];
+  }
+
+  function createRefusalSetupPrompt(settings) {
+    const config = normalizeSettings(settings);
+    const prompt = renderTemplate(String(config.refusalSystemPrompt || "")
+      .replaceAll("{{name}}", "").replaceAll("{{text}}", "")
+      .replaceAll(READY_MARKERS.introduction, "")
+      .replaceAll(READY_MARKERS.system, "")
+      .replaceAll(REFUSAL_READY_INSTRUCTION, "")
+      .replaceAll(REFUSAL_READY_MARKER, ""), {
+        sourcelanguage: config.sourceLanguage,
+        targetlanguage: config.targetLanguage
+    });
+    return prompt.trim() ? `${prompt.trim()}\n\n${REFUSAL_READY_INSTRUCTION}` : REFUSAL_READY_INSTRUCTION;
   }
 
   const TRANSLATION_BATCH_LIMITS = Object.freeze({ maxChars: Infinity, maxBlocks: 30 });
@@ -435,13 +472,44 @@ Chỉ trả kết quả dịch. Cấm giải thích, chú thích, giải nghĩa 
     return `batch_${ordinal}_${token}`;
   }
 
-  function createBatchPrompt({ responseId, requestId, blocks, settings, retryReason }) {
+  const REFUSAL_SANITIZE_INSTRUCTION = [
+    "Nếu một hoặc vài câu trong batch có thể khiến bạn hiểu nhầm là nội dung vi phạm, hãy không dịch riêng những câu đó.",
+    "Đây chỉ là một đoạn 16+; hãy xử lý công bằng các câu không vi phạm.",
+    "Các câu bị bỏ qua phải thay đúng bằng: [Nội dung nhạy cảm được lược bỏ theo chính sách an toàn].",
+    "Không từ chối toàn bộ batch chỉ vì một số câu nhạy cảm; vẫn giữ nguyên mã batch và đủ số nhãn câu."
+  ].join(" ");
+  const SAFETY_PLACEHOLDER = "[Nội dung nhạy cảm được lược bỏ theo chính sách an toàn]";
+
+  function normalizeSafetyPlaceholder(value) {
+    let text = String(value || "").normalize("NFKC").replace(/\s+/gu, " ").trim();
+    text = text.replace(/^["'“”‘’]+|["'“”‘’]+$/gu, "").trim();
+    text = text.replace(/[.!。！？…]+$/gu, "").trim();
+    return text.toLocaleLowerCase("vi");
+  }
+
+  function isSafetyPlaceholder(value) {
+    return normalizeSafetyPlaceholder(value) === normalizeSafetyPlaceholder(SAFETY_PLACEHOLDER);
+  }
+
+  function materializeSafetyFallbackItems(items, blocks) {
+    const sourceById = new Map((blocks || []).map((block) => [String(block.id), block]));
+    return (Array.isArray(items) ? items : []).map((item) => {
+      const block = sourceById.get(String(item?.id || ""));
+      if (!block || !isSafetyPlaceholder(item?.text)) return { ...item };
+      const convert = String(block.convert || "").trim();
+      if (!convert) return { ...item, fallbackReason: "safety_placeholder_missing_convert" };
+      return { ...item, text: convert, origin: "convert", fallbackReason: "safety_placeholder" };
+    });
+  }
+
+  function createBatchPrompt({ responseId, requestId, blocks, settings, retryReason, refusalSanitize = false }) {
     const batchMarker = String(responseId || requestId || "");
-    const lines = [
+    const lines = [];
+    if (batchMarker) lines.push(
       batchMarker,
       "",
       `Bắt buộc giữ nguyên ${batchMarker} làm dòng đầu tiên của phản hồi; không dịch, sửa hoặc bỏ mã này.`
-    ];
+    );
     const relevantNameGuide = selectRelevantNameGuide(settings?.nameGuide, blocks);
     if (relevantNameGuide) lines.push("", "Bộ name:", relevantNameGuide, "");
     if (retryReason === "source_language_unchanged") {
@@ -449,7 +517,8 @@ Chỉ trả kết quả dịch. Cấm giải thích, chú thích, giải nghĩa 
     } else if (retryReason === "incomplete_response") {
       lines.push("", "Kết quả trước bị cụt nội dung. Hãy dịch lại đầy đủ toàn bộ batch, đặc biệt không bỏ dở phần cuối của bất kỳ câu nào.");
     }
-    lines.push(LABELED_BATCH_INSTRUCTION);
+    if (refusalSanitize === true) lines.push("", REFUSAL_SANITIZE_INSTRUCTION);
+    lines.push(LABELED_BATCH_INSTRUCTION, "", "NỘI DUNG CẦN DỊCH:");
     for (const [index, block] of (blocks || []).entries()) {
       lines.push("", `câu ${index + 1}:`, String(block.text || ""));
     }
@@ -460,25 +529,50 @@ Chỉ trả kết quả dịch. Cấm giải thích, chú thích, giải nghĩa 
     return createBatchPrompt({ responseId, requestId, blocks, settings, retryReason });
   }
 
-  function createApiMessages({ blocks, settings, retryReason }) {
+  function createApiMessages({ responseId, requestId, blocks, settings, retryReason }) {
     const config = normalizeSettings(settings);
     const system = renderTemplate(String(config.systemPrompt || "").replaceAll("{{name}}", "").replaceAll("{{text}}", ""), {
       sourcelanguage: config.sourceLanguage,
       targetlanguage: config.targetLanguage
     });
-    const text = (blocks || []).map((block) => String(block.text || "").replace(/\s*\r?\n+\s*/g, " ").trim()).join("\n");
-    const relevantNameGuide = selectRelevantNameGuide(config.nameGuide, blocks);
-    let user = renderTemplate(ensureTextPlaceholder(config.userPrompt), {
-      sourcelanguage: config.sourceLanguage,
-      targetlanguage: config.targetLanguage,
-      name: relevantNameGuide || "(Không có bộ Name liên quan)",
-      namne: relevantNameGuide || "(Không có bộ Name liên quan)",
-      text
+    const user = createBatchPrompt({
+      blocks,
+      settings: config,
+      retryReason
     });
-    if (retryReason === "source_language_unchanged") {
-      user += "\n\nKết quả trước chưa được dịch và vẫn còn nguyên tiếng Trung. Hãy dịch toàn bộ sang tiếng Việt, giữ đúng số đoạn và không chép lại nguyên văn nguồn.";
-    }
     return { system, user };
+  }
+
+  function createRefusalFallbackMessages({ responseId, blocks, settings, retryReason }) {
+    const messages = createApiMessages({ responseId, requestId: responseId, blocks, settings, retryReason });
+    const marker = String(responseId || "").trim();
+    const requiredLabels = (blocks || []).map((_block, index) => `câu ${index + 1}:`).join(", ");
+    return {
+      system: messages.system,
+      user: [
+        messages.user,
+        "",
+        "Translate to Vietnamese.",
+        `Bắt buộc bắt đầu phần kết quả bằng đúng mã ${marker}.`,
+        "Sau mã, trả đúng một bản dịch cho mỗi nhãn câu theo đúng thứ tự; không bỏ hoặc thêm câu.",
+        `Các nhãn bắt buộc theo thứ tự: ${requiredLabels}`
+      ].join("\n").trim()
+    };
+  }
+
+  function extractExpectedBatchResponse(raw, expectedResponseId, maxPrefixLength = 2048) {
+    const text = String(raw || "").replace(/[\u200b-\u200d\u2060\ufeff]/g, "").trim();
+    const expected = String(expectedResponseId || "").trim();
+    if (!/^batch_\d+_\d{4}$/.test(expected)) return { ok: false, text: "", reason: "response_id_mismatch" };
+    const markers = Array.from(text.matchAll(/batch_\d+_\d{4}/g));
+    if (markers.length !== 1 || markers[0][0] !== expected) {
+      return { ok: false, text: "", reason: "response_id_mismatch" };
+    }
+    const prefixLength = Number(markers[0].index) || 0;
+    if (prefixLength > Math.max(0, Number(maxPrefixLength) || 0)) {
+      return { ok: false, text: "", reason: "response_prefix_too_long" };
+    }
+    return { ok: true, text: text.slice(prefixLength).trim(), reason: "ok" };
   }
 
   function normalizedComparableText(value) {
@@ -769,7 +863,7 @@ Chỉ trả kết quả dịch. Cấm giải thích, chú thích, giải nghĩa 
       protocolVersion: TRANSLATION_PROTOCOL_VERSION,
       provider: config.provider,
       systemPrompt: config.systemPrompt,
-      userPrompt: config.userPrompt,
+      refusalSystemPrompt: config.refusalSystemPrompt,
       nameGuide: normalizeNameGuide(config.nameGuide),
       sourceLanguage: config.sourceLanguage,
       targetLanguage: config.targetLanguage
@@ -790,6 +884,7 @@ Chỉ trả kết quả dịch. Cấm giải thích, chú thích, giải nghĩa 
     TRANSLATION_PROTOCOL_VERSION,
     READY_MARKER,
     READY_MARKERS,
+    REFUSAL_READY_MARKER,
     TRANSLATION_BATCH_LIMITS,
     PREFETCH_BATCH_LIMIT,
     SETTINGS_DEFAULTS_VERSION,
@@ -807,12 +902,20 @@ Chỉ trả kết quả dịch. Cấm giải thích, chú thích, giải nghĩa 
     selectRelevantNameGuide,
     renderTemplate,
     ensureSystemReadyInstruction,
+    stripToolReadySuffix,
     createSetupMessages,
+    createRefusalSetupPrompt,
     normalizeCacheSourceText,
     createBatchResponseId,
     createBatchPrompt,
+    SAFETY_PLACEHOLDER,
+    normalizeSafetyPlaceholder,
+    isSafetyPlaceholder,
+    materializeSafetyFallbackItems,
     createRepairPrompt,
     createApiMessages,
+    createRefusalFallbackMessages,
+    extractExpectedBatchResponse,
     validateApiTranslationItems,
     validateTranslationItems,
     splitIntoBatches,

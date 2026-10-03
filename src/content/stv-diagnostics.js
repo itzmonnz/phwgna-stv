@@ -320,11 +320,25 @@
       const endpoint = value.endpoint && typeof value.endpoint === "object" ? value.endpoint : {};
       const extraction = value.extraction && typeof value.extraction === "object" ? value.extraction : {};
       result.prefetch = {
+        lastSourceFailure: {
+          code: safeEnum(value.lastSourceFailure?.code, ['next_chapter_source_unstable', 'next_chapter_source_unavailable',
+            'next_chapter_fetch_failed', 'next_chapter_timeout', 'next_chapter_identity_mismatch'], 'none'),
+          stage: safeEnum(value.lastSourceFailure?.stage, ['request_page', 'parse_page', 'request_source_api',
+            'request_source_warmup', 'parse_source_api', 'validate_rendered_source', 'extract_source'], 'unknown'),
+          renderedReason: safeEnum(value.lastSourceFailure?.renderedReason, ['none', 'source_wait_timeout', 'frame_load_failed', 'cancelled'], 'none')
+        },
+        renderedSource: {
+          attempted: value.renderedSource?.attempted === true,
+          state: safeEnum(value.renderedSource?.state, ['loading', 'ok', 'failed'], 'idle'),
+          reason: safeEnum(value.renderedSource?.reason, ['none', 'source_wait_timeout', 'frame_load_failed', 'cancelled'], 'none'),
+          endpointMatch: value.renderedSource?.endpointMatch === true
+        },
         stage: safeEnum(value.stage, ["idle", "next_link", "request_page", "parse_page", "request_source_api", "request_source_warmup",
-          "parse_source_api", "extract_source", "waiting_source", "dispatch_job", "running", "ready", "completed", "failed", "cancelled"], "idle"),
+          "parse_source_api", "validate_rendered_source", "extract_source", "waiting_source", "dispatch_job", "running", "ready", "completed", "failed", "cancelled"], "idle"),
         failureCode: safeEnum(value.failureCode, ["none", "next_chapter_timeout", "next_chapter_fetch_failed",
-          "next_chapter_source_unavailable", "next_chapter_identity_mismatch", "next_chapter_redirect_invalid",
-          "next_chapter_end", "next_chapter_cancelled", "prefetch_not_allowed", "provider_unavailable",
+          "next_chapter_source_unavailable", "next_chapter_source_unstable", "next_chapter_identity_mismatch", "next_chapter_redirect_invalid",
+          "next_chapter_end", "next_chapter_cancelled", "prefetch_not_allowed", "prefetch_busy",
+          "prefetch_consent_required", "prefetch_parent_invalid", "provider_unavailable",
           "send_not_confirmed", "ui_changed", "captcha", "login_required", "rate_limited"], "other"),
         elapsedBucket: safeEnum(value.elapsedBucket, ["<1s", "1-5s", "5-20s", "20s+"], "<1s"),
         nextLinkFound: value.nextLinkFound === true,

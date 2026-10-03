@@ -270,18 +270,19 @@ function Get-PhwgnaDedicatedChromeArguments {
         throw 'invalid_start_url'
     }
     $quotedProfile = '"' + $profile + '"'
-    $quotedExtension = '"' + $extension + '"'
     $quotedStartUrl = '"' + $StartUrl + '"'
     $items = @(
         "--user-data-dir=$quotedProfile",
         '--no-first-run',
         '--no-default-browser-check',
+        ("--load-extension=`"$extension`""),
+        '--disable-background-mode',
         '--disable-background-timer-throttling',
         '--disable-renderer-backgrounding',
         '--disable-backgrounding-occluded-windows',
         '--disable-features=CalculateNativeWinOcclusion,IntensiveWakeUpThrottling',
-        "--disable-extensions-except=$quotedExtension",
-        "--load-extension=$quotedExtension",
+        '--window-position=0,0',
+        '--start-maximized',
         '--new-window'
     )
     if (-not [string]::IsNullOrWhiteSpace($ProfileDirectory)) {
@@ -300,6 +301,7 @@ function New-PhwgnaDedicatedChromeShortcut {
         [Parameter(Mandatory)][string]$StateRoot,
         [string]$DesktopPath = [Environment]::GetFolderPath('Desktop'),
         [string]$StartUrl = 'https://sangtacviet.com/mybook/',
+        [switch]$PinToTaskbar,
         [switch]$DryRun
     )
     if ($Browser.id -ne 'chrome') { throw 'dedicated_chrome_required' }
@@ -330,7 +332,52 @@ function New-PhwgnaDedicatedChromeShortcut {
     $shortcut.IconLocation = "$browserPath,0"
     $shortcut.Description = $description
     $shortcut.Save()
+    if ($PinToTaskbar) {
+        [void](New-PhwgnaTaskbarShortcut -TargetPath $browserPath -Arguments $arguments -WorkingDirectory (Split-Path -Parent $browserPath) -IconLocation "$browserPath,0" -Description $description -Name 'Phwgna STV - Chrome Max')
+    }
     [pscustomobject]@{ ok=$true; code='dedicated_shortcut_created'; browser='chrome'; path=$shortcutPath; profile=$profile; arguments=$arguments; dryRun=$false }
+}
+
+function New-PhwgnaTaskbarShortcut {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$TargetPath,
+        [string]$Arguments = '',
+        [string]$WorkingDirectory = '',
+        [string]$IconLocation = '',
+        [string]$Description = '',
+        [string]$Name = 'Phwgna STV - Chrome Max',
+        [switch]$DryRun
+    )
+    $taskbar = Join-Path $env:APPDATA 'Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar'
+    $path = Join-Path $taskbar ($Name + '.lnk')
+    if ($DryRun) {
+        return [pscustomobject]@{ ok=$true; code='taskbar_shortcut_ready'; path=$path; dryRun=$true }
+    }
+    if (-not (Test-Path -LiteralPath $taskbar -PathType Container)) {
+        New-Item -ItemType Directory -Path $taskbar -Force | Out-Null
+    }
+    $shell = New-Object -ComObject WScript.Shell
+    $shortcut = $shell.CreateShortcut($path)
+    $shortcut.TargetPath = [IO.Path]::GetFullPath($TargetPath)
+    $shortcut.Arguments = $Arguments
+    if (-not [string]::IsNullOrWhiteSpace($WorkingDirectory)) { $shortcut.WorkingDirectory = $WorkingDirectory }
+    if (-not [string]::IsNullOrWhiteSpace($IconLocation)) { $shortcut.IconLocation = $IconLocation }
+    $shortcut.Description = $Description
+    $shortcut.Save()
+    $pinned = $false
+    try {
+        $item = $shell.Namespace($taskbar).ParseName((Split-Path -Leaf $path))
+        $pinVerb = @($item.Verbs() | Where-Object {
+            $name = $_.Name -replace '&',''
+            $name -match '(?i)pin to taskbar|ghim.*thanh tác vụ|aan taakbalk vastmaken'
+        } | Select-Object -First 1)
+        if ($pinVerb) { $pinVerb.DoIt(); $pinned = $true }
+    } catch {
+        # Windows changes this shell verb between releases and languages. The
+        # owned shortcut is still useful for one-click manual pinning.
+    }
+    [pscustomobject]@{ ok=$true; code=if ($pinned) { 'taskbar_pinned' } else { 'taskbar_shortcut_created' }; path=$path; pinned=$pinned; dryRun=$false }
 }
 
 function Get-PhwgnaChromeProfileDirectory {
@@ -393,6 +440,32 @@ function Write-PhwgnaJsonAtomic {
     }
 }
 
+function Test-PhwgnaChromeProfileIdentity {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$UserDataRoot,
+        [Parameter(Mandatory)][string]$ProfileDirectory
+    )
+    if ($ProfileDirectory -ne 'Default' -and $ProfileDirectory -notmatch '^Profile \d+$') { return $false }
+    $root = [IO.Path]::GetFullPath($UserDataRoot)
+    $localStatePath = Join-Path $root 'Local State'
+    $preferencesPath = Join-Path (Join-Path $root $ProfileDirectory) 'Preferences'
+    if (-not (Test-Path -LiteralPath $localStatePath -PathType Leaf) -or -not (Test-Path -LiteralPath $preferencesPath -PathType Leaf)) { return $false }
+    try {
+        $localState = Get-Content -Raw -LiteralPath $localStatePath | ConvertFrom-Json
+        $preferences = Get-Content -Raw -LiteralPath $preferencesPath | ConvertFrom-Json
+    } catch {
+        return $false
+    }
+    $infoProperty = @($localState.profile.info_cache.PSObject.Properties) | Where-Object { $_.Name -eq $ProfileDirectory } | Select-Object -First 1
+    $info = if ($infoProperty) { $infoProperty.Value } else { $null }
+    $accounts = @(@($preferences.account_info) | Where-Object { $null -ne $_ })
+    [bool]($info -and $accounts.Count -gt 0 -and (
+        -not [string]::IsNullOrWhiteSpace([string]$info.gaia_id) `
+            -or -not [string]::IsNullOrWhiteSpace([string]$info.user_name)
+    ))
+}
+
 function Set-PhwgnaChromeMaxPreferences {
     [CmdletBinding()]
     param(
@@ -416,6 +489,7 @@ function Set-PhwgnaChromeMaxPreferences {
     Set-PhwgnaJsonPathValue -Root $localState -Path @('performance_tuning','high_efficiency_mode','enabled') -Value $false
     Set-PhwgnaJsonPathValue -Root $localState -Path @('performance_tuning','battery_saver_mode','state') -Value 0
     Set-PhwgnaJsonPathValue -Root $localState -Path @('performance_tuning','tab_freezing','enabled') -Value $false
+    Set-PhwgnaJsonPathValue -Root $preferences -Path @('background_mode','enabled') -Value $false
     Set-PhwgnaJsonPathValue -Root $preferences -Path @('performance_tuning','force_foreground_priority_for_urls') -Value ([object]@(
         'https://gemini.google.com/*',
         'https://chatgpt.com/*'
@@ -449,6 +523,31 @@ function Copy-PhwgnaProfileTree {
             Copy-PhwgnaProfileTree -Source $item.FullName -Destination $target
         } else {
             Copy-Item -LiteralPath $item.FullName -Destination $target -Force
+        }
+    }
+}
+
+function Copy-PhwgnaChromeMaxUserState {
+    param(
+        [Parameter(Mandatory)][string]$ExistingProfile,
+        [Parameter(Mandatory)][string]$StagedProfile
+    )
+    $existing = [IO.Path]::GetFullPath($ExistingProfile).TrimEnd('\')
+    $staged = [IO.Path]::GetFullPath($StagedProfile).TrimEnd('\')
+    foreach ($name in @(
+        'Local Extension Settings', 'Sync Extension Settings', 'Extension State',
+        'IndexedDB', 'Local Storage', 'Session Storage', 'Sessions', 'Service Worker'
+    )) {
+        $source = Join-Path $existing $name
+        if (-not (Test-Path -LiteralPath $source -PathType Container)) { continue }
+        $destination = Join-Path $staged $name
+        if (Test-Path -LiteralPath $destination) { Remove-Item -LiteralPath $destination -Recurse -Force }
+        Copy-Item -LiteralPath $source -Destination $destination -Recurse -Force
+    }
+    foreach ($name in @('History', 'History-journal', 'Bookmarks', 'Bookmarks.bak')) {
+        $source = Join-Path $existing $name
+        if (Test-Path -LiteralPath $source -PathType Leaf) {
+            Copy-Item -LiteralPath $source -Destination (Join-Path $staged $name) -Force
         }
     }
 }
@@ -495,10 +594,13 @@ function Copy-PhwgnaChromeProfile {
         Copy-Item -LiteralPath $sourceLocalState -Destination (Join-Path $staging 'Local State') -Force
         Copy-PhwgnaProfileTree -Source $sourceProfile -Destination (Join-Path $staging $ProfileDirectory)
         if (Test-Path -LiteralPath $destination -PathType Container) {
+            $existingProfile = Join-Path $destination $ProfileDirectory
+            if (Test-Path -LiteralPath $existingProfile -PathType Container) {
+                Copy-PhwgnaChromeMaxUserState -ExistingProfile $existingProfile -StagedProfile (Join-Path $staging $ProfileDirectory)
+            }
             Move-Item -LiteralPath $destination -Destination $backup
         }
         Move-Item -LiteralPath $staging -Destination $destination
-        if (Test-Path -LiteralPath $backup -PathType Container) { Remove-Item -LiteralPath $backup -Recurse -Force }
     } catch {
         if (Test-Path -LiteralPath $staging -PathType Container) { Remove-Item -LiteralPath $staging -Recurse -Force }
         if (-not (Test-Path -LiteralPath $destination) -and (Test-Path -LiteralPath $backup -PathType Container)) {
@@ -519,6 +621,7 @@ function Copy-PhwgnaChromeProfile {
         code = 'profile_cloned'
         profileDirectory = $ProfileDirectory
         metadataPath = (Join-Path $destinationParent 'profile-clone.json')
+        backupPath = if (Test-Path -LiteralPath $backup -PathType Container) { $backup } else { '' }
     }
 }
 
@@ -534,7 +637,6 @@ function Test-PhwgnaChromeMaxProcess {
     $process = @($ChromeProcesses) | Where-Object {
         $commandLine = [string]$_.CommandLine
         $commandLine.IndexOf($profile, [StringComparison]::OrdinalIgnoreCase) -ge 0 `
-            -and $commandLine.IndexOf($extension, [StringComparison]::OrdinalIgnoreCase) -ge 0 `
             -and $commandLine -notmatch '(?:^|\s)--type='
     } | Select-Object -First 1
     $command = [string]$process.CommandLine
@@ -544,6 +646,7 @@ function Test-PhwgnaChromeMaxProcess {
         'disable-backgrounding-occluded-windows' = '--disable-backgrounding-occluded-windows'
         'CalculateNativeWinOcclusion' = 'CalculateNativeWinOcclusion'
         'IntensiveWakeUpThrottling' = 'IntensiveWakeUpThrottling'
+        'stv-extension' = $extension
     }
     $missing = @()
     foreach ($entry in $required.GetEnumerator()) {
@@ -566,12 +669,10 @@ function Get-PhwgnaChromeLaunchState {
         [object[]]$ChromeProcesses = @(Get-CimInstance Win32_Process -Filter "Name='chrome.exe'" -ErrorAction SilentlyContinue)
     )
     $profile = [IO.Path]::GetFullPath($UserDataRoot)
-    $extension = [IO.Path]::GetFullPath($ExtensionDirectory)
     foreach ($process in @($ChromeProcesses)) {
         $commandLine = [string]$process.CommandLine
         if ($commandLine.IndexOf($profile, [StringComparison]::OrdinalIgnoreCase) -ge 0 `
-            -and $commandLine.IndexOf($extension, [StringComparison]::OrdinalIgnoreCase) -ge 0 `
-            -and $commandLine -match '--load-extension=') {
+            -and $commandLine -notmatch '(?:^|\s)--type=') {
             return 'max_running'
         }
     }
@@ -616,6 +717,7 @@ function New-PhwgnaAccountChromeShortcut {
         [Parameter(Mandatory)][string]$LauncherScript,
         [string]$DesktopPath = [Environment]::GetFolderPath('Desktop'),
         [string]$StartUrl = 'https://sangtacviet.com/mybook/',
+        [switch]$PinToTaskbar,
         [switch]$DryRun
     )
     if ($Browser.id -ne 'chrome') { throw 'dedicated_chrome_required' }
@@ -631,7 +733,7 @@ function New-PhwgnaAccountChromeShortcut {
     $command = "& '$escapedLauncher' -LaunchOnly -StartUrl '$escapedStartUrl'"
     $encodedCommand = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
     $arguments = '-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -EncodedCommand ' + $encodedCommand
-    $shortcutPath = Join-Path $desktop 'Phwgna STV - Chrome Max Tai Khoan.lnk'
+    $shortcutPath = Join-Path $desktop 'MO CHROME STV MAX.lnk'
     $description = 'Phwgna STV - Chrome Max dung tai khoan Chrome hien tai'
     if ($DryRun) {
         return [pscustomobject]@{ ok=$true; code='account_shortcut_ready'; browser='chrome'; path=$shortcutPath; arguments=$arguments; dryRun=$true }
@@ -648,7 +750,133 @@ function New-PhwgnaAccountChromeShortcut {
     $shortcut.IconLocation = "$browserPath,0"
     $shortcut.Description = $description
     $shortcut.Save()
+    if ($PinToTaskbar) {
+        [void](New-PhwgnaTaskbarShortcut -TargetPath $powershell -Arguments $arguments -WorkingDirectory (Split-Path -Parent $browserPath) -IconLocation "$browserPath,0" -Description $description -Name 'MO CHROME STV MAX')
+    }
     [pscustomobject]@{ ok=$true; code='account_shortcut_created'; browser='chrome'; path=$shortcutPath; arguments=$arguments; dryRun=$false }
+}
+
+function Test-PhwgnaSunshineWatcherHeartbeat {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$StatusPath,
+        [int]$MaximumAgeSeconds = 20,
+        [datetime]$NowUtc = [DateTime]::UtcNow
+    )
+    try {
+        if (-not (Test-Path -LiteralPath $StatusPath -PathType Leaf)) { return $false }
+        $item = Get-Item -LiteralPath $StatusPath
+        if ($item.Length -lt 2 -or $item.Length -gt 65536) { return $false }
+        $status = Get-Content -Raw -LiteralPath $StatusPath | ConvertFrom-Json
+        if ([int]$status.schemaVersion -ne 1 -or [int]$status.processId -le 0) { return $false }
+        $updated = [DateTimeOffset]::Parse([string]$status.updatedAt).UtcDateTime
+        $age = ($NowUtc.ToUniversalTime() - $updated).TotalSeconds
+        return $age -ge -5 -and $age -le [Math]::Max(5, $MaximumAgeSeconds)
+    } catch {
+        return $false
+    }
+}
+
+function Start-PhwgnaSunshineWatcher {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$SourceDirectory,
+        [string]$DestinationRoot = (Join-Path $env:LOCALAPPDATA 'phwgna-stv'),
+        [object[]]$WatcherProcesses,
+        [string]$ChromeMaxLauncherScript = '',
+        [string]$StartUrl = 'https://sangtacviet.com/mybook/',
+        [switch]$AutoLaunchChromeMax,
+        [switch]$DryRun
+    )
+    $source = [IO.Path]::GetFullPath($SourceDirectory)
+    $destination = [IO.Path]::GetFullPath($DestinationRoot)
+    $watcherSource = Join-Path $source 'phwgna-sunshine-stream-watcher.ps1'
+    $supervisorSource = Join-Path $source 'phwgna-sunshine-stream-watcher.vbs'
+    if (-not (Test-Path -LiteralPath $watcherSource -PathType Leaf)) { throw 'sunshine_watcher_missing' }
+    if (-not (Test-Path -LiteralPath $supervisorSource -PathType Leaf)) { throw 'sunshine_supervisor_missing' }
+
+    $watcherPath = Join-Path $destination 'sunshine-stream-watcher.ps1'
+    $supervisorPath = Join-Path $destination 'sunshine-stream-watcher.vbs'
+    $statusPath = Join-Path $destination 'sunshine-stream-watcher.json'
+    $launchConfigPath = Join-Path $destination 'chrome-max-autolaunch.json'
+    if ($DryRun) {
+        return [pscustomobject]@{
+            ok = $true
+            code = 'watcher_ready'
+            watcherPath = $watcherPath
+            supervisorPath = $supervisorPath
+            launchConfigPath = $launchConfigPath
+            dryRun = $true
+        }
+    }
+
+    New-Item -ItemType Directory -Path $destination -Force | Out-Null
+    $startupSupervisorPath = Join-Path ([Environment]::GetFolderPath('Startup')) 'phwgna-sunshine-stream-watcher.vbs'
+    $startupSupervisorExists = Test-Path -LiteralPath $startupSupervisorPath -PathType Leaf
+    $watcherChanged = -not (Test-Path -LiteralPath $watcherPath -PathType Leaf) `
+        -or ((Get-FileHash -LiteralPath $watcherSource -Algorithm SHA256).Hash -ne (Get-FileHash -LiteralPath $watcherPath -Algorithm SHA256).Hash)
+    $supervisorChanged = -not (Test-Path -LiteralPath $supervisorPath -PathType Leaf) `
+        -or ((Get-FileHash -LiteralPath $supervisorSource -Algorithm SHA256).Hash -ne (Get-FileHash -LiteralPath $supervisorPath -Algorithm SHA256).Hash)
+    $startupSupervisorChanged = $startupSupervisorExists `
+        -and ((Get-FileHash -LiteralPath $supervisorSource -Algorithm SHA256).Hash -ne (Get-FileHash -LiteralPath $startupSupervisorPath -Algorithm SHA256).Hash)
+    $installationChanged = $watcherChanged -or $supervisorChanged -or $startupSupervisorChanged
+    Copy-Item -LiteralPath $watcherSource -Destination $watcherPath -Force
+    Copy-Item -LiteralPath $supervisorSource -Destination $supervisorPath -Force
+    if ($startupSupervisorExists) {
+        # Older installs may already have the owned watcher entry in Startup.
+        # Keep it bound to Chrome Max too, instead of leaving an old perpetual
+        # supervisor that can resurrect the watcher independently at logon.
+        Copy-Item -LiteralPath $supervisorSource -Destination $startupSupervisorPath -Force
+    }
+    if ($AutoLaunchChromeMax -and -not [string]::IsNullOrWhiteSpace($ChromeMaxLauncherScript)) {
+        $launcher = [IO.Path]::GetFullPath($ChromeMaxLauncherScript)
+        if (-not (Test-Path -LiteralPath $launcher -PathType Leaf)) { throw 'chrome_max_launcher_missing' }
+        $launchConfig = [ordered]@{
+            launcher = $launcher
+            startUrl = $StartUrl
+            updatedAt = [DateTime]::UtcNow.ToString('o')
+        }
+        $launchConfig | ConvertTo-Json -Compress | Set-Content -LiteralPath $launchConfigPath -Encoding UTF8
+    }
+
+    if ($null -eq $WatcherProcesses) {
+        $WatcherProcesses = @(Get-CimInstance Win32_Process -Filter "Name='wscript.exe'" -ErrorAction SilentlyContinue)
+    }
+    $expected = [IO.Path]::GetFullPath($supervisorPath)
+    $expectedPaths = @($expected)
+    if ($startupSupervisorExists) { $expectedPaths += [IO.Path]::GetFullPath($startupSupervisorPath) }
+    $runningProcesses = @($WatcherProcesses | Where-Object {
+        $commandLine = [string]$_.CommandLine
+        $matchesExpected = $false
+        foreach ($expectedPath in $expectedPaths) {
+            if ($commandLine.IndexOf($expectedPath, [StringComparison]::OrdinalIgnoreCase) -ge 0) {
+                $matchesExpected = $true
+                break
+            }
+        }
+        $matchesExpected
+    })
+    $heartbeatHealthy = Test-PhwgnaSunshineWatcherHeartbeat -StatusPath $statusPath
+    if ($runningProcesses.Count -gt 0 -and -not $installationChanged -and $heartbeatHealthy) {
+        return [pscustomobject]@{ ok=$true; code='watcher_already_running'; watcherPath=$watcherPath; supervisorPath=$supervisorPath; dryRun=$false }
+    }
+
+    if ($runningProcesses.Count -gt 0) {
+        foreach ($process in $runningProcesses) {
+            Invoke-CimMethod -InputObject $process -MethodName Terminate -ErrorAction SilentlyContinue | Out-Null
+        }
+        Start-Sleep -Milliseconds 250
+        $watcherChildren = @(Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" -ErrorAction SilentlyContinue | Where-Object {
+            ([string]$_.CommandLine).IndexOf($watcherPath, [StringComparison]::OrdinalIgnoreCase) -ge 0
+        })
+        foreach ($process in $watcherChildren) {
+            Invoke-CimMethod -InputObject $process -MethodName Terminate -ErrorAction SilentlyContinue | Out-Null
+        }
+    }
+
+    $wscript = Join-Path $env:WINDIR 'System32\wscript.exe'
+    Start-Process -FilePath $wscript -ArgumentList ('"' + $supervisorPath + '"') -WindowStyle Hidden
+    [pscustomobject]@{ ok=$true; code='watcher_started'; watcherPath=$watcherPath; supervisorPath=$supervisorPath; dryRun=$false }
 }
 
 function New-PhwgnaPerformanceShortcut {

@@ -74,18 +74,19 @@
     return unescape(encodeURIComponent(text)).length;
   }
 
-  function hasAiItems(items) {
+  function hasReusableItems(items) {
     return Array.isArray(items) && items.length > 0 && items.every((item) => (
-      item?.origin === "ai"
+      (item?.origin === "ai"
+        || (item?.origin === "convert" && item?.fallbackReason === "safety_placeholder"))
       && typeof item.id === "string" && item.id.trim().length > 0
       && typeof item.text === "string" && item.text.trim().length > 0
     ));
   }
 
-  function hasOnlyAiBatches(record) {
+  function hasOnlyReusableBatches(record) {
     if (!record?.batches || typeof record.batches !== "object" || Array.isArray(record.batches)) return false;
     const batches = Object.values(record.batches);
-    return batches.length > 0 && batches.every((batch) => hasAiItems(batch?.items));
+    return batches.length > 0 && batches.every((batch) => hasReusableItems(batch?.items));
   }
 
   function validInputHash(value) {
@@ -244,7 +245,7 @@
         if (!record) return null;
         // Older records without provenance cannot prove they came from AI.
         // Never infer provenance from Vietnamese text or from a cache hit.
-        if (!hasOnlyAiBatches(record)) {
+        if (!hasOnlyReusableBatches(record)) {
           await driver.delete(key);
           return null;
         }
@@ -280,7 +281,7 @@
       ));
       for (const record of records) {
         const stored = storedIdentityFromKey(record);
-        if (!stored?.chapterKey || !hasOnlyAiBatches(record)) continue;
+        if (!stored?.chapterKey || !hasOnlyReusableBatches(record)) continue;
         if (stored.chapterKey !== identity.chapterKey) continue;
         if (!["provider", "chapterId", "promptHash", "nameHash"].every(field => (
           typeof identity[field] === "string" && record[field] === identity[field]
@@ -291,7 +292,7 @@
           const exact = validInputHash(inputHash) && batch?.inputHash === inputHash;
           const presentationOnly = validInputHash(presentationHash)
             && batch?.presentationHash === presentationHash;
-          if ((exact || presentationOnly) && hasAiItems(batch.items)) matches[batchId] = clone(batch);
+          if ((exact || presentationOnly) && hasReusableItems(batch.items)) matches[batchId] = clone(batch);
         }
         const sequences = [];
         let sequence = [];
@@ -300,7 +301,7 @@
           .sort(([left], [right]) => left.localeCompare(right))) {
           const ordinal = Number(/^B(\d+)$/.exec(storedBatchId)?.[1]) || 0;
           const usable = ordinal > 0
-            && hasAiItems(batch?.items)
+            && hasReusableItems(batch?.items)
             && Array.isArray(batch.sourceHashes)
             && batch.sourceHashes.length === batch.items.length
             && batch.sourceHashes.every(validInputHash);
@@ -349,13 +350,13 @@
 
       const key = buildCacheKey(identity);
       return serializeKey(key, async () => {
-        if (!hasAiItems(items)) {
+        if (!hasReusableItems(items)) {
           await driver.delete(key);
           return null;
         }
         const timestamp = now();
         const existing = await driver.get(key);
-        const record = hasOnlyAiBatches(existing) ? existing : {
+        const record = hasOnlyReusableBatches(existing) ? existing : {
           key,
           ...Object.fromEntries(IDENTITY_FIELDS.map((field) => [field, identity[field]])),
           createdAt: timestamp,

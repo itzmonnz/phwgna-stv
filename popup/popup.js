@@ -397,15 +397,16 @@
 
   function sanitizeErrorReport(value) {
     const input = safeObject(value);
-    const raw = safeObject(input.incident);
-    if (!Object.keys(raw).length) {
-      return { schemaVersion: 1, generatedAt: Math.max(0, Number(input.generatedAt) || 0), incident: null };
+    const rawPrimary = safeObject(input.incident);
+    const rawRecent = Array.isArray(input.incidents) ? input.incidents.slice(0, 5).map(safeObject) : [];
+    if (!Object.keys(rawPrimary).length && !rawRecent.some(item => Object.keys(item).length)) {
+      return { schemaVersion: 1, generatedAt: Math.max(0, Number(input.generatedAt) || 0), incident: null, incidents: [] };
     }
     const providers = new Set(["chatgpt", "gemini", "openrouter_api", "gemini_api", "openai_api", "deepseek_api", "unknown"]);
     const phases = new Set(["setup", "batch", "prefetch", "chapter", "tts", "name_lookup", "pool", "unknown"]);
     const outcomes = new Set(["still_running", "recovered", "failed"]);
     const responseStates = new Set(["match", "mismatch", "missing", "unknown"]);
-    const generationStates = new Set(["generating", "stopped", "unknown"]);
+    const generationStates = new Set(["generating", "stopped", "stale_stop_confirmed", "unknown"]);
     const sendStates = new Set(["confirmed", "unconfirmed", "unknown"]);
     const composerStates = new Set(["not_found", "empty_before_write", "filled", "write_failed", "cleared_after_send", "unknown"]);
     const sendButtonStates = new Set(["not_found", "disabled", "enabled", "clicked", "stop_visible", "submission_confirmed", "click_unconfirmed", "unknown"]);
@@ -437,20 +438,20 @@
     const safeLabels = value => Array.isArray(value)
       ? value.map(Number).filter(item => Number.isInteger(item) && item >= 1 && item <= 30).slice(0, 30)
       : [];
-    const timeline = Array.isArray(raw.timeline) ? raw.timeline.slice(0, 16).map(item => {
-      const event = safeObject(item);
+    const sanitizeIncident = candidate => {
+      const raw = safeObject(candidate);
+      if (!Object.keys(raw).length) return null;
+      const timeline = Array.isArray(raw.timeline) ? raw.timeline.slice(0, 16).map(item => {
+        const event = safeObject(item);
+        return {
+          elapsedMs: safeCount(event.elapsedMs, 60 * 60 * 1000),
+          kind: safeEnum(event.kind, eventKinds, "provider_fault"),
+          ...(event.errorCode ? { errorCode: safeCode(event.errorCode) } : {}),
+          ...(event.recoveryStage ? { recoveryStage: safeEnum(event.recoveryStage, recoveryStages, "unknown") } : {}),
+          ...(typeof event.tabClosed === "boolean" ? { tabClosed: event.tabClosed } : {})
+        };
+      }) : [];
       return {
-        elapsedMs: safeCount(event.elapsedMs, 60 * 60 * 1000),
-        kind: safeEnum(event.kind, eventKinds, "provider_fault"),
-        ...(event.errorCode ? { errorCode: safeCode(event.errorCode) } : {}),
-        ...(event.recoveryStage ? { recoveryStage: safeEnum(event.recoveryStage, recoveryStages, "unknown") } : {}),
-        ...(typeof event.tabClosed === "boolean" ? { tabClosed: event.tabClosed } : {})
-      };
-    }) : [];
-    return {
-      schemaVersion: 1,
-      generatedAt: Math.max(0, Number(input.generatedAt) || 0),
-      incident: {
         schemaVersion: 1,
         occurredAt: Math.max(0, Number(raw.occurredAt) || 0),
         extensionVersion: safeVersion(raw.extensionVersion),
@@ -490,7 +491,16 @@
         outcome: safeEnum(raw.outcome, outcomes, "still_running"),
         ageSeconds: safeCount(raw.ageSeconds, 60 * 60),
         timeline
-      }
+      };
+    };
+    const incident = sanitizeIncident(rawPrimary) || sanitizeIncident(rawRecent[0]);
+    const incidents = (rawRecent.length ? rawRecent : [rawPrimary])
+      .map(sanitizeIncident).filter(Boolean);
+    return {
+      schemaVersion: 1,
+      generatedAt: Math.max(0, Number(input.generatedAt) || 0),
+      incident,
+      incidents
     };
   }
 
@@ -684,17 +694,23 @@
   }
 
   function renderStoredError(document, report) {
-    const incident = sanitizeErrorReport(report).incident;
+    const sanitized = sanitizeErrorReport(report);
+    const incident = sanitized.incident;
     if (!incident) return false;
+    const incidentCount = Math.max(1, sanitized.incidents.length);
     const app = document.getElementById("popupApp");
     app.dataset.state = "toolbar_missing";
     app.setAttribute("aria-busy", "false");
     document.getElementById("statusPill").textContent = "Lỗi gần đây";
-    document.getElementById("statusTitle").textContent = "Có báo cáo lỗi trong 1 giờ qua";
+    document.getElementById("statusTitle").textContent = `Có ${incidentCount} báo cáo lỗi trong 1 giờ qua`;
     document.getElementById("statusDetail").textContent = incident.outcome === "recovered"
-      ? "Lỗi gần nhất đã tự phục hồi; báo cáo vẫn còn để đối chiếu."
+      ? "Lỗi gần nhất đã tự phục hồi; toàn bộ bằng chứng gần đây vẫn còn để đối chiếu."
       : "Tab gây lỗi có thể đã đóng; bạn vẫn có thể sao chép báo cáo bên dưới.";
-    document.getElementById("exportDiagnostic").disabled = false;
+    const exportButton = document.getElementById("exportDiagnostic");
+    exportButton.textContent = incidentCount > 1
+      ? `Sao chép ${incidentCount} báo cáo lỗi`
+      : "Sao chép báo cáo lỗi";
+    exportButton.disabled = false;
     return true;
   }
 
@@ -705,7 +721,9 @@
     document.getElementById("statusPill").textContent = "Không có lỗi";
     document.getElementById("statusTitle").textContent = "Không có lỗi trong 1 giờ qua";
     document.getElementById("statusDetail").textContent = "Nhật ký lỗi đang trống.";
-    document.getElementById("exportDiagnostic").disabled = true;
+    const exportButton = document.getElementById("exportDiagnostic");
+    exportButton.textContent = "Sao chép báo cáo lỗi";
+    exportButton.disabled = true;
   }
 
   async function initPopup({ document, chromeApi, copyText = defaultCopyText, distribution = defaultDistribution }) {
@@ -809,8 +827,9 @@
         }
         const text = `${JSON.stringify(createExportPayload(diagnostic, support, errorReport), null, 2)}\n`;
         await copyText(text, document);
+        const incidentCount = sanitizeErrorReport(errorReport).incidents.length;
         liveStatus.textContent = errorReport?.incident
-          ? "Đã sao chép lỗi mới nhất. Bạn có thể dán trực tiếp vào chat."
+          ? `Đã sao chép ${Math.max(1, incidentCount)} báo cáo lỗi gần đây. Bạn có thể dán trực tiếp vào chat.`
           : "Không có lỗi trong 1 giờ qua; đã sao chép trạng thái hiện tại.";
       } catch (_error) {
         liveStatus.textContent = "Không sao chép được. Hãy thử lại hoặc kiểm tra quyền clipboard.";

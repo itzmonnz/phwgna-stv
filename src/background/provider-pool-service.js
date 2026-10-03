@@ -16,6 +16,7 @@
       withPoolLock, withProviderForegroundLock, holdChatGPTSetupPerformanceLease,
       releaseChatGPTSetupPerformanceLease, withProviderPerformanceLease,
       sendProviderMessage,
+      geminiAccounts,
       protectOwnedProviderTab, resolveProviderWindowId, createOwnedProviderTab,
       registerStvTab, hasEligibleStvTab, normalizedPoolTarget, desiredPoolPurposes,
       requestedPurposePriorities, slotMatchesPurpose, hasExactPoolRoles,
@@ -27,6 +28,7 @@
       notifyPoolStatus, readAutomationConfig, hashSettings, clearPrefetchParent,
       hasPrefetchParent, notifyStatus, diagnosticPhase, pause, loadSettings,
       acquireRecoverySlot, dispatchCurrent, probeProvider, restoreJobs, didRestoreJobs,
+      recoverOrphanedReadyLease,
       retrySleep,
       nextStvPresenceGeneration, currentStvPresenceGeneration
     } = options;
@@ -38,7 +40,7 @@
       GEMINI_SETUP_REJECTION_COOLDOWN_MS,
       CHATGPT_SETUP_INACTIVITY_MS, CHATGPT_SETUP_HARD_TIMEOUT_MS,
       READY_MARKER_GRACE_MS, MAX_WARM_REPLACEMENTS, MIN_POOL_TABS,
-      MAX_POOL_TABS, POOL_STORAGE_KEY, OWNED_TABS_STORAGE_KEY,
+      MAX_POOL_TABS, GEMINI_SESSION_BATCH_LIMIT, POOL_STORAGE_KEY, OWNED_TABS_STORAGE_KEY,
       DEVELOPER_KEEP_TABS_KEY, OWNED_TABS_RECORD_VERSION, AUTHENTICATION_BLOCKERS,
       REPLACEABLE_WARM_FAILURES, isAuthenticationBlocker
     } = contracts;
@@ -50,15 +52,22 @@
     let poolReconfigurationSerial = Promise.resolve();
     let geminiSetupReopenNotBefore = 0;
     let geminiSetupCooldownOperation = null;
+    // This guard is intentionally transient: a new service worker must be able
+    // to reclaim a READY lease whose original reset continuation disappeared.
+    const activeLeasedRestarts = new WeakMap();
     let geminiSetupRefillOperation = null;
     const geminiRecoveryOperations = new Map();
-    const GEMINI_RECOVERY_BACKOFF_MS = Object.freeze([1_000, 2_000, 5_000, 10_000]);
+    // The first 1s retry is already short enough to keep unchanged. Longer
+    // recovery waits are reduced to three fifths for faster same-tab recovery.
+    const GEMINI_RECOVERY_BACKOFF_MS = Object.freeze([1_000, 1_200, 3_000, 6_000]);
     const GEMINI_RECOVERY_ALARM_PREFIX = "stvai-gemini-recovery:";
     const GEMINI_LIVENESS_ALARM_PREFIX = "stvai-gemini-liveness:";
     const GEMINI_RECOVERY_ALARM_DELAY_MINUTES = 0.5;
+    const REFUSAL_READY_RECHECK_ATTEMPTS = 4;
     const GEMINI_IN_PLACE_RECOVERY_CODES = new Set([
       "send_not_confirmed", "temporary_unavailable", "temporary_session_lost",
-      "provider_busy", "provider_busy_timeout", "provider_unreachable", "ui_changed"
+      "provider_busy", "provider_busy_timeout", "provider_unreachable", "ui_changed",
+      "gemini_account_probe_failed"
     ]);
     const GEMINI_BOUNDED_RECOVERY_CODES = new Set(["provider_unreachable", "ui_changed"]);
 
@@ -92,6 +101,13 @@
     function isResumableGeminiRecoverySlot(slot) {
       if (slot?.provider !== "gemini" || !Number.isInteger(slot?.providerTabId)
         || slot?.recoveryCancelled === true) return false;
+      // Older workers persisted this transient account-bridge failure as
+      // `failed` before the in-place recovery path existed. Retain that exact
+      // physical tab across worker restart and promote it to recovery below;
+      // otherwise restorePoolMetadata discards it before Temporary Chat can be
+      // reopened.
+      if (slot.state === "failed" && slot.errorCode === "gemini_account_probe_failed") return true;
+      if (slot.accountSwitching === true) return true;
       if (slot.state === "recovering"
         && GEMINI_IN_PLACE_RECOVERY_CODES.has(String(slot.errorCode || ""))) return true;
       if (wantsTemporaryGeminiSession(slot)
@@ -100,7 +116,7 @@
       const recoveryStage = String(slot.recoveryStage || "");
       return Boolean(slot.recoveryJobId)
         && ["recovering", "opening", "preparing"].includes(String(slot.state || ""))
-        && ["handoff_batch", "clear_owned_prompt", "open_new_chat", "activate_temporary", "ready_1", "ready_2"]
+        && ["handoff_batch", "clear_owned_prompt", "open_new_chat", "activate_temporary", "ready_1", "ready_2", "account_probe"]
           .includes(recoveryStage);
     }
 
@@ -118,6 +134,23 @@
         await Promise.resolve(alarms.create(name, {
           delayInMinutes: GEMINI_RECOVERY_ALARM_DELAY_MINUTES
         }));
+        return true;
+      } catch (_error) {
+        return false;
+      }
+    }
+
+    // Reload only the already-owned Gemini tab when the extension bridge is
+    // stale after a service-worker/extension reload. This keeps the physical
+    // tab and its slot identity; it never creates a replacement tab.
+    async function reloadGeminiBridgeOnce(slot) {
+      if (!slot || slot.provider !== "gemini" || !Number.isInteger(slot.providerTabId)
+        || typeof tabs?.reload !== "function") return false;
+      const previous = Number(slot.bridgeRecoveryReloadAt) || 0;
+      if (previous && now() - previous < 30_000) return false;
+      slot.bridgeRecoveryReloadAt = now();
+      try {
+        await Promise.resolve(tabs.reload(slot.providerTabId));
         return true;
       } catch (_error) {
         return false;
@@ -216,6 +249,64 @@
       return url ? providerMatchesUrl(provider, url) : true;
     }
 
+    async function recordProviderTabCleanup(provider, reason, outcome) {
+      if (!storage?.local) return;
+      const safeReason = String(reason || "automatic_cleanup").toLowerCase()
+        .replace(/[^a-z0-9_-]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 48);
+      try {
+        await storageCall(storage.local, "set", {
+          stvaiLastProviderTabCleanup: {
+            schemaVersion: 1,
+            at: now(),
+            provider: provider === "gemini" ? "gemini" : "chatgpt",
+            reason: safeReason || "automatic_cleanup",
+            outcome
+          }
+        });
+      } catch (_error) { /* diagnostic only */ }
+    }
+
+    async function removeProviderTabSafely(tabId, provider, fallbackUrl = "", reason = "automatic_cleanup") {
+      if (!Number.isInteger(tabId) || typeof tabs.remove !== "function") return true;
+      // A stale/corrupt persisted tab id must never be allowed to close the
+      // reader tab (or any unrelated user tab) after Chrome reuses an id.
+      if (warmPool.stvTabs.has(tabId)) {
+        await recordProviderTabCleanup(provider, reason, "blocked_stv_tab");
+        return false;
+      }
+      if (typeof tabs.get === "function") {
+        let tab;
+        try { tab = await tabs.get(tabId); }
+        catch (_missing) {
+          await recordProviderTabCleanup(provider, reason, "already_missing");
+          return true;
+        }
+        const liveUrl = String(tab?.url || tab?.pendingUrl || fallbackUrl || "");
+        if (!liveUrl || !providerMatchesUrl(provider, liveUrl)) {
+          await recordProviderTabCleanup(provider, reason, "blocked_origin_mismatch");
+          return false;
+        }
+      } else if (!fallbackUrl || !providerMatchesUrl(provider, fallbackUrl)) {
+        await recordProviderTabCleanup(provider, reason, "blocked_origin_mismatch");
+        return false;
+      }
+      await recordProviderTabCleanup(provider, reason, "approved");
+      try {
+        await tabs.remove(tabId);
+        await recordProviderTabCleanup(provider, reason, "removed");
+        return true;
+      } catch (_error) {
+        try {
+          await tabs.get(tabId);
+          await recordProviderTabCleanup(provider, reason, "remove_failed");
+          return false;
+        } catch (_missing) {
+          await recordProviderTabCleanup(provider, reason, "removed");
+          return true;
+        }
+      }
+    }
+
     function findPoolSlotByTab(tabId) {
       return warmPool.slots.find((slot) => slot.providerTabId === tabId) || null;
     }
@@ -274,11 +365,13 @@
 
     async function removeDiagnosticTab(entry) {
       if (!entry) return;
-      if (Number.isInteger(entry.providerTabId) && typeof tabs.remove === "function") {
-        try { await tabs.remove(entry.providerTabId); } catch (_error) { /* already closed */ }
-      }
+      const removed = await removeProviderTabSafely(
+        entry.providerTabId, entry.provider, entry.lastKnownUrl, entry.reason || "diagnostic_cleanup"
+      );
+      if (!removed) return false;
       const index = warmPool.diagnosticTabs.indexOf(entry);
       if (index >= 0) warmPool.diagnosticTabs.splice(index, 1);
+      return true;
     }
 
     async function removeOwnedSlot(slot, options = {}) {
@@ -296,19 +389,15 @@
       slot.state = "retiring";
       await persistPool();
       await releaseChatGPTSetupPerformanceLease(slot);
-      if (Number.isInteger(slot.providerTabId) && typeof tabs.remove === "function") {
-        try {
-          await tabs.remove(slot.providerTabId);
-        } catch (_error) {
-          let stillPresent = true;
-          try { stillPresent = Boolean(await tabs.get(slot.providerTabId)); }
-          catch (_missing) { stillPresent = false; }
-          if (stillPresent) {
-            warmPool.errorCode = "provider_tab_close_failed";
-            await persistPool();
-            return false;
-          }
-        }
+      if (!(await removeProviderTabSafely(
+        slot.providerTabId, slot.provider, slot.lastKnownUrl, removalReason
+      ))) {
+        slot.state = "failed";
+        slot.errorCode = "provider_tab_identity_mismatch";
+        slot.recoveryStage = "blocked:provider_tab_identity_mismatch";
+        warmPool.errorCode = "provider_tab_identity_mismatch";
+        await persistPool();
+        return false;
       }
       const index = warmPool.slots.indexOf(slot);
       if (index >= 0) warmPool.slots.splice(index, 1);
@@ -325,7 +414,8 @@
       if (!settings || settings.provider !== slot.provider) return false;
       if (!options.force && await developerKeepsFailedTabs()) return false;
 
-      const targetUrl = ownedProviderUrl(settings.provider, settings.temporaryChat);
+      const targetUrl = (settings.provider === "gemini" && settings.geminiAccountRotationEnabled === true
+        ? await geminiAccounts.preferredUrl?.() : "") || ownedProviderUrl(settings.provider, settings.temporaryChat);
       const previousState = slot.state;
       const previousJobId = slot.jobId;
       const preparationAttemptId = createId("recycle-attempt");
@@ -357,6 +447,7 @@
       slot.setupResumeAttempts = 0;
       slot.setupErrorCode = "";
       slot.firstBatchDispatchedAt = 0;
+      slot.batchUseCount = 0;
       await persistPool();
       try {
         await tabs.update(slot.providerTabId, { url: targetUrl });
@@ -386,7 +477,7 @@
         }
         const record = stored?.[POOL_STORAGE_KEY];
         const keepDiagnosticTabs = await developerKeepsFailedTabs();
-        if ([2, 3, 4, 5, 6, 7].includes(record?.version) && Array.isArray(record.slots)) {
+        if ([2, 3, 4, 5, 6, 7, 8].includes(record?.version) && Array.isArray(record.slots)) {
           warmPool.suspendedStvTabs = new Set(
             (Array.isArray(record.suspendedStvTabIds) ? record.suspendedStvTabIds : [])
               .filter(Number.isInteger)
@@ -413,16 +504,18 @@
             for (const standby of recordedSlots.filter((slot) => slot?.state === "handoff_standby")) {
               const successor = recordedSlots.find((slot) => slot?.slotId === standby.handoffSuccessorSlotId);
               if (successor?.state === "ready") {
-                if (Number.isInteger(standby.providerTabId) && typeof tabs.remove === "function") {
-                  try { await tabs.remove(standby.providerTabId); } catch (_error) { /* retry during normal cleanup */ }
+                const removed = await removeProviderTabSafely(
+                  standby.providerTabId, standby.provider, standby.lastKnownUrl, "handoff_predecessor_cleanup"
+                );
+                if (removed) {
+                  standby.state = "retiring";
+                  successor.handoffPredecessorSlotId = "";
                 }
-                standby.state = "retiring";
-                successor.handoffPredecessorSlotId = "";
               } else {
-                if (Number.isInteger(successor?.providerTabId) && typeof tabs.remove === "function") {
-                  try { await tabs.remove(successor.providerTabId); } catch (_error) { /* retry during normal cleanup */ }
-                }
-                if (successor) successor.state = "retiring";
+                const removed = !successor || await removeProviderTabSafely(
+                  successor.providerTabId, successor.provider, successor.lastKnownUrl, "handoff_successor_cleanup"
+                );
+                if (successor && removed) successor.state = "retiring";
                 standby.state = "ready";
                 standby.handoffSuccessorSlotId = "";
               }
@@ -447,9 +540,9 @@
             if (["ready", "leased", "retiring", "handoff_standby"].includes(slot?.state)
               || resumableChatGPT || resumableGeminiRecovery
               || !Number.isInteger(slot?.providerTabId)) continue;
-            if (typeof tabs.remove === "function") {
-              try { await tabs.remove(slot.providerTabId); } catch (_error) { /* already closed */ }
-            }
+            await removeProviderTabSafely(
+              slot.providerTabId, slot.provider, slot.lastKnownUrl, "restore_non_resumable_cleanup"
+            );
           }
           warmPool.slots = recordedSlots.filter((slot) => ["ready", "leased", "retiring", "handoff_standby"].includes(slot?.state)
             || (slot?.provider === "chatgpt" && slot?.state === "preparing" && slot?.setupSessionId)
@@ -488,9 +581,14 @@
               setupServiceWorkerRestarts: Math.max(0, Number(slot?.setupServiceWorkerRestarts) || 0) + 1,
               setupResumeAttempts: Math.max(0, Number(slot?.setupResumeAttempts) || 0),
               setupErrorCode: String(slot?.setupErrorCode || ""),
+              accountInitialized: slot?.accountInitialized === true,
+              bridgeRecoveryReloadAt: Math.max(0, Number(slot?.bridgeRecoveryReloadAt) || 0),
+              accountProbeRecoveryAttempts: Math.max(0, Number(slot?.accountProbeRecoveryAttempts) || 0),
               firstBatchDispatchedAt: Math.max(0, Number(slot?.firstBatchDispatchedAt) || 0),
+              batchUseCount: Math.max(0, Math.min(GEMINI_SESSION_BATCH_LIMIT, Number(slot?.batchUseCount) || 0)),
+              laneRole: ["normal", "rescue"].includes(slot?.laneRole) ? slot.laneRole : "",
               errorCode: resumableGeminiRecovery ? String(slot?.errorCode || "temporary_session_lost") : "",
-              jobId: slot?.state === "leased" ? String(slot?.jobId || "") : "",
+              jobId: slot?.state === "leased" || slot?.accountSwitching === true ? String(slot?.jobId || "") : "",
               recoveryJobId: resumableGeminiRecovery
                 ? String(slot?.recoveryJobId || createId("setup-recovery")) : "",
               recoveryGeneration: resumableGeminiRecovery
@@ -500,6 +598,7 @@
               recoveryStage: resumableGeminiRecovery
                 ? String(slot?.recoveryStage || "clear_owned_prompt") : "",
               recoveryCancelled: false,
+              accountSwitching: slot?.accountSwitching === true,
               restored: true,
               handoffPredecessorSlotId: String(slot?.handoffPredecessorSlotId || ""),
               handoffSuccessorSlotId: String(slot?.handoffSuccessorSlotId || "")
@@ -537,9 +636,7 @@
           }
           const provider = entry?.provider === "gemini" ? "gemini" : "chatgpt";
           if (!liveTab?.url || !providerMatchesUrl(provider, liveTab.url)) continue;
-          if (typeof tabs.remove === "function") {
-            try { await tabs.remove(entry.tabId); } catch (_error) { /* already closed */ }
-          }
+          await removeProviderTabSafely(entry.tabId, provider, liveTab.url, "orphan_cleanup");
         }
         await persistOwnedProviderTabs();
       })();
@@ -558,19 +655,23 @@
       slot.pageFocused = performance?.focused === true;
     }
 
-    async function ensureIsolatedGeminiIsVisible(slot, initialStatus) {
+    async function ensureIsolatedGeminiIsResponsive(slot, initialStatus) {
       recordSlotPerformance(slot, initialStatus?.state);
       if (slot?.provider !== "gemini" || slot.windowMode !== "isolated_normal"
         || slot.pageVisibility !== "hidden") return initialStatus;
 
       for (let check = 0; check < 2; check += 1) {
         try {
-          if (Number.isInteger(slot.providerWindowId) && typeof windows?.update === "function") {
-            await windows.update(slot.providerWindowId, { state: "normal", drawAttention: false });
-          }
+          // Keep the user's window state.  Calling windows.update({ state: "normal" })
+          // here restored every hidden/minimized Gemini window onto the desktop just
+          // because its document reported pageVisibility=hidden.  The provider
+          // content script remains responsive in the isolated max-performance
+          // window, so no window restoration is needed for readiness.
           if (typeof tabs.update === "function") {
-            await tabs.update(slot.providerTabId, { active: true, autoDiscardable: false });
-            slot.tabActiveInWindow = true;
+            // Do not activate a provider tab: Chrome can restore its normal
+            // window when an active tab is touched, putting Gemini over STV.
+            await tabs.update(slot.providerTabId, { autoDiscardable: false });
+            slot.tabActiveInWindow = false;
             slot.autoDiscardable = false;
           }
         } catch (_error) {
@@ -587,8 +688,13 @@
           // not an unsafe duplicate Send.
         }
       }
-      slot.performanceDegraded = true;
-      return null;
+      // A non-focused normal window can legitimately report `hidden` even
+      // when its content script is responsive and the renderer is not
+      // throttled.  The status probes above already prove that the document
+      // is reachable; do not discard the slot or block READY solely on the
+      // page-visibility bit.
+      slot.performanceDegraded = false;
+      return initialStatus;
     }
 
     async function inspectPreparedSlot(slot) {
@@ -601,9 +707,11 @@
       } catch (_error) {
         return { verified: false, code: "provider_unreachable" };
       }
-      response = await ensureIsolatedGeminiIsVisible(slot, response);
+      response = await ensureIsolatedGeminiIsResponsive(slot, response);
       if (!response) return { verified: false, code: "background_performance_degraded" };
       const state = response?.state;
+      if (isAuthenticationBlocker(state?.code) || state?.code === "rate_limited") return { verified: false, code: state.code, state };
+      if (state?.code === "gemini_1095") return { verified: false, code: "gemini_1095", state };
       const sessionState = String(state?.session?.state || "unknown");
       slot.sessionState = sessionState;
       if (wantsTemporaryGeminiSession(slot) && state?.session?.composerContent === "foreign") {
@@ -656,6 +764,11 @@
       for (const slot of warmPool.slots.slice()) {
         if (slot.state !== "ready" || slot.provider !== provider || slot.settingsHash !== settingsHash
           || slot.slotId === excludedSlotId || !slotMatchesPurpose(slot, purpose)) continue;
+        if (provider === "gemini" && warmPool.settings?.geminiAccountRotationEnabled === true && !slot.accountInitialized) {
+          slot.accountNeedsReset = true;
+          slot.state = "opening";
+          if (!await prepareWarmSlot(slot, warmPool.settings)) continue;
+        }
         const verificationAttempts = slot.provider === "gemini" ? 3 : 1;
         let verified = false;
         let inspection = null;
@@ -670,6 +783,13 @@
           }
         }
         if (verified) return slot;
+        if (inspection?.code === "gemini_1095" && provider === "gemini") {
+          slot.errorCode = "gemini_1095";
+          if (warmPool.settings?.geminiAccountRotationEnabled === true) {
+            if (await recoverGemini1095Slot(slot, warmPool.settings)) return slot;
+          } else await markWarmSlotFailed(slot, "gemini_1095", { suppressAutomaticReplacement: true });
+          continue;
+        }
         if (wantsTemporaryGeminiSession(slot)
           && GEMINI_IN_PLACE_RECOVERY_CODES.has(String(inspection?.code || ""))) {
           await beginGeminiSessionRecovery(slot, inspection.code);
@@ -752,8 +872,9 @@
       }
     }
 
-    async function markWarmSlotFailed(slot, code) {
+    async function markWarmSlotFailed(slot, code, failureOptions = {}) {
       const wasLeased = slot.state === "leased";
+      const automaticReplacementSuppressed = failureOptions.suppressAutomaticReplacement === true;
       slot.state = "failed";
       slot.errorCode = String(code || "warm_failed");
       slot.failedAt = now();
@@ -815,7 +936,8 @@
           await notifyPoolStatus();
           return;
         }
-        const shouldRefill = !slot.suppressAutomaticReplacement
+        const shouldRefill = !automaticReplacementSuppressed
+          && !slot.suppressAutomaticReplacement
           && REPLACEABLE_WARM_FAILURES.has(slot.errorCode)
           && (slot.recoveryAttempts || 0) < MAX_WARM_REPLACEMENTS;
         await removeOwnedSlot(slot, { errorReason: slot.errorCode, force: true });
@@ -826,7 +948,8 @@
         return;
       }
       await notifyPoolStatus();
-      if (!slot.suppressAutomaticReplacement && REPLACEABLE_WARM_FAILURES.has(slot.errorCode)
+      if (!automaticReplacementSuppressed
+        && !slot.suppressAutomaticReplacement && REPLACEABLE_WARM_FAILURES.has(slot.errorCode)
         && (slot.recoveryAttempts || 0) < MAX_WARM_REPLACEMENTS) {
         setTimeout(() => { void replaceFailedWarmSlot(slot); }, 0);
       }
@@ -846,14 +969,17 @@
     function validateSetupProviderResult(payload, expected) {
       const receipt = payload?.setupValidation;
       const expectedPart = String(expected.part || "");
-      const expectedMarker = String(core.READY_MARKERS[expectedPart] || "");
+      const expectedMarker = String(expected.responseMarker || core.READY_MARKERS[expectedPart] || "");
       if (receipt && Number(receipt.schemaVersion) === 1) {
         const ok = receipt.ok === true
           && String(receipt.part || "") === expectedPart
           && String(receipt.marker || "") === expectedMarker;
         if (ok) return { ok: true, source: "provider_receipt", reason: "ok" };
       }
-      const fallback = core.validateSetupResponse(payload?.response ?? payload?.text, expected);
+      const fallback = expectedMarker !== String(core.READY_MARKERS[expectedPart] || "")
+        ? { ok: String(payload?.response ?? payload?.text ?? "").trim() === expectedMarker,
+          reason: String(payload?.response ?? payload?.text ?? "").trim() === expectedMarker ? "ok" : "marker_mismatch" }
+        : core.validateSetupResponse(payload?.response ?? payload?.text, expected);
       return {
         ...fallback,
         source: "background_fallback",
@@ -861,15 +987,16 @@
       };
     }
 
-    async function recheckSetupMarker(slot, setupIndex) {
-      const setupPart = SETUP_PARTS[setupIndex];
-      const responseMarker = core.READY_MARKERS[setupPart];
+    async function recheckSetupMarker(slot, setupIndex, setupParts = SETUP_PARTS,
+      setupMarkers = core.READY_MARKERS) {
+      const setupPart = setupParts[setupIndex];
+      const responseMarker = setupMarkers[setupPart];
       try {
         const receipt = await tabs.sendMessage(slot.providerTabId, {
           type: "STVAI_PROVIDER_READY_RECHECK",
           setupPart,
           responseMarker,
-          ...(setupIndex === SETUP_PARTS.length - 1 ? {
+          ...(setupIndex === setupParts.length - 1 ? {
             warmSessionId: slot.warmSessionId,
             settingsHash: slot.settingsHash
           } : {})
@@ -889,18 +1016,110 @@
       }
     }
 
-    async function reconcileUnconfirmedSetupMarker(slot, setupIndex, attempts, current) {
+    async function reconcileUnconfirmedSetupMarker(slot, setupIndex, attempts, current,
+      setupParts = SETUP_PARTS, setupMarkers = core.READY_MARKERS) {
       const limit = Math.max(1, Math.trunc(Number(attempts) || 1));
       slot.readyWatchdogState = "rechecking_marker";
       for (let attempt = 0; attempt < limit; attempt += 1) {
         if (!current()) return false;
-        if (await recheckSetupMarker(slot, setupIndex)) return true;
+        if (await recheckSetupMarker(slot, setupIndex, setupParts, setupMarkers)) return true;
         if (attempt + 1 < limit) await retrySleep(READY_MARKER_GRACE_MS);
       }
       return false;
     }
 
     async function prepareWarmSlot(slot, settings, options = {}) {
+      if (slot?.provider === "gemini" && settings?.geminiAccountRotationEnabled === true
+        && !options.accountRecovery && !slot.accountInitialized
+        && (slot.state === "opening" || (slot.state === "restoring" && slot.restoreState !== "leased"))) {
+        let initial1095 = false;
+        slot.accountSwitching = true;
+        slot.state = "preparing";
+        await persistPool();
+        try {
+          await geminiAccounts.ensureSelected(slot.providerTabId, () => !warmPool.slots.includes(slot) || slot.recoveryCancelled);
+          if (slot.accountNeedsReset) {
+            let reset;
+            try {
+              reset = await sendProviderMessage("gemini", slot.providerTabId, {
+                type: "STVAI_PROVIDER_RESTART_TEMPORARY", timeoutMs: warmTemporaryTimeoutMs
+              });
+            } catch (_) { /* verify fresh document through normal READY probing */ }
+            if (reset?.ok === false) throw Object.assign(new Error("account_reset_failed"), { code: reset.error?.code || "temporary_unavailable" });
+            slot.accountNeedsReset = false;
+          }
+          slot.accountInitialized = true;
+          slot.documentGeneration = (slot.documentGeneration || 0) + 1;
+          slot.warmSessionId = createId("warm");
+          slot.warmJobId = createId("warm-job");
+          slot.setupId = createId("setup");
+          slot.state = "opening";
+        } catch (error) {
+          if (error?.code === "gemini_1095") {
+            initial1095 = true;
+            slot.accountInitialized = true;
+            slot.accountNeedsReset = false;
+            slot.errorCode = "gemini_1095";
+          } else {
+            await markWarmSlotFailed(slot, error?.code || "gemini_account_probe_failed", { suppressAutomaticReplacement: true });
+            return false;
+          }
+        } finally {
+          slot.accountSwitching = false;
+          slot.documentLoading = false;
+          await persistPool();
+        }
+        if (initial1095) return recoverGemini1095Slot(slot, settings, options);
+      }
+      const prepared = await prepareWarmSlotCore(slot, settings, options);
+      if (!prepared && slot?.errorCode === "gemini_1095" && !options.accountRecovery
+        && settings?.geminiAccountRotationEnabled === true) {
+        return recoverGemini1095Slot(slot, settings, options);
+      }
+      return prepared;
+    }
+
+    async function recoverGemini1095Slot(slot, settings, options = {}) {
+      if (!slot || slot.provider !== "gemini" || settings?.geminiAccountRotationEnabled !== true) return false;
+      if (slot.accountRecoveryRunning) return false;
+      slot.accountRecoveryRunning = true;
+      const stopped = () => options.shouldStop?.() === true || slot.recoveryCancelled || !warmPool.slots.includes(slot);
+      try {
+        while (!stopped()) {
+          slot.accountSwitching = true;
+          slot.state = "recovering";
+          await persistPool();
+          const decision = await geminiAccounts.recover1095(slot.providerTabId, stopped);
+          if (stopped()) return false;
+          slot.accountInitialized = true;
+          slot.documentLoading = false;
+          slot.errorCode = "";
+          await options.onAccountRecovery?.(decision);
+          await retrySleep(900);
+          if (stopped()) return false;
+          const ready = await restartLeasedGeminiSlot(slot, settings, {
+            ...options, accountRecovery: true, suppressAutomaticReplacement: true,
+            timeoutMs: warmTemporaryTimeoutMs
+          });
+          if (ready) return true;
+          if (slot.errorCode !== "gemini_1095") return false;
+        }
+        return false;
+      } catch (error) {
+        slot.errorCode = error?.code || "gemini_account_probe_failed";
+        slot.state = "failed";
+        exposeSlotFailureToPool(slot);
+        await notifyPoolStatus();
+        return false;
+      } finally {
+        slot.accountSwitching = false;
+        slot.accountRecoveryRunning = false;
+        slot.documentLoading = false;
+        await persistPool();
+      }
+    }
+
+    async function prepareWarmSlotCore(slot, settings, options = {}) {
       if (!slot) return false;
       if (slot.documentLoading) return false;
       if (slot.state === "preparing") {
@@ -908,6 +1127,17 @@
         return false;
       }
       const rebindLeased = options.rebindLeased === true && slot.state === "leased";
+      const failWarmSlot = async code => {
+        if (code === "gemini_1095" && settings?.geminiAccountRotationEnabled === true) {
+          slot.errorCode = code;
+          slot.state = "opening";
+          await persistPool();
+          return;
+        }
+        return markWarmSlotFailed(slot, code, {
+          suppressAutomaticReplacement: options.suppressAutomaticReplacement === true
+        });
+      };
       if (!["opening", "restoring"].includes(slot.state) && !rebindLeased) return false;
       const generation = slot.documentGeneration || 0;
       const preparationAttemptId = createId("ready-attempt");
@@ -920,10 +1150,17 @@
       if (!restoring && !rebindLeased) slot.state = "preparing";
       if (!(await providerTabMatches(slot.provider, slot.providerTabId, slot.lastKnownUrl))) {
         if (!current()) return false;
-        await markWarmSlotFailed(slot, "provider_origin_mismatch");
+        await failWarmSlot("provider_origin_mismatch");
         return false;
       }
       if (restoring) {
+        if (slot.provider === "gemini" && settings.geminiAccountRotationEnabled === true && slot.restoreState === "leased") {
+          try { await geminiAccounts.verifyCurrent?.(slot.providerTabId); }
+          catch (error) {
+            await failWarmSlot(error?.code || "gemini_account_probe_failed");
+            return false;
+          }
+        }
         if (slot.provider === "chatgpt" && slot.restoreState === "preparing" && slot.setupSessionId) {
           try {
             const restoredStatus = await tabs.sendMessage(slot.providerTabId, { type: "STVAI_PROVIDER_STATUS" });
@@ -953,6 +1190,15 @@
           await persistPool();
           return true;
         }
+        if (slot.provider === "gemini" && settings.geminiAccountRotationEnabled === true) {
+          const inspection = await inspectPreparedSlot(slot);
+          if (inspection.code === "gemini_1095") {
+            await failWarmSlot("gemini_1095");
+            return false;
+          }
+          await failWarmSlot(inspection.code || "warm_evidence_missing");
+          return false;
+        }
         await removeOwnedSlot(slot, { errorReason: "restore_evidence_missing" });
         return false;
       }
@@ -965,7 +1211,7 @@
       const providerProbeStartedAt = now();
       for (let attempt = 0; attempt < providerReadyAttempts; attempt += 1) {
         if (now() - providerProbeStartedAt >= 60_000) {
-          await markWarmSlotFailed(slot, "provider_unreachable");
+          await failWarmSlot("provider_unreachable");
           return false;
         }
         try {
@@ -993,15 +1239,15 @@
             return prepareWarmSlot(slot, settings, options);
           }
           slot.preparationPasses = 0;
-          await markWarmSlotFailed(slot, "provider_unreachable");
+          await failWarmSlot("provider_unreachable");
           return false;
         }
-        await markWarmSlotFailed(slot, "provider_unreachable");
+        await failWarmSlot("provider_unreachable");
         return false;
       }
-      status = await ensureIsolatedGeminiIsVisible(slot, status);
+      status = await ensureIsolatedGeminiIsResponsive(slot, status);
       if (!status) {
-        await markWarmSlotFailed(slot, "background_performance_degraded");
+        await failWarmSlot("background_performance_degraded");
         return false;
       }
       slot.preparationPasses = 0;
@@ -1014,7 +1260,9 @@
           await persistPool();
           return false;
         }
-        const statusCode = runtimeStatusCode || operationStatusCode || status?.error?.code
+        const explicitBlocker = isAuthenticationBlocker(status?.state?.code) || status?.state?.code === "rate_limited"
+          || status?.state?.code === "gemini_1095" ? status.state.code : "";
+        const statusCode = explicitBlocker || runtimeStatusCode || operationStatusCode || status?.error?.code
           || status?.state?.code || status?.state?.state || "provider_unavailable";
         if (options.inPlaceRecovery
           && GEMINI_IN_PLACE_RECOVERY_CODES.has(statusCode)) {
@@ -1023,15 +1271,21 @@
           await persistPool();
           return false;
         }
-        await markWarmSlotFailed(slot, statusCode);
+        await failWarmSlot(statusCode);
         return false;
       }
 
-      const prompts = core.createSetupMessages({
+      const prompts = Array.isArray(options.setupPrompts) && options.setupPrompts.length
+        ? options.setupPrompts.map(value => String(value || ""))
+        : core.createSetupMessages({
         setupId: slot.setupId,
         jobId: slot.warmJobId,
         settings
       });
+      const setupParts = Array.isArray(options.setupParts) && options.setupParts.length
+        ? options.setupParts : SETUP_PARTS;
+      const setupMarkers = options.setupMarkers && typeof options.setupMarkers === "object"
+        ? options.setupMarkers : core.READY_MARKERS;
       const readyTimeoutMs = readyTimeoutFor(slot.provider);
       const readySendTimeoutMs = readySendTimeoutFor(slot.provider);
       let setupComplete = false;
@@ -1041,11 +1295,11 @@
         const steps = prompts.map((prompt, setupIndex) => ({
           jobId: slot.warmJobId,
           setupIndex,
-          setupPart: SETUP_PARTS[setupIndex],
-          responseMarker: core.READY_MARKERS[SETUP_PARTS[setupIndex]],
+          setupPart: setupParts[setupIndex],
+          responseMarker: setupMarkers[setupParts[setupIndex]],
           prompt
         }));
-        slot.readyWatchdogStep = `ready_${Math.min(SETUP_PARTS.length, (slot.setupCheckpoint || 0) + 1)}`;
+        slot.readyWatchdogStep = `ready_${Math.min(setupParts.length, (slot.setupCheckpoint || 0) + 1)}`;
         slot.readyWatchdogState = "waiting_marker";
         slot.readyWatchdogTimeoutMs = CHATGPT_SETUP_HARD_TIMEOUT_MS;
         slot.readyWatchdogGraceMs = READY_MARKER_GRACE_MS;
@@ -1056,7 +1310,7 @@
             type: "STVAI_PROVIDER_SETUP_START",
             provider: "chatgpt",
             setupSessionId: slot.setupSessionId,
-            checkpoint: Math.max(0, Math.min(SETUP_PARTS.length, Number(slot.setupCheckpoint) || 0)),
+            checkpoint: Math.max(0, Math.min(setupParts.length, Number(slot.setupCheckpoint) || 0)),
             progressRevision: Math.max(0, Number(slot.setupProgressRevision) || 0),
             setupId: slot.setupId,
             warmSessionId: slot.warmSessionId,
@@ -1071,18 +1325,18 @@
         } catch (_error) {
           if (!current()) return false;
           await releaseChatGPTSetupPerformanceLease(slot);
-          await markWarmSlotFailed(slot, "provider_unreachable");
+          await failWarmSlot("provider_unreachable");
           return false;
         }
         if (!current()) return false;
         if (!response?.ok) {
           await releaseChatGPTSetupPerformanceLease(slot);
-          await markWarmSlotFailed(slot, response?.error?.code || "warm_setup_failed");
+          await failWarmSlot(response?.error?.code || "warm_setup_failed");
           return false;
         }
         slot.setupCheckpoint = Math.max(
           Number(slot.setupCheckpoint) || 0,
-          Math.max(0, Math.min(SETUP_PARTS.length, Number(response.checkpoint) || 0))
+          Math.max(0, Math.min(setupParts.length, Number(response.checkpoint) || 0))
         );
         // SETUP_START acknowledges the state that existed when the content
         // script received the request. READY progress can overtake that reply,
@@ -1094,14 +1348,14 @@
         }
         slot.setupLastProgressAt ||= now();
         await persistPool();
-        setupComplete = slot.setupState === "completed" && slot.setupCheckpoint === SETUP_PARTS.length;
+        setupComplete = slot.setupState === "completed" && slot.setupCheckpoint === setupParts.length;
       } else setupComplete = await withProviderPerformanceLease(
         slot.provider,
         slot.providerTabId,
         { phase: "setup", setupIndex: 0, timeoutMs: readyTimeoutMs },
         async () => {
           for (let setupIndex = 0; setupIndex < prompts.length; setupIndex += 1) {
-            const setupPart = SETUP_PARTS[setupIndex];
+            const setupPart = setupParts[setupIndex];
             const finalSetup = setupIndex === prompts.length - 1;
             const providerMessage = {
               type: "STVAI_PROVIDER_SEND",
@@ -1110,7 +1364,7 @@
               setupIndex,
               setupId: slot.setupId,
               setupPart,
-              responseMarker: core.READY_MARKERS[setupPart],
+              responseMarker: setupMarkers[setupPart],
               prompt: prompts[setupIndex],
               temporaryTimeoutMs: warmTemporaryTimeoutMs,
               sendTimeoutMs: readySendTimeoutMs,
@@ -1138,7 +1392,7 @@
               response = await sendProviderMessage(slot.provider, slot.providerTabId, providerMessage);
             } catch (_error) {
               if (!current()) return false;
-              await markWarmSlotFailed(slot, "provider_unreachable");
+              await failWarmSlot("provider_unreachable");
               return false;
             }
             if (!current()) return false;
@@ -1146,17 +1400,22 @@
               const responseCode = response.error?.code;
               const recheckAttempts = responseCode === "send_not_confirmed"
                 ? Math.max(1, Math.ceil((readyTimeoutMs - readySendTimeoutMs) / READY_MARKER_GRACE_MS))
-                : 1;
+                : (responseCode === "response_timeout"
+                    && providerMessage.responseMarker === core.REFUSAL_READY_MARKER
+                  ? REFUSAL_READY_RECHECK_ATTEMPTS
+                  : 1);
               if (["response_timeout", "send_not_confirmed"].includes(responseCode)
-                && await reconcileUnconfirmedSetupMarker(slot, setupIndex, recheckAttempts, current)) {
+                && await reconcileUnconfirmedSetupMarker(slot, setupIndex, recheckAttempts, current,
+                  setupParts, setupMarkers)) {
+                const confirmedMarker = setupMarkers[setupPart];
                 response = {
                   ok: true,
-                  response: core.READY_MARKERS[setupPart],
+                  response: confirmedMarker,
                   setupValidation: {
                     schemaVersion: 1,
                     ok: true,
                     part: setupPart,
-                    marker: core.READY_MARKERS[setupPart],
+                    marker: confirmedMarker,
                     reason: "ok"
                   },
                   stability: {
@@ -1180,11 +1439,11 @@
                 await persistPool();
                 return false;
               }
-              await markWarmSlotFailed(slot, responseCode);
+              await failWarmSlot(responseCode);
               return false;
             }
             if (response?.outcomeCode === "content_refused") {
-              await markWarmSlotFailed(slot, "content_refused");
+              await failWarmSlot("content_refused");
               return false;
             }
             if (!(response && typeof response.response === "string")) return false;
@@ -1196,12 +1455,13 @@
             const validation = validateSetupProviderResult(response, {
               jobId: slot.warmJobId,
               setupId: slot.setupId,
-              part: setupPart
+              part: setupPart,
+              responseMarker: setupMarkers[setupPart]
             });
             slot.readyValidationSource = validation.source;
             slot.readyValidationReason = validation.reason;
             if (!validation.ok) {
-              await markWarmSlotFailed(slot, "invalid_setup_response");
+              await failWarmSlot("invalid_setup_response");
               return false;
             }
             if (!finalSetup && geminiSetupStepDelayMs > 0) await retrySleep(geminiSetupStepDelayMs);
@@ -1214,7 +1474,7 @@
       const verified = await verifyPreparedSlot(slot);
       if (!current()) return false;
       if (!verified) {
-        await markWarmSlotFailed(slot, "warm_evidence_missing");
+        await failWarmSlot("warm_evidence_missing");
         return false;
       }
       // A concurrent READY progress handler may already have exposed and
@@ -1242,7 +1502,7 @@
       return true;
     }
 
-    async function restartLeasedGeminiSlot(slot, settings, options = {}) {
+    async function restartLeasedGeminiSlotCore(slot, settings, options = {}) {
       if (!slot || slot.provider !== "gemini" || !["leased", "recovering"].includes(slot.state)
         || !Number.isInteger(slot.providerTabId) || !settings) return false;
       const tabId = slot.providerTabId;
@@ -1270,6 +1530,7 @@
         slot.setupResumeAttempts = 0;
         slot.setupErrorCode = "";
         slot.firstBatchDispatchedAt = 0;
+        slot.batchUseCount = 0;
         slot.preparationRequested = false;
         slot.preparationPasses = 0;
         await persistPool();
@@ -1280,7 +1541,7 @@
       slot.recoveryStage = "clear_owned_prompt";
       await persistPool();
       try {
-        reset = await tabs.sendMessage(tabId, {
+        reset = await sendProviderMessage("gemini", tabId, {
           type: "STVAI_PROVIDER_RESTART_TEMPORARY",
           timeoutMs: options.timeoutMs,
           recoveryGeneration: Math.max(0, Number(slot.recoveryGeneration) || 0),
@@ -1296,6 +1557,7 @@
       }
       if ((!reset?.ok && !navigationInterruptedReply) || !warmPool.slots.includes(slot)
         || cancelled()) {
+        if (reset?.error?.code === "gemini_1095") slot.errorCode = "gemini_1095";
         if (options.inPlaceRecovery && warmPool.slots.includes(slot) && !cancelled()) {
           slot.errorCode = String(reset?.error?.code || reset?.reason || "provider_unreachable");
           await persistPool();
@@ -1317,7 +1579,7 @@
       const reclaimPreparedLease = async () => {
         if (!warmPool.slots.includes(slot) || slot.state !== "ready") return false;
         if (options.inPlaceRecovery) return true;
-        if (!slot.jobId) return false;
+        if (!slot.jobId) return options.accountRecovery === true;
         slot.state = "leased";
         await persistPool();
         return true;
@@ -1333,12 +1595,18 @@
         if (!slot.documentLoading && slot.state === "opening") {
           const prepared = await prepareWarmSlot(slot, settings, {
             deferUnavailable: true,
-            inPlaceRecovery: options.inPlaceRecovery === true
+            inPlaceRecovery: options.inPlaceRecovery === true,
+            suppressAutomaticReplacement: options.suppressAutomaticReplacement === true,
+            setupPrompts: options.setupPrompts,
+            setupParts: options.setupParts,
+            setupMarkers: options.setupMarkers,
+            accountRecovery: options.accountRecovery === true
           });
           if (cancelled()) return false;
           if (prepared && warmPool.slots.includes(slot) && slot.state === "ready") {
             return reclaimPreparedLease();
           }
+          if (!prepared && options.accountRecovery && slot.errorCode === "gemini_1095") return false;
           if (options.inPlaceRecovery
             && GEMINI_IN_PLACE_RECOVERY_CODES.has(slot.errorCode)) {
             if (slot.errorCode === "provider_busy") {
@@ -1360,7 +1628,7 @@
             slot.inPlaceRecoveryAttempts = retryOrdinal + 1;
             let nextReset;
             try {
-              nextReset = await tabs.sendMessage(tabId, {
+              nextReset = await sendProviderMessage("gemini", tabId, {
                 type: "STVAI_PROVIDER_RESTART_TEMPORARY",
                 timeoutMs: options.timeoutMs,
                 recoveryGeneration: Math.max(0, Number(slot.recoveryGeneration) || 0),
@@ -1389,6 +1657,24 @@
       return reclaimPreparedLease();
     }
 
+    async function restartLeasedGeminiSlot(slot, settings, options = {}) {
+      if (!slot) return false;
+      const existing = activeLeasedRestarts.get(slot);
+      if (existing) return existing;
+      const operation = restartLeasedGeminiSlotCore(slot, settings, options);
+      activeLeasedRestarts.set(slot, operation);
+      try {
+        return await operation;
+      } finally {
+        activeLeasedRestarts.delete(slot);
+      }
+    }
+
+    async function wakeOrphanedReadyLease(slot) {
+      if (!slot?.jobId || activeLeasedRestarts.has(slot)) return false;
+      return recoverOrphanedReadyLease?.(slot) || false;
+    }
+
     async function cancelGeminiRecovery(jobId) {
       const id = String(jobId || "");
       if (!id) return false;
@@ -1411,6 +1697,50 @@
       if (geminiRecoveryOperations.has(operationKey)) return geminiRecoveryOperations.get(operationKey);
       const operation = (async () => {
         if (slot.recoveryCancelled) return false;
+        if (settings.geminiAccountRotationEnabled === true && !slot.accountInitialized) {
+          slot.accountSwitching = true;
+          await persistPool();
+          try {
+            await geminiAccounts.ensureSelected(slot.providerTabId, () => slot.recoveryCancelled || !warmPool.slots.includes(slot));
+            slot.accountInitialized = true;
+            slot.accountProbeRecoveryAttempts = 0;
+          } catch (error) {
+            // Account probing can lose its content-script bridge while the
+            // same physical tab is navigating through Google's chooser. Keep
+            // the slot recoverable and let the durable recovery alarm retry;
+            // do not strand the job or create a replacement tab.
+            if (error?.code === "gemini_account_probe_failed") {
+              slot.accountInitialized = false;
+              slot.state = "recovering";
+              slot.errorCode = error.code;
+              slot.recoveryJobId ||= createId("account-probe-recovery");
+              slot.recoveryStage = "account_probe";
+              slot.accountProbeRecoveryAttempts = Math.max(0, Number(slot.accountProbeRecoveryAttempts) || 0) + 1;
+              await persistPool();
+              // Existing provider pages can retain a dead content-script
+              // bridge after the extension itself is reloaded. Rebind that
+              // same page once, then retry recovery promptly; the durable
+              // alarm remains as a service-worker fallback.
+              await reloadGeminiBridgeOnce(slot);
+              await scheduleGeminiRecoveryAlarm(slot);
+              if (slot.accountProbeRecoveryAttempts <= 2) {
+                const retryTimer = setTimeout(() => {
+                  void recoverGeminiSlotInPlace(slot, settings);
+                }, 1_000);
+                retryTimer?.unref?.();
+              }
+              return false;
+            }
+            slot.state = "failed";
+            slot.errorCode = error?.code || "gemini_account_probe_failed";
+            await persistPool();
+            return false;
+          } finally {
+            slot.accountSwitching = false;
+            slot.documentLoading = false;
+            await persistPool();
+          }
+        }
         // Detached setTimeout callbacks are not durable in a Manifest V3
         // service worker. Keep one persisted browser alarm as a watchdog so a
         // suspended worker resumes this exact physical tab instead of leaving
@@ -1422,11 +1752,16 @@
         slot.recoveryStage = "handoff_batch";
         slot.jobId = "";
         await persistPool();
-        const recovered = await restartLeasedGeminiSlot(slot, settings, {
+        let recovered = await restartLeasedGeminiSlot(slot, settings, {
           timeoutMs: warmTemporaryTimeoutMs,
           inPlaceRecovery: true,
           shouldStop: () => slot.recoveryCancelled === true
         });
+        if (!recovered && slot.errorCode === "gemini_1095" && settings.geminiAccountRotationEnabled === true) {
+          recovered = await recoverGemini1095Slot(slot, settings, {
+            inPlaceRecovery: true, shouldStop: () => slot.recoveryCancelled === true
+          });
+        }
         if (slot.recoveryCancelled) {
           if (warmPool.slots.includes(slot)) {
             slot.state = "failed";
@@ -1508,6 +1843,10 @@
       if (!slotId) return true;
       await restorePoolMetadata();
       const slot = warmPool.slots.find((candidate) => candidate.slotId === slotId);
+      if (slot?.accountRecoveryRunning) {
+        await scheduleGeminiLivenessAlarm(slot);
+        return true;
+      }
       if (livenessAlarm) {
         if (!slot || !isManagedGeminiTemporarySlot(slot)) {
           if (slot) await clearGeminiLivenessAlarm(slot);
@@ -1527,6 +1866,11 @@
             slot.sessionState = "temporary_active";
             await persistPool();
             await scheduleGeminiLivenessAlarm(slot);
+            // This alarm is durable across MV3 service-worker suspension. A
+            // slot may already be READY while a job remains queued because the
+            // original detached drain callback was lost with the old worker.
+            await wakeOrphanedReadyLease(slot);
+            await drainWarmWaiters();
             return true;
           }
           if (isAuthenticationBlocker(inspection.code)
@@ -1539,12 +1883,27 @@
             await notifyPoolStatus();
             return true;
           }
+          if (inspection.code === "gemini_1095" && config.settings.geminiAccountRotationEnabled === true) {
+            slot.errorCode = inspection.code;
+            await recoverGemini1095Slot(slot, config.settings);
+            await scheduleGeminiLivenessAlarm(slot);
+            await drainWarmWaiters();
+            return true;
+          }
           await beginGeminiSessionRecovery(slot, inspection.code);
           return true;
         }
         if (slot.state === "leased") {
           // The active send path owns batch handoff. The liveness watcher must
           // not race it or create a second owner for the same request.
+          await scheduleGeminiLivenessAlarm(slot);
+          return true;
+        }
+        if (slot.state === "preparing") {
+          // READY 1/2 owns this tab until its send and response settle. The
+          // sessionState may still be the pre-Temp probe's "normal_chat";
+          // treating that stale value as a lost session restarts the chat
+          // underneath an in-flight READY prompt.
           await scheduleGeminiLivenessAlarm(slot);
           return true;
         }
@@ -1595,7 +1954,8 @@
       const operationalCount = warmPool.slots.filter((slot) => !["handoff_standby", "retiring"].includes(slot.state)).length;
       if (operationalCount >= warmPool.targetCount && createOptions.allowHandoffOverflow !== true) return null;
       if (warmPool.slots.length >= warmPool.targetCount + (createOptions.allowHandoffOverflow === true ? 1 : 0)) return null;
-      const targetUrl = ownedProviderUrl(settings.provider, settings.temporaryChat);
+      const targetUrl = (settings.provider === "gemini" && settings.geminiAccountRotationEnabled === true
+        ? await geminiAccounts.preferredUrl?.() : "") || ownedProviderUrl(settings.provider, settings.temporaryChat);
       const slot = {
         slotId: createId("slot"),
         providerTabId: null,
@@ -1622,6 +1982,8 @@
         setupResumeAttempts: 0,
         setupErrorCode: "",
         firstBatchDispatchedAt: 0,
+        batchUseCount: 0,
+        laneRole: "",
         errorCode: "",
         jobId: "",
         recoveryAttempts: Math.max(0, Number(recoveryAttempts) || 0),
@@ -1646,7 +2008,9 @@
       slot.providerTabId = tab.id;
       slot.providerWindowId = Number.isInteger(tab.windowId) ? tab.windowId : null;
       slot.windowMode = tab.stvaiWindowMode === "isolated_normal" ? "isolated_normal" : "shared";
-      slot.tabActiveInWindow = tab.active === true || slot.windowMode === "isolated_normal";
+      // The provider tab may be active inside its own window, but the
+      // extension must never use that as a reason to focus or raise Gemini.
+      slot.tabActiveInWindow = false;
       slot.pageVisibility = "unknown";
       slot.pageFocused = false;
       const currentUrlMatches = providerMatchesUrl(settings.provider, tab.url);
@@ -1885,6 +2249,24 @@
             || (slot.state === "restoring" && slot.restoreState === "leased");
           if (slot.state === "retiring" || (wasLeased
             && ((!owner && didRestoreJobs()) || ["completed", "cancelled"].includes(owner?.status)))) {
+            // Completed jobs are omitted from persisted job storage. A lease
+            // left behind by worker suspension therefore is not evidence that
+            // its physical Gemini tab must be deleted and recreated.
+            if (slot.state !== "retiring" && slot.provider === "gemini"
+              && slot.settingsHash === settingsHash
+              && await providerTabMatches(slot.provider, slot.providerTabId, slot.lastKnownUrl)) {
+              delete slot.restoreState;
+              slot.laneRole = "";
+              if (await beginGeminiSessionRecovery(slot)) {
+                if (owner?.poolSlotId === slot.slotId) {
+                  owner.poolSlotId = "";
+                  owner.providerTabId = null;
+                  await persistJob(owner);
+                }
+                void recoverGeminiSlotInPlace(slot, config.settings);
+                continue;
+              }
+            }
             if (await removeOwnedSlot(slot, { removalReason: "restored_job_finished" })) {
               if (owner?.poolSlotId === slot.slotId) {
                 owner.poolSlotId = "";
@@ -2034,6 +2416,7 @@
     function assignWarmSlot(job, slot) {
       slot.state = "leased";
       slot.jobId = job.id;
+      slot.laneRole = "normal";
       slot.errorCode = "";
       job.providerTabId = slot.providerTabId;
       job.warmSessionId = slot.warmSessionId;
@@ -2178,22 +2561,21 @@
       if (!job?.poolSlotId) return;
       await restorePoolMetadata();
       const automation = await readAutomationConfig(job.settings);
-      const keepCompletedTabsForDiagnostics = await developerKeepsFailedTabs();
       let handoff = null;
 
       // A healthy Gemini conversation does not need a physical replacement
-      // after every completed chapter/prefetch job. Re-open Temporary chat in
-      // the same tab, replay READY 1/2, then return that tab to the warm pool.
+      // after every completed chapter/prefetch job. Reuse it for up to the
+      // configured batch limit, then re-open Temporary chat in the same tab,
+      // replay READY 1/2, and return that tab to the warm pool.
       // Besides avoiding visible tab churn, this also removes an unnecessary
       // new-session pressure point that can trigger Gemini's 1095 reset.
       //
-      // Keep the existing handoff path as the fallback: if the in-place reset
-      // cannot be proven READY, the old slot remains available until a fresh
-      // successor has completed setup.
+      // Diagnostic retention applies to failures. Successful Gemini jobs must
+      // use this same-tab path too, rather than keeping every successful chat
+      // outside the pool and opening replacement windows.
       if (job.status === "completed"
         && job.provider === "gemini"
         && automation.consented && automation.enabled
-        && !keepCompletedTabsForDiagnostics
         && (hasEligibleStvTab() || options.preserveWithoutStv)) {
         const reusable = warmPool.slots.find((candidate) => (
           candidate.slotId === job.poolSlotId
@@ -2202,6 +2584,55 @@
         ));
         const settings = warmPool.settings || job.settings;
         if (reusable && settings?.provider === "gemini") {
+          if (options.resetAfterChapter !== true
+            && Math.max(0, Number(reusable.batchUseCount) || 0) < GEMINI_SESSION_BATCH_LIMIT) {
+            let released = false;
+            await withPoolLock(async () => {
+              if (!warmPool.slots.includes(reusable)
+                || reusable.state !== "leased"
+                || reusable.jobId !== job.id) return;
+              reusable.state = "ready";
+              reusable.jobId = "";
+              reusable.laneRole = "";
+              reusable.errorCode = "";
+              reusable.firstBatchDispatchedAt = 0;
+              reusable.handoffPredecessorSlotId = "";
+              reusable.handoffSuccessorSlotId = "";
+              await persistPool();
+              released = true;
+            });
+            if (released) {
+              job.poolSlotId = "";
+              await notifyPoolStatus();
+              if (!options.deferDrain) await drainWarmWaiters();
+              return;
+            }
+          }
+          if (options.deferReadyReset === true) {
+            // Completion must not wait for New chat + Temporary Chat + READY
+            // 1/2. Detach this lease first so it cannot be assigned twice, then
+            // recover the same physical tab durably in the background. Other
+            // READY slots remain immediately available for next-chapter work.
+            reusable.state = "recovering";
+            reusable.jobId = "";
+            reusable.laneRole = "";
+            reusable.errorCode = "";
+            reusable.recoveryJobId ||= createId("setup-recovery");
+            reusable.recoveryCancelled = false;
+            reusable.recoveryStage = "clear_owned_prompt";
+            await persistPool();
+            await scheduleGeminiRecoveryAlarm(reusable);
+            job.poolSlotId = "";
+            // Start the reset before this MV3 event returns. A detached
+            // zero-delay timer can be discarded when Chrome suspends the
+            // service worker, leaving the completed Temporary Chat visible
+            // until the much later alarm wake-up. The persisted alarm remains
+            // the durable fallback if the worker is interrupted mid-reset.
+            void recoverGeminiSlotInPlace(reusable, settings);
+            await notifyPoolStatus();
+            if (!options.deferDrain) await drainWarmWaiters();
+            return;
+          }
           const restarted = await restartLeasedGeminiSlot(reusable, settings, {
             timeoutMs: warmTemporaryTimeoutMs
           });
@@ -2213,6 +2644,7 @@
                 || reusable.jobId !== job.id) return;
               reusable.state = "ready";
               reusable.jobId = "";
+              reusable.laneRole = "";
               reusable.errorCode = "";
               reusable.handoffPredecessorSlotId = "";
               reusable.handoffSuccessorSlotId = "";
@@ -2242,10 +2674,7 @@
             // proves which physical tab must be recovered.
             await scheduleGeminiRecoveryAlarm(reusable);
             job.poolSlotId = "";
-            const recoveryTimer = setTimeout(() => {
-              void recoverGeminiSlotInPlace(reusable, settings);
-            }, 0);
-            recoveryTimer?.unref?.();
+            void recoverGeminiSlotInPlace(reusable, settings);
             await notifyPoolStatus();
             if (!options.deferDrain) await drainWarmWaiters();
             return;
@@ -2322,9 +2751,7 @@
       if (!job || job.poolSlotId || !Number.isInteger(job.providerTabId)) return;
       const tabId = job.providerTabId;
       job.providerTabId = null;
-      if (typeof tabs.remove === "function") {
-        try { await tabs.remove(tabId); } catch (_error) { /* already closed */ }
-      }
+      await removeProviderTabSafely(tabId, job.provider, job.providerUrl || "", "legacy_job_cleanup");
     }
 
     async function openProvider(job) {
@@ -2339,7 +2766,9 @@
         if (warmPool.slots.length + activeLegacyCount >= warmPool.targetCount) {
           throw new Error("provider_tab_limit");
         }
-        tab = await createOwnedProviderTab(ownedProviderUrl(
+        const savedAccountUrl = job.provider === "gemini" && job.settings.geminiAccountRotationEnabled === true
+          ? await geminiAccounts.preferredUrl?.() : "";
+        tab = await createOwnedProviderTab(savedAccountUrl || ownedProviderUrl(
           job.provider,
           job.settings.temporaryChat
         ), job.provider);
@@ -2364,7 +2793,7 @@
       verifiedReadySlotByPriority, acquireJapaneseLookupSlot,
       releaseJapaneseLookupSlot, cancelJapaneseLookup, markWarmSlotFailed,
       markWarmSlotRecovered, validateSetupProviderResult, recheckSetupMarker,
-      prepareWarmSlot, restartLeasedGeminiSlot, recoverGeminiSlotInPlace, cancelGeminiRecovery, handleGeminiRecoveryAlarm, createWarmSlot, replaceFailedWarmSlot, fillWarmPool,
+      prepareWarmSlot, restartLeasedGeminiSlot, wakeOrphanedReadyLease, recoverGeminiSlotInPlace, recoverGemini1095Slot, cancelGeminiRecovery, handleGeminiRecoveryAlarm, createWarmSlot, replaceFailedWarmSlot, fillWarmPool,
       ensureWarmPool, performWarmPoolReconfiguration, reconfigureWarmPool,
       cleanupWarmPool, scheduleLastStvCleanup, assignWarmSlot, acquireWarmSlot,
       drainWarmWaiters, spendJobSlot, closeLegacyProviderTab, openProvider

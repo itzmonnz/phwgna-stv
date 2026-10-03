@@ -95,7 +95,7 @@
         trace.elapsedBucket = elapsedBucket();
         options.onTrace?.(structuredClone(trace));
       },
-      fail(code) { this.update({ stage: "failed", failureCode: String(code || "next_chapter_source_unavailable") }); }
+      fail(code) { this.update({ failureStage: trace.stage, stage: "failed", failureCode: String(code || "next_chapter_source_unavailable") }); }
     };
   }
 
@@ -239,7 +239,7 @@
       let payloadTransport = 'POST';
       let warmupSent = false;
       const retryDelays = (Array.isArray(options.sourceRetryDelaysMs)
-        ? options.sourceRetryDelaysMs : [1_000, 2_000])
+        ? options.sourceRetryDelaysMs : [1_000, 1_200])
         .slice(0, 2).map(value => Math.min(5_000, Math.max(0, Number(value) || 0)));
       for (let attempt = 0; ; attempt += 1) {
         let dataResponse;
@@ -361,7 +361,7 @@
       // endpoint source against a hidden same-origin rendered page before any AI
       // work or cache write. The rendered page is authoritative when they differ.
       if (typeof options.loadRenderedChapter === 'function') {
-        trace?.update({ stage: 'validate_rendered_source', renderedSource: { attempted: true, state: 'loading' } });
+        trace?.update({ stage: 'validate_rendered_source', renderedSource: { attempted: true, state: 'loading', reason: 'none' } });
         try {
           renderedChapter = prepareChapter(await options.loadRenderedChapter({ url, signal }));
         } catch (error) {

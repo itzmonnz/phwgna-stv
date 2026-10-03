@@ -262,6 +262,18 @@
       },
       domResolution: sanitizeDomResolution(options.domResolution),
       runtime: {
+        sendFailures: (Array.isArray(runtime.sendFailures) ? runtime.sendFailures : []).slice(-8).map(entry => ({
+          at: Math.max(0, Math.min(Number.MAX_SAFE_INTEGER, Number(entry?.at) || 0)),
+          code: safeEnum(entry?.code, ["send_not_confirmed", "provider_busy_timeout", "provider_busy", "ui_changed",
+            "captcha", "temporary_unavailable", "temporary_session_lost", "cancelled", "provider_error"], "provider_error"),
+          requestId: /^batch_\d+_\d{4}$/.test(String(entry?.requestId || "")) ? entry.requestId : "",
+          batchAttempt: Math.max(0, Math.min(3, Number(entry?.batchAttempt) || 0)),
+          composerState: safeEnum(entry?.composerState,
+            ["not_found", "empty_before_write", "filled", "write_failed", "cleared_after_send"], "not_found"),
+          sendButtonState: safeEnum(entry?.sendButtonState, ["not_found", "disabled", "enabled", "clicked",
+            "stop_visible", "submission_confirmed", "click_unconfirmed"], "not_found"),
+          clickAttempted: entry?.clickAttempted === true
+        })),
         stage: safeEnum(runtime.stage, [
           "idle", "preparing", "sending", "waiting_response", "completed", "error", "cancelled"
         ], "idle"),

@@ -28,7 +28,8 @@
     "https://generativelanguage.googleapis.com/*",
     "https://api.openai.com/*",
     "https://api.deepseek.com/*",
-    "https://raw.githubusercontent.com/itzmonnz/phwgna-stv-updates/*"
+    "https://raw.githubusercontent.com/itzmonnz/phwgna-stv-updates/*",
+    "https://accounts.google.com/SignOutOptions*"
   ],
   "background": {
     "service_worker": "src/background.js"
@@ -90,6 +91,7 @@
         "http://14.225.254.182/*"
       ],
       "js": [
+        "src/shared/tts-pronunciation.js",
         "src/content/stv-ui.js",
         "src/content/stv-site-navigation.js"
       ],
@@ -166,11 +168,21 @@
         "https://gemini.google.com/*"
       ],
       "js": [
+        "src/content/gemini-account-probe.js",
         "src/shared/core.js",
         "src/content/provider-common.js",
         "src/content/gemini-dom-resolver.js",
         "src/content/gemini.js",
         "src/content/provider-diagnostics.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://accounts.google.com/SignOutOptions*"
+      ],
+      "js": [
+        "src/content/gemini-account-probe.js"
       ],
       "run_at": "document_idle"
     }

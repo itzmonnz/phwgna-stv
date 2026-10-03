@@ -20,22 +20,26 @@
   const AUTOMATION_CONSENT_VERSION = 2;
   const MIN_POOL_TABS = 2;
   const MAX_POOL_TABS = 10;
+  const GEMINI_SESSION_BATCH_LIMIT = 5;
   const READY_TIMEOUT_MS = 30_000;
   const GEMINI_SETUP_HARD_TIMEOUT_MS = 90_000;
   const CHATGPT_READY_TIMEOUT_MS = 13_000;
   const READY_SEND_TIMEOUT_MS = 5_000;
   const CHATGPT_READY_SEND_TIMEOUT_MS = 8_000;
-  const GEMINI_SETUP_STEP_GAP_MS = 2_000;
-  const GEMINI_SETUP_SLOT_GAP_MS = 2_000;
-  const GEMINI_SETUP_REJECTION_COOLDOWN_MS = 60_000;
+  // Gemini does not need a multi-second pause between the two technical
+  // READY prompts. Keep a short gap for DOM replacement, while avoiding the
+  // old pacing delay that made every new Temporary Chat noticeably slower.
+  const GEMINI_SETUP_STEP_GAP_MS = 600;
+  const GEMINI_SETUP_SLOT_GAP_MS = 600;
+  const GEMINI_SETUP_REJECTION_COOLDOWN_MS = 36_000;
   const GEMINI_SEND_NOT_CONFIRMED_RETRIES = 15;
   const CHATGPT_SETUP_INACTIVITY_MS = 30_000;
   const CHATGPT_SETUP_HARD_TIMEOUT_MS = 60_000;
   const READY_MARKER_GRACE_MS = 2_000;
   const MAX_WARM_REPLACEMENTS = 2;
   const PERFORMANCE_HEARTBEAT_MS = 2_000;
-  const JOB_RECORD_VERSION = 2;
-  const POOL_RECORD_VERSION = 7;
+  const JOB_RECORD_VERSION = 5;
+  const POOL_RECORD_VERSION = 8;
   const OWNED_TABS_RECORD_VERSION = 1;
   const DOM_PROFILE_RECORD_VERSION = 1;
   const AUTHENTICATION_BLOCKERS = new Set([
@@ -45,7 +49,7 @@
     "content_refused", "ui_changed", "temporary_unavailable", "temporary_session_lost", "provider_unreachable",
     "background_performance_degraded",
     "provider_tab_failed", "warm_evidence_missing", "invalid_setup_response",
-    "send_not_confirmed", "response_timeout"
+    "send_not_confirmed", "response_timeout", "gemini_account_probe_failed"
   ]);
   const DOM_PROFILE_ROLES = new Set([
     "composer", "send", "stop", "response", "completion", "temporaryLauncher", "temporaryActive"
@@ -110,7 +114,8 @@
       && typeof items[index].text === "string"
       && items[index].text.trim().length > 0
       && (items[index].origin !== "convert"
-        || cachedConvertText(items[index].text) === String(block.convert || "").trim())
+        || (items[index].fallbackReason === "safety_placeholder"
+          && cachedConvertText(items[index].text) === String(block.convert || "").trim()))
     ));
   }
 
@@ -127,6 +132,7 @@
     AUTOMATION_CONSENT_VERSION,
     MIN_POOL_TABS,
     MAX_POOL_TABS,
+    GEMINI_SESSION_BATCH_LIMIT,
     READY_TIMEOUT_MS,
     GEMINI_SETUP_HARD_TIMEOUT_MS,
     CHATGPT_READY_TIMEOUT_MS,

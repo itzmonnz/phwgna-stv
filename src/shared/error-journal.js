@@ -32,6 +32,7 @@
     "line_count_mismatch", "response_id_mismatch", "invalid_response", "incomplete_response",
     "response_timeout", "send_not_confirmed", "content_refused", "provider_unreachable",
     "provider_unavailable", "network_error", "provider_error", "ui_changed", "temporary_unavailable", "temporary_session_lost",
+    "gemini_1095", "gemini_accounts_cooling_down", "gemini_paid_account_missing", "gemini_account_identity_changed", "gemini_account_probe_failed",
     "background_performance_degraded",
     "login_required", "login_window_open", "captcha", "security_verification", "login_browser_rejected",
     "batch_recovery_exhausted", "provider_tab_close_failed", "provider_origin_mismatch",
@@ -297,13 +298,23 @@
       });
     }
 
+    async function recent(limit = 5) {
+      return enqueue(async () => {
+        const incidents = await readIncidents();
+        await writeIncidents(incidents);
+        const safeLimit = Math.max(1, Math.min(10, boundedInteger(limit, 10) || 5));
+        const nowValue = now();
+        return incidents.slice(-safeLimit).reverse().map(value => publicIncident(value, nowValue));
+      });
+    }
+
     async function clear() {
       return enqueue(async () => {
         return writeIncidents([]);
       });
     }
 
-    return Object.freeze({ append, latest, clear });
+    return Object.freeze({ append, latest, recent, clear });
   }
 
   return Object.freeze({ createErrorJournal, STORAGE_KEY, DEFAULT_TTL_MS, DEFAULT_LIMIT });

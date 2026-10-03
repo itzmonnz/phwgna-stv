@@ -102,6 +102,7 @@
             provider: "gemini",
             ...(safeConfig || {})
           });
+          if (safeConfig?.ui && typeof safeConfig.ui === "object") Object.assign(patch, safeConfig.ui);
         }
         await writeState(patch);
         await openOnboarding();

@@ -19,12 +19,44 @@
       try { payload = JSON.parse(input); } catch (_) { return null; }
     }
     if (!payload || typeof payload !== "object" || Array.isArray(payload)
-      || payload.format !== CONFIG_FORMAT || payload.version !== 1) return null;
-    const limits = Object.freeze({ systemPrompt: 250_000, userPrompt: 250_000, nameGuide: 1_000_000, ttsPronunciationGuide: 20_000 });
+      || payload.format !== CONFIG_FORMAT || ![1, 2, 3].includes(payload.version)) return null;
+    const limits = Object.freeze({ systemPrompt: 250_000, refusalSystemPrompt: 250_000, userPrompt: 250_000, nameGuide: 1_000_000, ttsPronunciationGuide: 20_000 });
     const result = {};
     for (const [key, limit] of Object.entries(limits)) {
+      if (key === "refusalSystemPrompt" && payload.version < 2) continue;
+      if (key === "userPrompt" && payload.version >= 2) continue;
       if (typeof payload[key] !== "string" || payload[key].length > limit) return null;
       result[key] = payload[key];
+    }
+    if (payload.version >= 3) {
+      const providers = new Set(["chatgpt", "gemini", "openrouter_api", "gemini_api", "openai_api", "deepseek_api"]);
+      if (providers.has(payload.provider)) result.provider = payload.provider;
+      const tabCount = Math.trunc(Number(payload.webAiTabCount));
+      if (tabCount >= 2 && tabCount <= 10) result.webAiTabCount = tabCount;
+      for (const key of ["temporaryChat", "warmPoolEnabled", "autoTranslateOnChapter", "geminiSafetyOff", "geminiRefusalFallbackEnabled", "geminiAccountRotationEnabled"]) {
+        if (typeof payload[key] === "boolean") result[key] = payload[key];
+      }
+      for (const key of ["openrouterModel", "geminiApiModel", "openaiApiModel", "deepseekApiModel"]) {
+        if (typeof payload[key] === "string" && payload[key].length <= 200) result[key] = payload[key];
+      }
+      const temperature = Number(payload.apiTemperature);
+      if (Number.isFinite(temperature) && temperature >= 0 && temperature <= 2) result.apiTemperature = temperature;
+      const ui = payload.ui;
+      if (ui && typeof ui === "object" && !Array.isArray(ui)) {
+        const safeUi = {};
+        const scales = new Set([0.5, 0.75, 1, 1.25, 1.5]);
+        if (scales.has(Number(ui.stvaiUiScale))) safeUi.stvaiUiScale = Number(ui.stvaiUiScale);
+        for (const [key, value] of Object.entries(ui)) {
+          if (/^stvai(?:NavigationExpanded|ToolbarCollapsed)$/.test(key) && typeof value === "boolean") safeUi[key] = value;
+          if (/^stvaiZoom(?:General|Story)Percent$/.test(key)
+            && Number.isInteger(value) && value >= 25 && value <= 500) safeUi[key] = value;
+          if (/^stvai(?:TtsOverlayPositionV1|ToolbarPositionV2|NameEditorPositionV2|NameManagerPositionV2)$/.test(key)
+            && Number.isFinite(value?.x) && Number.isFinite(value?.y)) {
+            safeUi[key] = { x: Math.min(1, Math.max(0, value.x)), y: Math.min(1, Math.max(0, value.y)) };
+          }
+        }
+        result.ui = safeUi;
+      }
     }
     return result;
   }

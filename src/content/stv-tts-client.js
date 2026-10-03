@@ -11,7 +11,7 @@
   const STATUS_EVENT = "stvai:tts-status";
   const ACTIONS = new Set(["arm", "inspect", "open", "watch", "complete", "pause", "resume", "stop", "release", "pronunciation-open", "pronunciation-close", "preview"]);
   const LISTENING_STATES = new Set(["absent", "ready", "playing", "user_paused", "menu_paused", "waiting_batch", "completed"]);
-  const STATUS_CODES = new Set(["chapter_changed", "player_stopped", "reader_opened", "native_listen_requested"]);
+  const STATUS_CODES = new Set(["chapter_changed", "player_stopped", "reader_opened", "native_listen_requested", "private_audio_lost", "watchdog_rearmed"]);
 
   function createRequestId() {
     return `tts-${Date.now()}-${Math.random().toString(36).slice(2)}`;

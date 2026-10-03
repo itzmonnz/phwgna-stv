@@ -57,7 +57,8 @@
   });
   const AUTOMATION_CONSENT_VERSION = 2;
   const POOL_STATES = new Set(["preparing", "ready", "leased", "error", "disabled"]);
-  const PREFETCH_SOURCE_RETRY_DELAYS_MS = Object.freeze([5_000, 10_000, 20_000, 30_000]);
+  const PREFETCH_SOURCE_RETRY_DELAYS_MS = Object.freeze([3_000, 6_000, 12_000, 18_000]);
+  const TTS_CLAIM_RETRY_DELAYS_MS = Object.freeze([120, 300, 600]);
   const SHARED_DOM_UI_SELECTOR = [
     ".stvai-toolbar",
     ".stvai-consent-backdrop",
@@ -309,6 +310,13 @@
       login_browser_rejected: "Google từ chối cửa sổ tự động. Hãy mở cửa sổ Đăng nhập Chrome AI, đăng nhập xong rồi bấm Tiếp tục.",
       "rate-limit": "Dịch vụ AI đang giới hạn lượt. Hãy chờ rồi bấm Tiếp tục.",
       rate_limited: "Dịch vụ AI đang giới hạn lượt. Hãy chờ rồi bấm Tiếp tục.",
+      gemini_1095: "Gemini báo lỗi 1095. Batch và tiến độ được giữ lại.",
+      gemini_1095_retry: "Gemini lỗi 1095 — đang thử lại trên cùng tài khoản Pro (tối đa 5 lần).",
+      gemini_account_rotated: "Đã đổi tài khoản Pro — đang dựng lại chat tạm và READY trên cùng tab.",
+      gemini_paid_account_missing: "Không xác nhận được tài khoản Gemini Pro/Ultra. Đã dừng và giữ tiến độ.",
+      gemini_accounts_cooling_down: "Các tài khoản Pro đều đang nghỉ sau lỗi 1095. Hãy chờ rồi bấm Tiếp tục.",
+      gemini_account_identity_changed: "Thứ tự tài khoản Google đã đổi. Đã dừng để tránh dùng nhầm tài khoản.",
+      gemini_account_probe_failed: "Chưa kiểm tra được tài khoản Gemini. Giữ tab hiện tại và tiến độ.",
       "temporary-chat": "Temporary Chat chưa sẵn sàng. Kiểm tra tab AI rồi bấm Tiếp tục.",
       temporary_unavailable: "Temporary Chat chưa sẵn sàng. Kiểm tra tab AI rồi bấm Tiếp tục.",
       temporary_session_lost: "Gemini đã rơi về chat thường — đang tự mở lại Temporary Chat…",
@@ -323,11 +331,25 @@
       invalid_api_key: "API key không hợp lệ hoặc không có quyền truy cập.",
       insufficient_credit: "Tài khoản API không đủ số dư/hạn mức.",
       safety_setting_unsupported: "Model Gemini này không chấp nhận Off Safety. Hãy đổi model hoặc tắt tùy chọn này.",
+      refusal_api_content_refused: "Gemini API vẫn từ chối batch này dù đã bật Safety OFF. Batch được giữ nguyên.",
+      refusal_fallback_limit_reached: "Chương này đã dùng đủ 5 batch cứu bằng Gemini API. Batch hiện tại được giữ nguyên.",
+      refusal_api_fallback: "Gemini Web từ chối — đang chuyển đúng batch này sang Gemini API với Safety OFF…",
+      refusal_api_failed_waiting_normal: "Gemini API chưa cứu được batch bị từ chối; đang giữ kết quả batch thường đã gửi trước khi dừng.",
+      refusal_sanitize_retry: "Gemini Web từ chối — đang gửi lại batch với cơ chế lược bỏ câu nhạy cảm…",
+      refusal_system2_ready: "System Prompt 2 đã READY — đang gửi lại đúng batch bị từ chối…",
+      refusal_system2_retry: "System Prompt 2 đang thử lại lần 2 cho đúng batch bị từ chối…",
+      refusal_api_retry: "Phản hồi cứu bằng Gemini API chưa hợp lệ — đang thử lại một lần…",
+      returning_to_web_pool: "Batch cứu đã hoàn tất — đang trở lại các tab Gemini Web…",
       api_returned_source_language: "API trả lại nội dung tiếng Trung. Đã thử sửa một lần và dừng để không chèn bản dịch sai.",
       provider_unavailable: "Dịch vụ API đang không khả dụng. Tiến độ đã được giữ lại.",
       network_error: "Không kết nối được dịch vụ API. Kiểm tra mạng rồi bấm Tiếp tục.",
       response_timeout: "Dịch vụ API phản hồi quá lâu. Tiến độ đã được giữ lại.",
-        content_refused: "AI từ chối nội dung. Đã dừng; không tự thay bằng Convert.",
+      content_refused: "AI từ chối nội dung. Đã dừng; không tự thay bằng Convert.",
+      refusal_system2_rescue: "Gemini từ chối batch — đang mở lại chat tạm và thử System Prompt 2.",
+      refusal_parallel_started: "System Prompt 2 đang cứu batch bị từ chối; tab thường tiếp tục dịch batch kế tiếp.",
+      refusal_queue_full: "Đang chờ System Prompt 2 xử lý bớt hàng đợi 18+.",
+      waiting_refusal_lane: "Tab thường đã chạy hết phần có thể gửi; đang chờ System Prompt 2.",
+      returning_to_web_pool: "Batch đã được cứu qua API — đang quay lại các tab Gemini Web.",
         diagnostic_tab_retained: "Đã giữ tab AI lỗi để chẩn đoán. Hãy lấy báo cáo rồi tự đóng tab.",
         send_not_confirmed: "Chưa xác nhận gửi — đã dừng để tránh gửi trùng.",
         provider_unreachable: "Mất kết nối với tab AI — đã dừng để tránh gửi trùng.",
@@ -349,6 +371,7 @@
       webAiTabCount: normalized.webAiTabCount,
       temporaryChat: normalized.temporaryChat,
       systemPrompt: normalized.systemPrompt,
+      refusalSystemPrompt: normalized.refusalSystemPrompt,
       userPrompt: normalized.userPrompt,
       nameGuide: normalized.nameGuide,
       ttsPronunciationGuide: normalized.ttsPronunciationGuide,
@@ -359,6 +382,7 @@
       openaiApiModel: normalized.openaiApiModel,
       deepseekApiModel: normalized.deepseekApiModel,
       geminiSafetyOff: normalized.geminiSafetyOff,
+      geminiRefusalFallbackEnabled: normalized.geminiRefusalFallbackEnabled,
       apiTemperature: normalized.apiTemperature,
       warmPoolEnabled: normalized.warmPoolEnabled === true || value?.warmPoolEnabled === true,
       autoTranslateOnChapter: normalized.autoTranslateOnChapter === true || value?.autoTranslateOnChapter === true
@@ -436,6 +460,8 @@
       signal,
       prefetchRetryDelaysMs = PREFETCH_SOURCE_RETRY_DELAYS_MS,
       prefetchRetryWait = waitForPrefetchRetry,
+      ttsClaimRetryDelaysMs = TTS_CLAIM_RETRY_DELAYS_MS,
+      ttsClaimRetryWait = waitForPrefetchRetry,
       historyNavigation: navigatedThroughHistory = false,
       sameDocumentNavigation = false,
       controllerGeneration,
@@ -448,6 +474,7 @@
       view: "stv",
       translations: Object.create(null),
       translationOrigins: Object.create(null),
+      apiBatchIndexes: new Set(),
       fallbackCount: 0,
       completedBatches: 0,
       completedBatchIndexes: new Set(),
@@ -503,11 +530,14 @@
     let prefetchStatus = "";
     let prefetchCompletedSuccessfully = false;
     let toolbarStatus = "Sẵn sàng";
+    let recoveryStatus = "";
+    let recoveryKind = "pending";
     let sourceRecoveryAttempts = 0;
     let sourceRecoveryPending = false;
     let batchReplayPending = false;
     let captchaRetry = false;
     let poolCaptchaCode = "";
+    let captchaToast = null;
     let originalViewPinned = false;
     const captchaToastMessage = "Dính captcha, xác thực xong ấn dịch lại";
     const previousFlow = diagnosticState?.chapterFlow && typeof diagnosticState.chapterFlow === "object"
@@ -562,7 +592,12 @@
     function setCaptchaRetry(reason) {
       captchaRetry = ["captcha", "security_verification"].includes(reason);
       if (captchaRetry) {
-        ui.showToast?.(document, captchaToastMessage, { timeoutMs: 3_000 });
+        if (!captchaToast?.isConnected) {
+          captchaToast = ui.showToast?.(document, captchaToastMessage, { persistent: true }) || null;
+        }
+      } else if (!poolCaptchaCode) {
+        captchaToast?.remove?.();
+        captchaToast = null;
       }
       return captchaRetry;
     }
@@ -584,7 +619,13 @@
       prefetchAbort?.abort();
       prefetchAbort = null;
       const jobId = prefetchJobId;
-      const cancelJob = Boolean(jobId) && !(options.preserveCompleted === true && prefetchCompletedSuccessfully);
+      // Keep a partial prefetch job's committed batches in the background
+      // cache when navigation interrupts the remaining work.  The next
+      // chapter start reconciles hit/miss indexes and only sends missing
+      // batches again.
+      const hasCommittedBatches = Number(state.prefetchCompleted) > 0;
+      const cancelJob = Boolean(jobId) && !(options.preserveCompleted === true
+        && (prefetchCompletedSuccessfully || hasCommittedBatches));
       prefetchJobId = "";
       prefetchCompletedSuccessfully = false;
       prefetchStatus = "";
@@ -609,14 +650,47 @@
         next_chapter_source_unstable: 'nguồn STV trả về chưa ổn định',
         next_chapter_identity_mismatch: 'nguồn không khớp chương kế',
         next_chapter_redirect_invalid: 'STV chuyển hướng sang trang khác',
-        prefetch_not_allowed: 'chưa được phép hoặc đang có tác vụ khác',
+        prefetch_busy: 'tác vụ trước chưa nhường chỗ',
+        prefetch_consent_required: 'chưa cho phép tự động dịch trước',
+        prefetch_parent_invalid: 'chương hiện tại đã đổi cài đặt hoặc mất phiên xác nhận',
+        prefetch_not_allowed: 'không còn đủ điều kiện dịch trước',
         captcha: 'cần xử lý CAPTCHA trên tab AI',
         login_required: 'cần đăng nhập trên tab AI',
         rate_limited: 'AI đang giới hạn lượt',
+        gemini_1095: 'Gemini báo lỗi 1095',
+        gemini_1095_retry: 'Gemini lỗi 1095; đang thử lại tài khoản Pro',
+        gemini_account_rotated: 'đã đổi tài khoản Pro; đang dựng lại READY',
+        gemini_accounts_cooling_down: 'các tài khoản Pro đang nghỉ sau lỗi 1095',
+        gemini_paid_account_missing: 'chưa xác nhận được tài khoản Pro',
+        gemini_account_identity_changed: 'thứ tự tài khoản đã thay đổi',
+        gemini_account_probe_failed: 'chưa kiểm tra được tài khoản Gemini',
+        content_refused: 'Gemini từ chối nội dung; batch được giữ nguyên',
+        refusal_system2_rescue: 'Gemini từ chối nội dung; đang mở chat tạm và gửi System Prompt 2',
+        refusal_system2_ready: 'System Prompt 2 đã READY; đang gửi lại đúng batch bị từ chối',
+        invalid_setup_response: 'System Prompt 2 trả marker READY không hợp lệ',
+        warm_evidence_missing: 'đã thấy READY nhưng chưa xác nhận được phiên System Prompt 2',
+        response_timeout: 'Gemini phản hồi quá lâu sau khi đã nhận yêu cầu',
+        send_not_confirmed: 'chưa xác nhận được Gemini đã nhận batch',
+        invalid_response: 'Gemini trả kết quả không đúng định dạng batch',
+        batch_recovery_exhausted: 'đã dùng hết lượt tự cứu cho đúng batch này',
+        refusal_api_content_refused: 'Gemini API vẫn từ chối đúng batch này',
+        api_key_missing: 'System Prompt 2 chưa cứu được và chưa có Gemini API key dự phòng',
+        api_client_unavailable: 'không khởi động được kết nối Gemini API dự phòng',
+        provider_unavailable: 'không còn tab AI sẵn sàng để cứu batch bị từ chối',
+        provider_unreachable: 'mất kết nối với tab AI trong lúc cứu batch bị từ chối',
+        provider_tab_failed: 'tab AI gặp lỗi trong lúc xử lý batch',
+        provider_tab_closed: 'tab AI đã bị đóng trong lúc xử lý batch',
+        provider_tab_close_failed: 'không thể khởi tạo lại an toàn tab AI đang lỗi',
+        temporary_session_lost: 'Gemini mất Temporary Chat trong lúc cứu batch bị từ chối',
+        warm_session_lost: 'tab AI mất phiên READY trước khi nhận batch',
+        warm_setup_failed: 'không hoàn tất được bước chuẩn bị tab AI',
+        provider_busy_timeout: 'tab AI bận quá lâu nên chưa thể gửi batch',
+        provider_origin_mismatch: 'tab AI đã chuyển sang trang không đúng',
+        not_runnable: 'tác vụ đã đổi trạng thái trước khi batch được gửi',
         user_cancelled: 'đã hủy',
         tool_disabled: 'tool đang tắt'
       };
-      return labels[code] || 'AI chưa sẵn sàng; kiểm tra tab AI';
+      return labels[code] || 'quy trình dịch trước bị gián đoạn; batch chưa bị mất';
     }
 
     function reportPrefetchFailure(code) {
@@ -653,6 +727,25 @@
       return '';
     }
 
+    async function claimListeningSession(options) {
+      let claim = await sendRuntime(runtime, {
+        type: "STVAI_TTS_SESSION_CLAIM_NEXT",
+        url: chapterUrl,
+        ...options
+      }).catch(() => null);
+      for (const delayMs of ttsClaimRetryDelaysMs) {
+        if (claim?.claimed || claim?.retry !== true || !active || signal?.aborted) break;
+        const mayRetry = await ttsClaimRetryWait(delayMs, signal);
+        if (!mayRetry || !active || signal?.aborted) break;
+        claim = await sendRuntime(runtime, {
+          type: "STVAI_TTS_SESSION_CLAIM_NEXT",
+          url: chapterUrl,
+          ...options
+        }).catch(() => null);
+      }
+      return claim;
+    }
+
     async function loadRenderedPrefetchChapter({ url, signal: requestSignal }) {
       const safeUrl = prefetch?.safeChapterUrl?.(url, location.href);
       if (!safeUrl) throw new Error('next_chapter_identity_mismatch');
@@ -663,15 +756,29 @@
       frame.setAttribute('aria-hidden', 'true');
       frame.setAttribute('title', 'STV AI source probe');
       let settled = false;
+      // A same-origin probe is a real STV document. Native site code can
+      // mistake its hidden load for a visit and advance `tusach` to the
+      // prefetched chapter. Freeze the reader's history while the probe lives.
+      let historyRaw;
+      let historyGuard;
+      try { historyRaw = window.localStorage.getItem('tusach'); } catch (_) { historyRaw = null; }
+      const restoreHistory = () => {
+        try {
+          if (window.localStorage.getItem('tusach') === historyRaw) return;
+          if (historyRaw === null) window.localStorage.removeItem('tusach');
+          else window.localStorage.setItem('tusach', historyRaw);
+        } catch (_) { /* The normal history observer reports storage errors. */ }
+      };
+      historyGuard = window.setInterval(restoreHistory, 50);
       const cleanup = () => {
         requestSignal?.removeEventListener('abort', aborted);
+        if (historyGuard) window.clearInterval(historyGuard);
+        restoreHistory();
         frame.remove();
       };
-      let resolveLoad;
       const aborted = () => {
         if (settled) return;
         settled = true;
-        resolveLoad?.(false);
         cleanup();
       };
       requestSignal?.addEventListener('abort', aborted, { once: true });
@@ -680,17 +787,16 @@
         throw new Error('next_chapter_cancelled');
       }
       try {
-        const loaded = new Promise((resolve) => {
-          resolveLoad = resolve;
-          frame.addEventListener('load', () => resolve(true), { once: true });
-          frame.addEventListener('error', () => resolve(false), { once: true });
-        });
         frame.src = `${safeUrl}${safeUrl.includes('#') ? '&' : '#'}stvai-source-probe`;
         (document.body || document.documentElement).append(frame);
-        if (!await loaded || requestSignal?.aborted) throw new Error(requestSignal?.aborted
-          ? 'next_chapter_cancelled' : 'next_chapter_source_unstable');
-        const frameDocument = frame.contentDocument;
-        if (!frameDocument || !await waitForChapterRoot(frameDocument, 15_000, requestSignal, 500)) {
+        // A native STV verification/navigation may replace the frame document
+        // after its first load. Follow that same frame instead of waiting on
+        // the disconnected document and creating another probe after timeout.
+        let renderedReason = 'source_wait_timeout';
+        const frameDocument = await waitForRenderedChapterRoot(frame, 15_000, requestSignal, 500,
+          reason => { renderedReason = reason; });
+        if (!frameDocument) {
+          setPrefetchDiagnostic({ renderedSource: { attempted: true, state: 'failed', reason: renderedReason } });
           throw new Error(requestSignal?.aborted ? 'next_chapter_cancelled' : 'next_chapter_source_unstable');
         }
         const extracted = extractor.extractChapter(frameDocument, { url: safeUrl, preserveNative: false });
@@ -814,6 +920,8 @@
       ui.setToolbarState(toolbar, {
         state: state.status,
         status: toolbarStatus,
+        recoveryStatus,
+        recoveryKind,
         running: state.status === "running" || state.status === "waiting-provider",
         paused: state.status === "paused",
         completed: state.completedBatches,
@@ -831,9 +939,30 @@
       });
     }
 
-    function reportAction(value) {
+    function setRecoveryStatus(value, kind = "pending") {
+      recoveryStatus = String(value || "").trim();
+      recoveryKind = kind;
+      if (active && toolbar) updateToolbar();
+    }
+
+    function reportAction(value, options = {}) {
       updateToolbar(value);
-      ui.showToast?.(document, value, { kind: "notice", timeoutMs: 1_500 });
+      ui.showToast?.(document, value, {
+        kind: "notice",
+        timeoutMs: Math.max(1_500, Number(options.timeoutMs) || 1_500)
+      });
+    }
+
+    function syncApiBatchNotice() {
+      ui.setApiBatchNotice?.(document, Array.from(state.apiBatchIndexes));
+    }
+
+    function refusalApiNotice(message) {
+      const suppliedModel = String(message?.apiModel || "").trim();
+      const model = /^[a-z0-9._:/-]{1,128}$/i.test(suppliedModel)
+        ? suppliedModel
+        : settings.geminiApiModel;
+      return `Đang sử dụng API dịch nội dung 18+ · Model: ${model}`;
     }
 
     function listeningCanQueue() {
@@ -890,18 +1019,22 @@
       });
     }
 
-    async function recoverChangedChapterSource() {
+    function refreshChapterSource() {
       renderView("stv");
-      updateToolbar("Nguồn STV vừa thay đổi — đang đọc lại chương…");
-      if (!active || signal?.aborted) return;
       copyrightGuard?.destroy();
       copyrightGuard = undefined;
       nameEditorInstance?.bind(null);
       nativeSync?.destroy();
+      chapter = extractor.extractChapter(document);
+      if (prefetch?.prepareChapter) chapter = prefetch.prepareChapter(chapter);
+      nativeSync = createNativeSyncForChapter();
+    }
+
+    async function recoverChangedChapterSource() {
+      updateToolbar("Nguồn STV vừa thay đổi — đang đọc lại chương…");
+      if (!active || signal?.aborted) return;
       try {
-        chapter = extractor.extractChapter(document);
-        if (prefetch?.prepareChapter) chapter = prefetch.prepareChapter(chapter);
-        nativeSync = createNativeSyncForChapter();
+        refreshChapterSource();
         state.activeJobId = null;
         state.status = "idle";
         originalViewPinned = false;
@@ -977,7 +1110,9 @@
         updateToolbar("Đã chặn dữ liệu cũ vì nguồn STV vừa thay đổi; đang tự đọc lại chương…");
         void enqueue(recoverChangedChapterSource);
       } else {
-        updateToolbar("Đã chặn dữ liệu dịch không khớp nội dung gốc; giữ nguyên bản STV hiện tại.");
+        updateToolbar(sourceChanged
+          ? "Nguồn STV lại thay đổi; bản dịch đã nhận vẫn được giữ ở nền. Bấm Dịch AI để đọc lại nguồn và kiểm tra cache."
+          : "Đã chặn dữ liệu dịch không khớp nội dung gốc; giữ nguyên bản STV hiện tại.");
       }
       return true;
     }
@@ -1109,6 +1244,9 @@
       nameEditorInstance?.close?.();
       renderView("translation");
       try {
+        const refreshed = await refreshControllerSettings(storage, core, settings);
+        if (!active || generation !== ttsGeneration) return;
+        settings = refreshed.settings;
         const session = ttsSessionId
           ? await sendRuntime(runtime, { type: "STVAI_TTS_SESSION_UPDATE", sessionId: ttsSessionId,
             state: "playing_next", nextUrl: nextListeningUrl() })
@@ -1297,9 +1435,17 @@
             retryCount += 1;
             const delayBucket = prefetchRetryDelayBucket(delayMs);
             setPrefetchDiagnostic({ stage: 'waiting_source', failureCode: error?.message,
-              sourceWait: { state: 'waiting', retryCount, nextDelayBucket: delayBucket } });
+              sourceWait: { state: 'waiting', retryCount, nextDelayBucket: delayBucket },
+              lastSourceFailure: {
+                code: ['next_chapter_source_unstable', 'next_chapter_source_unavailable', 'next_chapter_fetch_failed',
+                  'next_chapter_timeout', 'next_chapter_identity_mismatch'].includes(error?.message)
+                  ? error.message : 'next_chapter_source_unavailable',
+                stage: diagnosticState?.prefetch?.failureStage || 'unknown',
+                renderedReason: diagnosticState?.prefetch?.failureStage === 'validate_rendered_source'
+                  ? diagnosticState?.prefetch?.renderedSource?.reason || 'none' : 'none'
+              } });
             const failureLabel = prefetchErrorLabel(error?.message);
-            reportPrefetch(`${failureLabel.charAt(0).toUpperCase()}${failureLabel.slice(1)} — tự thử lại sau ${delayBucket.replace('s', ' giây')} (lần ${retryCount})…`);
+            reportPrefetch(`${failureLabel.charAt(0).toUpperCase()}${failureLabel.slice(1)} — tự thử lại sau ${delayMs / 1_000} giây (lần ${retryCount})…`);
             if (!await prefetchRetryWait(delayMs, controller.signal)) return;
           }
         }
@@ -1324,16 +1470,27 @@
         setPrefetchDiagnostic({ stage: "dispatch_job", failureCode: "none",
           sourceWait: { state: 'resolved', retryCount, nextDelayBucket: 'none' } });
         reportPrefetch(`Đang dịch trước chương kế 0/${result.batches.length}…`);
-        const response = await sendRuntime(runtime, message);
+        let response;
+        const admissionRetryDelays = [250, 750, 900, 1_800];
+        for (let attempt = 0; attempt <= admissionRetryDelays.length; attempt += 1) {
+          response = await sendRuntime(runtime, message);
+          if (response?.reason !== 'prefetch_busy' || attempt >= admissionRetryDelays.length) break;
+          const delayMs = admissionRetryDelays[attempt];
+          reportPrefetch(`Tác vụ trước chưa nhường chỗ — tự thử lại sau ${delayMs < 1_000 ? `${delayMs} mili giây` : `${delayMs / 1_000} giây`}…`);
+          if (!await prefetchRetryWait(delayMs, controller.signal)) return;
+          if (!active || generation !== prefetchGeneration || controller.signal.aborted
+            || state.status !== "completed" || setupSnapshot !== core.stableSettingsPayload(settings)) return;
+        }
+        if (response?.ok && typeof response.jobId === 'string' && response.jobId) prefetchJobId = response.jobId;
         if (active && generation === prefetchGeneration && state.status === "completed") {
           if (response?.status === "completed") {
             state.prefetchCompleted = state.prefetchTotal;
             state.prefetchRunning = false;
-            state.prefetchCacheable = !response.fallbackCount;
+            state.prefetchCacheable = response.cacheable !== false;
             prefetchCompletedSuccessfully = true;
             setPrefetchDiagnostic({ stage: "completed", failureCode: "none" });
             reportPrefetch(response.fallbackCount
-              ? 'Dịch trước có câu Convert — không lưu cache chương kế.'
+              ? `Đã chuẩn bị ${result.batches.length}/${result.batches.length} batch chương kế; có ${response.fallbackCount} câu dùng Convert gốc.`
               : `Đã chuẩn bị ${result.batches.length}/${result.batches.length} batch chương kế.`);
           }
           else if (!response?.ok) {
@@ -1366,6 +1523,26 @@
         return;
       }
       if (!keepListening) await stopListening();
+      // A previous source recovery can be exhausted while the site continues
+      // updating its tokens. Never replay cache against that stale snapshot.
+      const sourceEvidence = sourceAttachmentEvidence();
+      if (!sourceEvidence.ok) {
+        try {
+          if (!["source_token_detached", "source_token_changed", "source_context_detached",
+            "source_context_changed"].includes(sourceEvidence.reason)) {
+            throw new Error("Chapter identity changed");
+          }
+          refreshChapterSource();
+          const refreshedEvidence = sourceAttachmentEvidence();
+          if (!refreshedEvidence.ok) throw new Error("Nguồn STV chưa ổn định; hãy thử lại sau.");
+          sourceRecoveryAttempts = 0;
+          traceChapterFlow("source_refreshed", { reason: sourceEvidence.reason });
+        } catch (_error) {
+          state.status = "error";
+          updateToolbar("Không thể đọc lại nguồn STV; tiến độ ở nền được giữ lại. Hãy thử lại sau.");
+          return;
+        }
+      }
       let jobId = resumedJobId || createJobId();
       state.activeJobId = jobId;
       state.status = "waiting-provider";
@@ -1375,6 +1552,8 @@
       state.totalBatches = 1;
       state.translations = Object.create(null);
       state.translationOrigins = Object.create(null);
+      state.apiBatchIndexes = new Set();
+      syncApiBatchNotice();
       state.fallbackCount = 0;
       state.firstBatchReady = false;
       traceChapterFlow("start_reset", { attachedIndexes: [], visibleIndexes: [] });
@@ -1404,9 +1583,19 @@
           reportAction("Áp dụng Bộ Name mới nên phải dịch lại.");
         }
         state.totalBatches = Math.max(1, Number(response.totalBatches) || 1);
+        if (response.status !== "completed" && Array.isArray(response.apiBatchIndexes)) {
+          for (const index of response.apiBatchIndexes.map(Number)) {
+            if (Number.isInteger(index) && index >= 0 && index < state.totalBatches) {
+              state.apiBatchIndexes.add(index);
+            }
+          }
+          syncApiBatchNotice();
+        }
         traceChapterFlow("start_response", {
           cachedIndexes: Array.isArray(response.cachedBatches)
             ? response.cachedBatches.map(batch => Number(batch?.batchIndex)) : [],
+          cacheHitIndexes: Array.isArray(response.cacheHitIndexes) ? response.cacheHitIndexes : [],
+          cacheMissIndexes: Array.isArray(response.cacheMissIndexes) ? response.cacheMissIndexes : [],
           attachedIndexes: [], visibleIndexes: [], reason: String(response.status || "waiting_provider").replaceAll("-", "_")
         });
         if (response.status !== "completed" && Array.isArray(response.cachedBatches)) {
@@ -1422,6 +1611,10 @@
             });
           }
         }
+        // Cache attachment can reject changed source and queue recovery. The
+        // background's running status must not erase that failure or restart
+        // rendering against the same invalid snapshot.
+        if (state.status === "error") return;
         if (response.status === "completed") {
           // The direct reply may arrive before (or without) the completion event.
           // Render its results through the same idempotent path before finishing.
@@ -1551,8 +1744,11 @@
       const nextCaptchaCode = ["captcha", "security_verification"].includes(pool.errorCode)
         ? pool.errorCode
         : "";
-      if (nextCaptchaCode && nextCaptchaCode !== poolCaptchaCode) {
-        ui.showToast?.(document, captchaToastMessage, { timeoutMs: 3_000 });
+      if (nextCaptchaCode && !captchaToast?.isConnected) {
+        captchaToast = ui.showToast?.(document, captchaToastMessage, { persistent: true }) || null;
+      } else if (!nextCaptchaCode && poolCaptchaCode && !captchaRetry) {
+        captchaToast?.remove?.();
+        captchaToast = null;
       }
       poolCaptchaCode = nextCaptchaCode;
       state.pool = {
@@ -1571,6 +1767,10 @@
       if (pool.uiDiagnostic) state.pool.uiDiagnostic = pool.uiDiagnostic;
       if (diagnosticState && typeof diagnosticState === "object") {
         diagnosticState.pool = { ...state.pool };
+      }
+      if (nextCaptchaCode) {
+        updateToolbar("Gemini đang yêu cầu CAPTCHA — xác thực trên tab AI, rồi bấm Dịch lại nếu chương đang tạm dừng.");
+        return;
       }
       if (state.status === 'completed' && prefetchStatus) return;
       if (["running", "waiting-provider", "paused", "error", "cancelled"].includes(state.status)) return;
@@ -1664,6 +1864,9 @@
         return true;
       }
       if (message?.type === "STVAI_PREFETCH_STATUS" && message.jobId === prefetchJobId) {
+        if (message.status === "running" && message.reason === "refusal_api_fallback") {
+          ui.showToast?.(document, refusalApiNotice(message), { kind: "notice", timeoutMs: 8_000 });
+        }
         setPrefetchDiagnostic({
           stage: message.status === "completed" ? "completed"
             : ['paused', 'failed', 'cancelled', 'error'].includes(message.status) ? "failed" : "running",
@@ -1679,9 +1882,21 @@
           state.prefetchRunning = !failed && message.status !== 'completed' && state.prefetchCacheable;
           if (message.status === 'completed') prefetchCompletedSuccessfully = true;
           else if (failed) prefetchCompletedSuccessfully = false;
-          if (message.cacheable === false) reportPrefetch('Dịch trước có câu Convert — không lưu cache chương kế.');
-          else if (failed) reportPrefetchFailure(message.reason);
-          else reportPrefetch(message.status === 'completed'
+          if (message.cacheable === false) reportPrefetch('Dịch trước có placeholder chưa có Convert gốc — không lưu cache chương kế.');
+          else if (failed && message.recoveryOutcome === 'api_fallback') {
+            reportPrefetch('Dịch trước dừng: Gemini API chưa cứu được batch 18+; kết quả các batch thường đã hoàn tất vẫn được giữ.');
+          } else if (failed) reportPrefetchFailure(message.reason);
+          else if (message.reason === 'refusal_system2_rescue') {
+            reportPrefetch('Dịch trước: Gemini từ chối nội dung — đang mở chat tạm và gửi System Prompt 2…');
+          } else if (message.reason === 'refusal_system2_ready') {
+            reportPrefetch('Dịch trước: System Prompt 2 đã READY — đang gửi lại đúng batch bị từ chối…');
+          } else if (message.reason === 'refusal_system2_succeeded') {
+            reportPrefetch('Dịch trước: System Prompt 2 đã dịch thành công batch bị từ chối.');
+          } else if (message.reason === 'refusal_api_fallback') {
+            reportPrefetch('Dịch trước: System Prompt 2 chưa cứu được batch; đang dùng Gemini API dự phòng…');
+          } else if (message.reason === 'refusal_api_failed_waiting_normal') {
+            reportPrefetch('Dịch trước: Gemini API chưa cứu được batch; đang lưu kết quả batch thường đã gửi trước khi dừng…');
+          } else reportPrefetch(message.status === 'completed'
             ? `Đã chuẩn bị ${completed}/${total} batch chương kế.`
             : `Đang dịch trước chương kế ${completed}/${total}…`);
         }
@@ -1714,6 +1929,10 @@
             && message.items.every((item) => item?.origin !== "convert"
               && state.translationOrigins[item?.id] === "ai");
           if (completedIndex === 0 && merged && batchIsAi) state.firstBatchReady = true;
+          if (message.cached !== true && message.apiUsed === true) {
+            state.apiBatchIndexes.add(completedIndex);
+            syncApiBatchNotice();
+          }
         }
         if (state.view === "translation") renderView("translation");
         else if (!originalViewPinned && state.completedBatchIndexes.has(0)) renderView("translation");
@@ -1740,8 +1959,13 @@
         if (message.status === "paused") {
           state.status = "paused";
           setCaptchaRetry(message.reason);
+          const receiptTab = Number.isInteger(message.batchDiagnostic?.receipt?.tabId)
+            ? ` trên tab ${message.batchDiagnostic.receipt.tabId}` : "";
           updateToolbar(message.reason === 'batch_recovery_exhausted'
-            ? `Batch ${batchNumber} chưa hoàn tất — bấm Tiếp tục để thử lại.` : reasonLabel(message.reason));
+            ? `Batch ${batchNumber} chưa hoàn tất — bấm Tiếp tục để thử lại.`
+            : message.reason === "ui_changed"
+              ? `Không nhận diện được giao diện AI${receiptTab}. Batch ${batchNumber} được giữ lại.`
+              : reasonLabel(message.reason));
           if (state.ttsActive || state.ttsPending || ttsOpening) enqueue(() => stopListening());
         } else if (message.status === "cancelled") {
           captchaRetry = false;
@@ -1756,7 +1980,42 @@
         } else {
           captchaRetry = false;
           state.status = message.status === "waiting-provider" ? "waiting-provider" : "running";
-          if (message.reason === "auto_retry") {
+          const normalNumber = Number.isInteger(Number(message.normalBatchIndex))
+            ? Number(message.normalBatchIndex) + 1 : null;
+          const rescueNumber = Number.isInteger(Number(message.rescueBatchIndex))
+            ? Number(message.rescueBatchIndex) + 1 : null;
+          const rescueQueueCount = Math.max(0, Math.min(2, Number(message.rescueQueueCount) || 0));
+          const parallelSummary = message.rescueActive
+            ? `System Prompt 2${rescueNumber ? ` đang cứu batch ${rescueNumber}` : " đang chờ batch 18+"}`
+              + `${normalNumber ? `; tab thường đang dịch batch ${normalNumber}` : ""}`
+              + `${rescueQueueCount ? `; còn ${rescueQueueCount} batch chờ` : ""}.`
+            : "";
+          if (message.recoveryOutcome === "succeeded" || message.reason === "refusal_system2_succeeded") {
+            setRecoveryStatus("System Prompt 2 đã dịch thành công batch bị từ chối.", "success");
+            if (parallelSummary) updateToolbar(parallelSummary);
+          } else if (message.recoveryOutcome === "api_fallback") {
+            setRecoveryStatus("System Prompt 2 chưa cứu được batch; đang dùng Gemini API dự phòng.", "fallback");
+            if (message.reason === "refusal_api_fallback") reportAction(refusalApiNotice(message), { timeoutMs: 8_000 });
+          } else if (message.reason === "refusal_system2_rescue") {
+            setRecoveryStatus("Đang mở chat tạm và thử System Prompt 2 cho batch bị từ chối…", "pending");
+          } else if (message.reason === "refusal_system2_ready") {
+            setRecoveryStatus("System Prompt 2 đã READY; đang gửi lại đúng batch bị từ chối…", "pending");
+          } else if (message.reason === "refusal_system2_retry") {
+            const attempt = Math.max(1, Math.min(2, Number(message.system2Attempts) || 2));
+            setRecoveryStatus(`System Prompt 2 đang thử lại lần ${attempt}/2 cho batch ${rescueNumber || batchNumber}…`, "pending");
+          } else if (["response_missing", "rechecking_response"].includes(message.reason)) {
+            const receipt = message.batchDiagnostic?.receipt;
+            const suffix = receipt?.tabId ? ` trên tab ${receipt.tabId}` : "";
+            updateToolbar(`Batch ${batchNumber}: chưa nhận biên nhận${suffix}; đang kiểm tra lại đúng tab…`);
+          } else if (["refusal_parallel_started", "refusal_queue_full", "waiting_refusal_lane"].includes(message.reason)) {
+            setRecoveryStatus(parallelSummary || reasonLabel(message.reason), "pending");
+            updateToolbar(parallelSummary || reasonLabel(message.reason));
+          } else if (message.reason === "refusal_api_fallback") {
+            reportAction(refusalApiNotice(message), { timeoutMs: 8_000 });
+          } else if (message.reason === "refusal_api_failed_waiting_normal") {
+            setRecoveryStatus(reasonLabel(message.reason), "fallback");
+            updateToolbar(reasonLabel(message.reason));
+          } else if (message.reason === "auto_retry") {
             updateToolbar(`Mất phản hồi từ AI. Đang thử lại ${Number(message.retryAttempt) || 1}/2…`);
           } else if (message.reason === 'retrying_whole_batch') {
             const expected = Math.max(0, Number(message.batchDiagnostic?.expectedCount) || 0);
@@ -1803,13 +2062,21 @@
           state.completedBatchIndexes = new Set(Array.from({ length: state.totalBatches }, (_, index) => index));
         }
         state.completedBatches = state.completedBatchIndexes.size;
+        if (message.cached !== true && Array.isArray(message.apiBatchIndexes)) {
+          for (const index of message.apiBatchIndexes.map(Number)) {
+            if (Number.isInteger(index) && index >= 0 && index < state.totalBatches) {
+              state.apiBatchIndexes.add(index);
+            }
+          }
+          syncApiBatchNotice();
+        }
         state.status = "completed";
         state.firstBatchReady = chapterRendered && chapter.translatableBlocks.every(
           (block) => state.translationOrigins[block.id] === "ai"
         );
         if (state.view === "translation" || !originalViewPinned) renderView("translation");
         updateToolbar(state.fallbackCount
-          ? `Có ${state.fallbackCount} câu dùng Convert — chương này không được lưu cache`
+          ? `Đã dịch xong; ${state.fallbackCount} câu dùng Convert gốc do giới hạn an toàn.`
           : message.cached ? "Đã tải bản dịch từ bộ nhớ đệm." : "Đã dịch xong chương.");
         recordAttachmentEvidence("attached", "confirmed", message, message.items?.length);
         traceChapterFlow("job_complete", { reason: "completed" });
@@ -2111,8 +2378,12 @@
         if (message?.type === "STVAI_SETTINGS_CHANGED") {
           void refreshControllerSettings(storage, core, settings).then(({ settings: next, changed }) => {
             if (!active || !changed) return;
+            const pronunciationChanged = next.ttsPronunciationGuide !== settings.ttsPronunciationGuide;
             settings = next;
             nameManagerInstance?.setNameGuide?.(settings.nameGuide);
+            if (pronunciationChanged) {
+              ttsOverlayDrag?.refreshPronunciationGuide?.(settings.ttsPronunciationGuide);
+            }
             if (["running", "waiting-provider"].includes(state.status)) {
               reportAction("Đã nhận cài đặt mới; sẽ áp dụng cho lượt dịch tiếp theo.");
             }
@@ -2142,6 +2413,9 @@
           if (state.status === "completed" && state.ttsActive && !ttsCompleted) enqueue(completeListening);
         }
         if (code === "player_stopped") void stopListening("Đã dừng nghe sách.");
+        if (code === "private_audio_lost") {
+          enqueue(() => stopListening("Đã dừng Nghe sách vì Artemis đã ngắt kết nối. Bấm Phát để nghe lại."));
+        }
         if (code === "chapter_changed") {
           ttsOverlayDrag?.setEnabled?.(false);
           state.ttsActive = false;
@@ -2159,8 +2433,8 @@
         const navigationType = document.defaultView?.performance?.getEntriesByType?.("navigation")?.[0]?.type;
         const historyNavigation = navigatedThroughHistory
           || navigationType === "back_forward";
-        ttsClaim = await sendRuntime(runtime, { type: "STVAI_TTS_SESSION_CLAIM_NEXT", url: chapterUrl,
-          historyNavigation, reload: !sameDocumentNavigation && navigationType === "reload" }).catch(() => null);
+        ttsClaim = await claimListeningSession({ historyNavigation,
+          reload: !sameDocumentNavigation && navigationType === "reload" });
         if (!active || signal?.aborted) return api;
         if (ttsClaim?.ok && ttsClaim.claimed && typeof ttsClaim.sessionId === "string") {
           ttsSessionId = ttsClaim.sessionId;
@@ -2194,6 +2468,7 @@
       if (toolbar?.announcementTimer) document.defaultView?.clearTimeout?.(toolbar.announcementTimer);
       if (messageListener) runtime.onMessage.removeListener(messageListener);
       toolbar?.root.remove();
+      ui.setApiBatchNotice?.(document, []);
       removePageFilterCompensation();
       copyrightGuard?.destroy();
       copyrightGuard = undefined;
@@ -2299,12 +2574,56 @@
     });
   }
 
+  function waitForRenderedChapterRoot(frame, timeoutMs, signal, settleMs = 500, onFailure) {
+    if (signal?.aborted) return Promise.resolve(null);
+    return new Promise(resolve => {
+      const deadline = Date.now() + timeoutMs;
+      let currentWait = null;
+      let finished = false;
+      const finish = (value, reason = 'source_wait_timeout') => {
+        if (finished) return;
+        finished = true;
+        currentWait?.abort();
+        clearTimeout(timer);
+        frame.removeEventListener('load', check);
+        frame.removeEventListener('error', failed);
+        signal?.removeEventListener('abort', aborted);
+        if (!value) onFailure?.(reason);
+        resolve(value);
+      };
+      const failed = () => finish(null, 'frame_load_failed');
+      const aborted = () => finish(null, 'cancelled');
+      const check = async () => {
+        if (finished) return;
+        currentWait?.abort();
+        const wait = new AbortController();
+        currentWait = wait;
+        let document;
+        try { document = frame.contentDocument; } catch (_) { return; }
+        if (!document || document.URL === 'about:blank') return;
+        const ready = await waitForChapterRoot(document, Math.max(0, deadline - Date.now()), wait.signal, settleMs);
+        if (finished || wait !== currentWait) return;
+        let liveDocument;
+        try { liveDocument = frame.contentDocument; } catch (_) { return; }
+        if (document !== liveDocument) { void check(); return; }
+        finish(ready ? document : null);
+      };
+      const timer = setTimeout(() => finish(null), Math.max(0, timeoutMs));
+      frame.addEventListener('load', check);
+      frame.addEventListener('error', failed);
+      signal?.addEventListener('abort', aborted, { once: true });
+      void check();
+    });
+  }
+
   async function refreshControllerSettings(storage, core, currentSettings) {
     const stored = await storageGet(storage, ["settings"]);
     const next = sanitizedSettings(core, stored.settings || currentSettings);
     return {
       settings: next,
-      changed: core.stableSettingsPayload(next) !== core.stableSettingsPayload(currentSettings)
+      // Pronunciation deliberately does not participate in the translation
+      // cache identity, but it still changes live controller behaviour.
+      changed: JSON.stringify(next) !== JSON.stringify(sanitizedSettings(core, currentSettings))
     };
   }
 
@@ -2463,6 +2782,7 @@
     installPageFilterCompensation,
     setDiagnosticState,
     waitForChapterRoot,
+    waitForRenderedChapterRoot,
     bootstrap
   });
 });

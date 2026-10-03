@@ -16,6 +16,7 @@
     "stvaiTtsOverlayPositionV1", "stvaiToolbarPositionV2",
     "stvaiNameEditorPositionV2", "stvaiNameManagerPositionV2"
   ]);
+  const UI_SCALE_BACKUP_KEY = "stvaiUiScaleBackup";
   const BOOLEAN_KEYS = new Set([
     "transmissionConsent", "ttsConsent", "stvaiNavigationExpanded", "stvaiToolbarCollapsed"
   ]);
@@ -48,8 +49,10 @@
         openaiApiModel: settings.openaiApiModel,
         deepseekApiModel: settings.deepseekApiModel,
         geminiSafetyOff: settings.geminiSafetyOff,
+        geminiRefusalFallbackEnabled: settings.geminiRefusalFallbackEnabled,
         apiTemperature: settings.apiTemperature,
         systemPrompt: settings.systemPrompt,
+        refusalSystemPrompt: settings.refusalSystemPrompt,
         userPrompt: settings.userPrompt,
         ttsPronunciationGuide: settings.ttsPronunciationGuide,
         ttsPronunciationDefaultsVersion: settings.ttsPronunciationDefaultsVersion,
@@ -105,8 +108,9 @@
       if (!isStvSender(sender)) return { ok: false, reason: "unauthorized-sender" };
       const requested = Array.isArray(message.keys) ? message.keys : [message.keys];
       const keys = requested.filter((key) => CLIENT_STORAGE_KEYS.includes(key));
-      const stored = keys.length && storage?.local?.get
-        ? await storageCall(storage.local, "get", keys)
+      const readKeys = keys.includes("stvaiUiScale") ? [...new Set([...keys, UI_SCALE_BACKUP_KEY])] : keys;
+      const stored = readKeys.length && storage?.local?.get
+        ? await storageCall(storage.local, "get", readKeys)
         : {};
       const values = {};
       for (const key of keys) {
@@ -116,7 +120,7 @@
         } else if (POSITION_KEYS.has(key)) {
           const savedPosition = position(stored?.[key]);
           if (savedPosition) values[key] = savedPosition;
-        } else if (key === "stvaiUiScale") values[key] = uiScale(stored?.[key]);
+        } else if (key === "stvaiUiScale") values[key] = uiScale(stored?.[key] ?? stored?.[UI_SCALE_BACKUP_KEY]);
         else if (Object.hasOwn(stored || {}, key)) values[key] = stored[key];
       }
       return { ok: true, values };
@@ -139,6 +143,7 @@
           if (savedPosition) values[key] = savedPosition;
         } else if (key === "stvaiUiScale" && UI_SCALES.includes(Number(source[key]))) {
           values[key] = Number(source[key]);
+          values[UI_SCALE_BACKUP_KEY] = Number(source[key]);
         }
       }
       if (!Object.keys(values).length) return { ok: false, reason: "empty-patch" };

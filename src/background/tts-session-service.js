@@ -143,7 +143,8 @@
         }
         if (message.type === "STVAI_TTS_SESSION_CLAIM_NEXT") {
           if (!session) return { ok: true, claimed: false };
-          const continuingCurrentChapter = message.historyNavigation !== true && message.reload !== true
+          const sameChapterReload = message.reload === true && session.currentUrl === url;
+          const continuingCurrentChapter = message.historyNavigation !== true && !sameChapterReload
             && chapterUrl(message.url) === url && session.currentUrl === url
             && ["playing", "waiting_batch_1", "playing_next"].includes(session.state);
           if (continuingCurrentChapter) {
@@ -157,15 +158,22 @@
           const followsUnlinkedChapter = !session.nextUrl && session.intent === true
             && ["playing", "playing_next", "waiting_next"].includes(session.state)
             && followingUrl(url, session.currentUrl) === url;
-          if (message.historyNavigation === true || message.reload === true || chapterUrl(message.url) !== url
+          if (message.historyNavigation === true || sameChapterReload || chapterUrl(message.url) !== url
             || (session.nextUrl !== url && !followsUnlinkedChapter)) {
-            if (session.currentUrl !== url || message.historyNavigation === true || message.reload === true) await storageCall(sessionStorage, "remove", key);
-            const holdNative = message.historyNavigation !== true && message.reload !== true
+            if (session.currentUrl !== url || message.historyNavigation === true || sameChapterReload) await storageCall(sessionStorage, "remove", key);
+            const holdNative = message.historyNavigation !== true && !sameChapterReload
               && session.currentUrl === url;
             return { ok: true, claimed: false, ...(holdNative ? { holdNative: true } : {}) };
           }
           const live = await tabs.get(tabId).catch(() => null);
-          if (chapterUrl(live?.url) !== url) return { ok: true, claimed: false };
+          const liveUrl = chapterUrl(live?.url);
+          if (liveUrl && liveUrl !== url && liveUrl !== session.currentUrl) {
+            // The verified sender already belongs to the requested chapter.
+            // chrome.tabs.get() may still expose the immediately previous URL
+            // during STV/Artemis navigation; accept that one known stale value,
+            // while a third chapter still blocks the claim safely.
+            return { ok: true, claimed: false, retry: true, holdNative: true };
+          }
           const value = { tabId, currentUrl: url, nextUrl: "", state: "waiting_batch_1", intent: true,
             sessionId: createId("tts-session") };
           await storageCall(sessionStorage, "set", { [key]: value });

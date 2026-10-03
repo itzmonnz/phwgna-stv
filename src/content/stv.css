@@ -75,6 +75,27 @@
   animation: stvai-notice-toast 1.5s both;
 }
 
+.stvai-api-batch-notice {
+  box-sizing: border-box;
+  position: fixed;
+  z-index: 2147483399;
+  top: max(72px, calc(env(safe-area-inset-top) + 72px));
+  left: max(16px, env(safe-area-inset-left));
+  width: fit-content;
+  max-width: min(360px, calc(100vw - 32px));
+  padding: 9px 12px;
+  border: 1px solid rgba(250, 204, 21, 0.62);
+  border-radius: 12px;
+  background: linear-gradient(145deg, rgba(82, 60, 10, 0.9), rgba(43, 34, 12, 0.86));
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.28), inset 0 1px rgba(255, 255, 255, 0.08);
+  color: #fef3c7;
+  font: 700 13px/1.4 "Segoe UI", Arial, sans-serif;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+  backdrop-filter: blur(14px) saturate(1.1);
+  -webkit-backdrop-filter: blur(14px) saturate(1.1);
+}
+
 @keyframes stvai-notice-toast {
   0% { opacity: 0; transform: translateX(-24px) scale(0.98); }
   16%, 78% { opacity: 1; transform: translateX(0) scale(1); }
@@ -1847,6 +1868,20 @@
   overflow-wrap: anywhere;
   white-space: normal;
 }
+
+.stvai-recovery-status {
+  display: block;
+  margin: -2px 0 6px;
+  color: var(--stvai-muted);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.stvai-recovery-status[data-kind="success"] { color: var(--stvai-success); }
+.stvai-recovery-status[data-kind="fallback"],
+.stvai-recovery-status[data-kind="failed"] { color: #fbbf24; }
 
 .stvai-toolbar[data-state="completed"] .stvai-status {
   color: var(--stvai-success);

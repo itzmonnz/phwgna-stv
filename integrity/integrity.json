@@ -63,7 +63,7 @@
     },
     {
       "path": "manifest.json",
-      "sha256": "c14fd919e5624202527ad8c15bbf00bcb19f3440d79b2712555d33a0fe83984d"
+      "sha256": "846a3f8c50b9c0bf73b296dbb93d7bfe2995a91d0cbdedcea3f44a06b70b56fb"
     },
     {
       "path": "onboarding/onboarding.css",
@@ -79,15 +79,15 @@
     },
     {
       "path": "options/options.css",
-      "sha256": "d6730fd7a074509c7189995662ff46fbbc1d1449d8bd1add23564a9f4f4f1df8"
+      "sha256": "1854c73febb1df764c4ea19e3e464ddd25bc24db15682007a9ea87d30a485164"
     },
     {
       "path": "options/options.html",
-      "sha256": "a4edb381b664e9935217aa3b59fb0ddf91df9ea7f960c78bdb716881b824c8e5"
+      "sha256": "8e3cb3d320d030a6dcda7ce592a1e2a653eddf021a740cb46f69dbbd41ad04ef"
     },
     {
       "path": "options/options.js",
-      "sha256": "da85c8a3026f96724a8b0ae12a32dc9976d6f759ea86a0f371e7e3ee2a03863b"
+      "sha256": "5710137c85827580b5f1a096fe62a86c0ed617a0b2eac206fe8bd15846e7eef6"
     },
     {
       "path": "popup/popup.css",
@@ -99,7 +99,7 @@
     },
     {
       "path": "popup/popup.js",
-      "sha256": "92f5a6fe4f453cb0c5296f0725092c59e7e9bc61a8a16952b92b0b72d2cbc246"
+      "sha256": "cd3d3a73f9960113cf06cbd65b7b9841dad03921492f14972403a8c496fa6324"
     },
     {
       "path": "security/OWNER-FINGERPRINT.txt",
@@ -111,19 +111,23 @@
     },
     {
       "path": "src/background.js",
-      "sha256": "8396b897cfbb0661fc7fdc8ecbd7bb2889be09131589b6e1963922780a4f1f1a"
+      "sha256": "d15eae22d13e247dac785de69d21e4bbfc7ce95af8ebeb2df5545d65ad09e4df"
     },
     {
       "path": "src/background/client-service.js",
-      "sha256": "5775dceb1676f3b6c918f3f0083711a529a99c02176e5cbd28824c827692e2d7"
+      "sha256": "d89483db2b7d31d2406b76aa3cc9ea8822c059841919ba5ce8cac2e0f2d049f3"
     },
     {
       "path": "src/background/contracts.js",
-      "sha256": "131bdb20cc7a68f7690eb898d095b79bf99ff624090e53e7ccc8c009ca0615bf"
+      "sha256": "bc89890b6c192c9568aab1a534e8472fefb866d26b9c823d20ded5e1ca9d4652"
     },
     {
       "path": "src/background/controller.js",
-      "sha256": "46d306f74bb8c3124bbd9a19d54ec8c872cd86d27deb0cb3a2bfcfb29cc8d9c7"
+      "sha256": "0fe7ea89d8f85eac9794327c6c53dc5654c713b1f1d6d1d1012f8e189f1e83ce"
+    },
+    {
+      "path": "src/background/gemini-account-service.js",
+      "sha256": "255de8708724eaa3c0a24e5d173e289bd134b1df007d491342b641e98af98faa"
     },
     {
       "path": "src/background/message-router.js",
@@ -131,15 +135,15 @@
     },
     {
       "path": "src/background/provider-pool-service.js",
-      "sha256": "2285628bc6d5d537faf885b728b97f63889025185a41e3965f46c6c08668e52e"
+      "sha256": "174d17480f13ec51800759cb956997aab6315100c8f02c8d4e9f7768e1ea4817"
     },
     {
       "path": "src/background/translation-job-service.js",
-      "sha256": "fbc29923afb9d68b8366257df119aa2c437c42d5ffa4afc3cfccd2e16e3027ff"
+      "sha256": "abfac533802454043b358877af633abe4a3345e99246e6b4b34192d52bbea4c7"
     },
     {
       "path": "src/background/tts-session-service.js",
-      "sha256": "43f431c9b38b9ca40d944eeee3b45f0029125fcea78548cd7de4e16b378ea6a1"
+      "sha256": "f462b5c59623c52554ec9a87463cedb1d67a95aee90405eefca5c687ceaff20a"
     },
     {
       "path": "src/content/chatgpt-dom-resolver.js",
@@ -154,20 +158,24 @@
       "sha256": "ca2622c6fdaba25c6ff162507c88eb1b49bc7d45b50213d8d4fa973a02c4dcde"
     },
     {
+      "path": "src/content/gemini-account-probe.js",
+      "sha256": "c199fbda4ab88ad5db8dda4368c5a913bff1dda4b4a6076f0586cf2ef05a40e9"
+    },
+    {
       "path": "src/content/gemini-dom-resolver.js",
       "sha256": "9e0ce08f43260ae649fafef7c69591deda02f32fc04a5930ad1fd3a1d295162f"
     },
     {
       "path": "src/content/gemini.js",
-      "sha256": "be4696b2ffbf1261936a54e885fcf9fdf9d47ba9bb2c01f2f5e2d772a25527b6"
+      "sha256": "188c5605e4c9202bbd0089e324f2f50a6fd6adee2811d6c4a248a6691e4a7ea1"
     },
     {
       "path": "src/content/provider-common.js",
-      "sha256": "5a15067e4a1da0a9e203182b66de67d8ba6f0e02678cc5d534064efe2fdbc51f"
+      "sha256": "fc36639f726454176a7d5e3e944d17e4b34c71c2ca59c0e6b6edcf2925a48460"
     },
     {
       "path": "src/content/provider-diagnostics.js",
-      "sha256": "d6a075a9a245a93d32193747b0805f00f2af77d5fd1177484d60df731fea9552"
+      "sha256": "807f596c4e1fd6bc9d1ddd4ebe4aac9bb7f4369c53b3cebadee9a5784b56d2af"
     },
     {
       "path": "src/content/stv-account.js",
@@ -175,7 +183,7 @@
     },
     {
       "path": "src/content/stv-diagnostics.js",
-      "sha256": "aa2df64e24a869963fab6fb596c01273fffb8c6db34f4ad1ed70e4cf7223325b"
+      "sha256": "da10bc8fd0d82642c06927ef51ab6d953f12d7392c4d49563d3300bc9baa679c"
     },
     {
       "path": "src/content/stv-extractor.js",
@@ -203,7 +211,7 @@
     },
     {
       "path": "src/content/stv-prefetch.js",
-      "sha256": "7fa05e8cd77a1294654e71cea88a3da532927849426793b7351e8ad676bcba79"
+      "sha256": "ed47962b0553adbe883877edca8928e49fff8e7d67e57f133a15d1446b4b5e0a"
     },
     {
       "path": "src/content/stv-site-navigation.js",
@@ -211,23 +219,23 @@
     },
     {
       "path": "src/content/stv-tts-bridge.js",
-      "sha256": "4b7e574138a2303878db2603f234dbbde1a84d3110babb65e39fd771041235e6"
+      "sha256": "0368f77c157345a3cbe8a27d78f98a983c78cd4f87b4b7fba7e4bb21fa75bf57"
     },
     {
       "path": "src/content/stv-tts-client.js",
-      "sha256": "908f6da5765a552ba476e5ac801854a4dfc12c9fa03a3fb3cc89866871fbb594"
+      "sha256": "79568b5ec7f8ef9093ebadfcb81cc1c300b335b67a4821786f82fdeaca5c57e7"
     },
     {
       "path": "src/content/stv-ui.js",
-      "sha256": "af5d76e74edd0d08153262e0bfb339b0c68a4bef22747fc98e8fa4bf9d192930"
+      "sha256": "aadaa880085fce7e1cc8a802c09e1548afcb1fddfc326275fba6cda19d1d6fad"
     },
     {
       "path": "src/content/stv.css",
-      "sha256": "c167ce2b441bbfb20d4a0b1e19267bb29834742ad7e90a0d03086bc742a4eb24"
+      "sha256": "88970e506bd38d97145ff259efc52972097e7ce0df576adfc31603b90c74a451"
     },
     {
       "path": "src/content/stv.js",
-      "sha256": "a7adc8c94eca370303808f57a135b69db48bfb9a4224b96029c8860922d80f8a"
+      "sha256": "e55d3fe2a69b5ca13c89aa5703aabd5e73608079bcbd822b47c18df7952ff10e"
     },
     {
       "path": "src/shared/account-history-sync.js",
@@ -235,7 +243,7 @@
     },
     {
       "path": "src/shared/api-providers.js",
-      "sha256": "2ca70faed83b86fd3a39d9d2030682bfaf705bcdf9c7907506d97dbd14ebccd6"
+      "sha256": "6df22ea981a6891217b1dcb2cb7a81b94c11867fa0455ebe0acec58d0b232717"
     },
     {
       "path": "src/shared/branding.js",
@@ -243,15 +251,15 @@
     },
     {
       "path": "src/shared/cache.js",
-      "sha256": "7c92a51cffa76fbbfce802f59d06a27c1a81ce745de18fead018f902f380365e"
+      "sha256": "c698dc33e306b20150ee8c1ea9b2708c267abfef66c84b6915d2ecf4012ae081"
     },
     {
       "path": "src/shared/config-file-store.js",
-      "sha256": "7195ff5872258d76427c6c9706687f00f4dbaa4ff9d31ce011e152a36aec56d3"
+      "sha256": "f61e4f820ee26e65ad4b31cb36a807a99ffe15709b664576518bfc6738f892c4"
     },
     {
       "path": "src/shared/core.js",
-      "sha256": "f5a7501a461a926f5f8d2220aeed9c3e9702baf66fa9923ce23883db94e81e87"
+      "sha256": "f94ba25d2fb995d81c9211d48b3c0b88041fa83366e9801f657125ef538001fa"
     },
     {
       "path": "src/shared/data-backup.js",
@@ -263,7 +271,7 @@
     },
     {
       "path": "src/shared/error-journal.js",
-      "sha256": "7746511e8470c6b7ec89c8534e1bbbb9ff99fd02ec9645e81fb3fd92e5bf2bc7"
+      "sha256": "017cbbad724040f3b13276175318c22f0433f72bf003345109a12160a090fa0c"
     },
     {
       "path": "src/shared/history-sync.js",
@@ -291,7 +299,7 @@
     },
     {
       "path": "src/shared/onboarding.js",
-      "sha256": "6fa1d9223eafd6cddc1ad4dd1fd7a8be10f4fe42936b5416070f5e5508e5fc33"
+      "sha256": "c6af72a2323875e88b55307a647fe75b604658d8c4386485ed660085ccaa82d9"
     },
     {
       "path": "src/shared/portable-sync.js",
@@ -327,15 +335,15 @@
     },
     {
       "path": "windows/phwgna-chrome-max-account.ps1",
-      "sha256": "bd1866cdd91d4226832340cee80f41ee007b8fff312c0ae2ec39365f0176b749"
+      "sha256": "096d3e0134d67c740a70f4484669fd5cdb2aeb397ab4bd621fb4c2ec70fc16e4"
     },
     {
       "path": "windows/phwgna-chrome-max.ps1",
-      "sha256": "cd4f7de3ccfb318aa54506952efb1d8e7a576b9a50e51f7dea0787a6aed47c42"
+      "sha256": "781ef83afa6eaa8f58697f58fe77ae0cc253bbb284024c43bdc61c6eeb276856"
     },
     {
       "path": "windows/phwgna-setup-core.ps1",
-      "sha256": "adf5adbb1eec14365179a00b8eeb9350af6c053ccda2db2ca2c656bd13805494"
+      "sha256": "897ec9234b68f7336e24e01f603a437eaea9089138d582423a380db51a3a7709"
     },
     {
       "path": "windows/phwgna-setup-wizard.ps1",
@@ -347,7 +355,7 @@
     }
   ],
   "product": "Phwgna Stv",
-  "sourceCommit": "387bb7c1ccf069766d7300194caae1bc64594988",
+  "sourceCommit": "c9bb19699812f621c4bb9d07d5b127adfb871454",
   "officialRepository": "https://github.com/itzmonnz/phwgna-stv",
   "officialReleaseUrl": "https://github.com/itzmonnz/phwgna-stv/releases/tag/v0.2.8",
   "publicKeyFingerprint": "85ac74c199d0a6028bce843d6f68d7632317912b460aad1a7431193767ec9871"

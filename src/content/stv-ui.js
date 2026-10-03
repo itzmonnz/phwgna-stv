@@ -996,6 +996,7 @@
     const threshold = Math.max(1, Number(options.dragThreshold) || 5);
     const cleanups = new Map();
     const pronunciationClosers = new Map();
+    const pronunciationReloaders = new Map();
     const bindingKinds = new Map();
     let enabled = false;
     let position = sanitizePosition(options.initialPosition);
@@ -1190,6 +1191,7 @@
       let generation = 0;
       let previewTask = 0;
       let saving = false;
+      let loadedDraftGuide = '';
       const duplicateTimers = new Map();
       const sourceKey = value => pronunciation?.sourceKey?.(value)
         || `folded:${String(value || '').trim().normalize('NFC').replace(/\s+/gu, ' ').toLocaleLowerCase('vi')}`;
@@ -1287,6 +1289,20 @@
         }
         return lines.join('\n');
       }
+      function renderGuide(guide) {
+        list.replaceChildren();
+        sampleInput.value = '';
+        sampleResult.textContent = '';
+        const mappings = pronunciation?.parseGuide?.(typeof guide === 'string' ? guide : '') || [];
+        for (const mapping of sortPronunciationMappings(mappings)) addRow(mapping.source, mapping.spoken);
+        loadedDraftGuide = draftGuide();
+      }
+      pronunciationReloaders.set(win, guide => {
+        if (!opened || panel.hidden || saving || draftGuide() !== loadedDraftGuide) return false;
+        renderGuide(guide);
+        status.textContent = '';
+        return true;
+      });
       samplePreview.addEventListener('click', async () => {
         if (saving) return;
         const text = sampleInput.value.trim();
@@ -1350,11 +1366,7 @@
           if (current !== generation || !panel.isConnected || !enabled) return;
           const guide = await options.getPronunciationGuide?.();
           if (current !== generation || !panel.isConnected || !enabled) return;
-          list.replaceChildren();
-          sampleInput.value = '';
-          sampleResult.textContent = '';
-          const mappings = pronunciation?.parseGuide?.(typeof guide === 'string' ? guide : '') || [];
-          for (const mapping of sortPronunciationMappings(mappings)) addRow(mapping.source, mapping.spoken);
+          renderGuide(guide);
           busy(false);
           status.textContent = '';
           (list.querySelector('input') || add).focus({ preventScroll: true });
@@ -1406,6 +1418,7 @@
           if (typeof options.savePronunciationGuide !== 'function') throw new Error('unavailable');
           await options.savePronunciationGuide(guide);
           for (const mapping of sortedMappings) list.append(mapping.row);
+          loadedDraftGuide = draftGuide();
           status.textContent = 'Đã lưu. Áp dụng ở lần mở Nghe sách tiếp theo.';
         } catch (_error) {
           status.textContent = 'Chưa lưu được. Nội dung vẫn được giữ để thử lại.';
@@ -1628,7 +1641,11 @@
       observer = new view.MutationObserver(records => {
         if (!enabled) return;
         for (const [win, close] of pronunciationClosers) {
-          if (!win.isConnected) { close(); pronunciationClosers.delete(win); }
+          if (!win.isConnected) {
+            close();
+            pronunciationClosers.delete(win);
+            pronunciationReloaders.delete(win);
+          }
         }
         for (const record of records) {
           for (const added of record.addedNodes) {
@@ -1648,6 +1665,11 @@
     return {
       refresh,
       reflow,
+      refreshPronunciationGuide(guide) {
+        let refreshed = false;
+        for (const reload of pronunciationReloaders.values()) refreshed = reload(guide) || refreshed;
+        return refreshed;
+      },
       setEnabled(value) {
         enabled = value === true;
         if (enabled) refresh();
@@ -1665,6 +1687,7 @@
         pendingVoiceAnchor = null;
         for (const close of pronunciationClosers.values()) close();
         pronunciationClosers.clear();
+        pronunciationReloaders.clear();
         observer?.disconnect();
         document.removeEventListener?.("click", suppressTransientOverlayClick, true);
         document.removeEventListener?.("click", rememberVoiceAnchor, true);
@@ -1919,13 +1942,17 @@
     const statusArea = element(document, "div", "stvai-status-area");
     const status = element(document, "span", "stvai-status", "Sẵn sàng");
     status.setAttribute("aria-live", "polite");
+    const recoveryStatus = element(document, "span", "stvai-recovery-status");
+    recoveryStatus.hidden = true;
+    recoveryStatus.setAttribute("aria-live", "polite");
+    recoveryStatus.setAttribute("role", "status");
     const progress = element(document, "div", "stvai-progress");
     progress.setAttribute("role", "progressbar");
     progress.setAttribute("aria-label", "Tiến độ dịch chương");
     progress.setAttribute("aria-valuemin", "0");
     progress.setAttribute("aria-valuemax", "1");
     progress.setAttribute("aria-valuenow", "0");
-    statusArea.append(status, progress);
+    statusArea.append(status, recoveryStatus, progress);
     if (document.location?.protocol === "http:") {
       statusArea.prepend(element(document, "span", "stvai-http-warning", "Cảnh báo: kết nối STV không được mã hóa"));
     }
@@ -2057,6 +2084,7 @@
       resume,
       listen,
       status,
+      recoveryStatus,
       progress,
       names: namesButton,
       clearCache,
@@ -2096,15 +2124,46 @@
       toast.setAttribute("aria-live", "assertive");
     }
     document.body.append(toast);
+    if (options.persistent === true) {
+      toast.dataset.persistent = "true";
+      return toast;
+    }
     const defaultTimeout = kind === "notice" ? 1_500 : 3_000;
     const timeoutMs = Math.max(1, Math.min(10_000, Number(options.timeoutMs) || defaultTimeout));
     document.defaultView?.setTimeout?.(() => toast.remove(), timeoutMs);
     return toast;
   }
 
+  function setApiBatchNotice(document, batchIndexes = []) {
+    const indexes = [...new Set((Array.isArray(batchIndexes) ? batchIndexes : [])
+      .map(Number)
+      .filter((index) => Number.isInteger(index) && index >= 0))]
+      .sort((a, b) => a - b);
+    let notice = document.querySelector(".stvai-api-batch-notice");
+    if (!indexes.length) {
+      notice?.remove();
+      return null;
+    }
+    if (!notice) {
+      notice = element(document, "div", "stvai-api-batch-notice");
+      notice.setAttribute("role", "status");
+      notice.setAttribute("aria-live", "polite");
+      document.body.append(notice);
+    }
+    notice.textContent = indexes.map((index) => `Batch ${index + 1} dùng API`).join(" · ");
+    return notice;
+  }
+
   function setToolbarState(toolbar, state) {
     const value = state || {};
     if (typeof value.status === "string") toolbar.status.textContent = value.status;
+    if (toolbar.recoveryStatus) {
+      const recoveryText = typeof value.recoveryStatus === "string" ? value.recoveryStatus.trim() : "";
+      toolbar.recoveryStatus.textContent = recoveryText;
+      toolbar.recoveryStatus.hidden = !recoveryText;
+      toolbar.recoveryStatus.dataset.kind = ["success", "fallback", "pending", "failed"].includes(value.recoveryKind)
+        ? value.recoveryKind : "pending";
+    }
     const total = Math.max(1, Number(value.total) || 1);
     const requestedIndexes = Array.isArray(value.completedIndexes)
       ? value.completedIndexes
@@ -2421,6 +2480,7 @@
     createToolbar,
     announceToolbar,
     showToast,
+    setApiBatchNotice,
     setToolbarState,
     createConsentPanel,
     createAutomationConsentPanel,

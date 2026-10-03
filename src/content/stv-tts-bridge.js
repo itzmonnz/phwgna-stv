@@ -12,8 +12,17 @@
   const RESULT_EVENT = "stvai:tts-result";
   const STATUS_EVENT = "stvai:tts-status";
   const NATIVE_ACTION_EVENT = "stvai:native-action";
+  const PRIVATE_AUDIO_SINK_PATTERN = /steam streaming speakers/i;
   const ACTIONS = new Set(["arm", "inspect", "open", "watch", "complete", "pause", "resume", "stop", "release", "pronunciation-open", "pronunciation-close", "preview"]);
   const AUTO_FOLLOW_IDLE_MS = 3000;
+  // Chromium may briefly omit an audio output while Sunshine/Artemis is
+  // changing the stream. Do not treat one transient device-list snapshot as
+  // a disconnect; require several consecutive misses after the sink was
+  // already verified. A real disconnect still fails closed within ~1.5s.
+  const PRIVATE_AUDIO_MISSING_POLLS = 3;
+  const PRIVATE_AUDIO_STARTUP_RETRIES = 4;
+  const PRIVATE_AUDIO_STARTUP_DELAY_MS = 250;
+  const NATIVE_WATCHDOG_DELAY_MS = 1200;
   const SCROLL_KEYS = new Set(["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " "]);
   const TOOL_SURFACE_SELECTOR = [
     ".stvai-toolbar", ".stvai-navigation", ".stvai-name-editor", ".stvai-name-manager",
@@ -86,6 +95,13 @@
     let followMenuOpen = false;
     let instantListRevealPending = false;
     let instantListRevealTimer = null;
+    let privateAudioSinkId = "";
+    let privateAudioArmed = false;
+    let privateAudioStopped = false;
+    let privateAudioMissingPolls = 0;
+    let privateAudioCheck = Promise.resolve(true);
+    let privateAudioPollTimer = null;
+    let nativeWatchdogTimer = null;
     let pronunciationReplacer = pronunciation.createReplacer([]);
     const GATE_KEY = "stvai:tts-ai-only";
     const ARM_KEY = "stvai:tts-armed";
@@ -147,6 +163,181 @@
         }
       });
     }
+
+    function resetPrivateAudioRoute() {
+      if (privateAudioPollTimer != null) root.clearInterval(privateAudioPollTimer);
+      privateAudioPollTimer = null;
+      privateAudioSinkId = "";
+      privateAudioArmed = false;
+      privateAudioStopped = false;
+      privateAudioMissingPolls = 0;
+    }
+
+    function startPrivateAudioPolling() {
+      if (privateAudioPollTimer != null || !privateAudioArmed) return;
+      // Chromium does not reliably emit devicechange when only the default
+      // output changes. Poll while listening so a Sunshine disconnect cannot
+      // silently move the next sentence to the physical speakers.
+      privateAudioPollTimer = root.setInterval(() => {
+        if (owned || armed) void queuePrivateAudioCheck();
+        else resetPrivateAudioRoute();
+      }, 500);
+    }
+
+    function pauseForPrivateAudioLoss() {
+      if (privateAudioStopped || disposed || (!owned && !armed)) return;
+      privateAudioStopped = true;
+      const player = playerForPage();
+      internally(() => {
+        player?.unWatch?.();
+        player?.stop?.();
+      });
+      emitStatus("private_audio_lost");
+    }
+
+    async function inspectPrivateAudioRoute() {
+      const mediaDevices = root.navigator?.mediaDevices;
+      if (typeof mediaDevices?.enumerateDevices !== "function") return true;
+      let devices;
+      try { devices = await mediaDevices.enumerateDevices(); }
+      catch (_) {
+        // Once Artemis' private sink has been verified, losing the ability to
+        // inspect it must fail closed. Continuing here can leak the next
+        // sentence to the physical speakers during a device transition.
+        if (privateAudioArmed) {
+          pauseForPrivateAudioLoss();
+          return false;
+        }
+        return true;
+      }
+      if (disposed || (!owned && !armed)) return true;
+      const outputs = Array.from(devices || []).filter(device => device?.kind === "audiooutput");
+      // Chrome may expose audio outputs as opaque placeholders until the page
+      // has an output-device permission: deviceId and label are both empty.
+      // This is not evidence that Artemis disappeared. Sunshine's watcher
+      // independently protects the physical speaker on a real disconnect, so
+      // keep playback on the browser default route instead of false-stopping.
+      const hasInspectableOutput = outputs.some(device => device.deviceId || device.label);
+      if (!hasInspectableOutput) {
+        // The permission state can become opaque after the sink was armed.
+        // Drop the stale per-origin id and use the browser default route;
+        // retaining it would make setSinkId throw private_audio_lost.
+        privateAudioSinkId = "";
+        privateAudioArmed = false;
+        privateAudioStopped = false;
+        privateAudioMissingPolls = 0;
+        return true;
+      }
+      const sink = outputs.find(device => device.deviceId !== "default"
+        && PRIVATE_AUDIO_SINK_PATTERN.test(String(device.label || "")));
+      if (!privateAudioArmed) {
+        // Sunshine exposes a separate Steam sink without changing Windows'
+        // default output (usually Realtek). Every TTS media object is pinned
+        // to this sink in preparePrivateAudio, so requiring the default
+        // device to match incorrectly rejects a live Artemis session.
+        if (!sink || !sink.deviceId) {
+          // The first enumerateDevices() call often races Sunshine creating
+          // the Steam sink. Give the device list a short bounded settling
+          // window so the first Play does not fail while a second Play works.
+          for (let attempt = 1; attempt < PRIVATE_AUDIO_STARTUP_RETRIES; attempt++) {
+            await new Promise(resolve => root.setTimeout(resolve, PRIVATE_AUDIO_STARTUP_DELAY_MS));
+            if (disposed || (!owned && !armed)) return true;
+            try { devices = await mediaDevices.enumerateDevices(); }
+            catch (_) { pauseForPrivateAudioLoss(); return false; }
+            const retryOutputs = Array.from(devices || []).filter(device => device?.kind === "audiooutput");
+            const retrySink = retryOutputs.find(device => device.deviceId !== "default"
+              && PRIVATE_AUDIO_SINK_PATTERN.test(String(device.label || "")));
+            if (retrySink?.deviceId) {
+              privateAudioSinkId = String(retrySink.deviceId);
+              privateAudioArmed = true;
+              privateAudioStopped = false;
+              privateAudioMissingPolls = 0;
+              startPrivateAudioPolling();
+              return true;
+            }
+          }
+          pauseForPrivateAudioLoss();
+          return false;
+        }
+        privateAudioSinkId = String(sink.deviceId || "");
+        privateAudioArmed = Boolean(privateAudioSinkId);
+        privateAudioStopped = false;
+        privateAudioMissingPolls = 0;
+        startPrivateAudioPolling();
+        return true;
+      }
+      const sinkStillPresent = outputs.some(device => device.deviceId === privateAudioSinkId
+        && PRIVATE_AUDIO_SINK_PATTERN.test(String(device.label || "")));
+      if (!sinkStillPresent) {
+        // Chromium can rotate the per-origin deviceId when a Sunshine stream
+        // is renegotiated even though the same Steam sink is still present.
+        // Rebind to the matching sink instead of reporting a false disconnect.
+        const replacementSink = outputs.find(device => device.deviceId !== "default"
+          && PRIVATE_AUDIO_SINK_PATTERN.test(String(device.label || "")));
+        if (replacementSink?.deviceId) {
+          privateAudioSinkId = String(replacementSink.deviceId);
+          privateAudioMissingPolls = 0;
+          return true;
+        }
+        privateAudioMissingPolls += 1;
+        if (privateAudioMissingPolls < PRIVATE_AUDIO_MISSING_POLLS) return true;
+        pauseForPrivateAudioLoss();
+        return false;
+      }
+      privateAudioMissingPolls = 0;
+      return true;
+    }
+
+    function queuePrivateAudioCheck() {
+      privateAudioCheck = privateAudioCheck.catch(() => true).then(inspectPrivateAudioRoute);
+      return privateAudioCheck;
+    }
+
+    async function preparePrivateAudio(media) {
+      if (disposed || (!owned && !armed)) return true;
+      const usable = await queuePrivateAudioCheck();
+      if (!usable || privateAudioStopped) return false;
+      if (!privateAudioArmed) return true;
+      if (typeof media?.setSinkId !== "function") {
+        pauseForPrivateAudioLoss();
+        return false;
+      }
+      try {
+        if (String(media.sinkId || "") !== privateAudioSinkId) await media.setSinkId(privateAudioSinkId);
+        return true;
+      } catch (_) {
+        pauseForPrivateAudioLoss();
+        return false;
+      }
+    }
+
+    async function preparePrivateAudioPlayer(player) {
+      const usable = await queuePrivateAudioCheck();
+      if (!usable || privateAudioStopped || !privateAudioArmed) return usable && !privateAudioStopped;
+      const targets = [player?.audioContext, player?.audioElement, player?.provider?.audio, root.ttsUI?.silenceAudio]
+        .filter((target, index, all) => target && all.indexOf(target) === index);
+      for (const target of targets) {
+        if (!await preparePrivateAudio(target)) return false;
+      }
+      return true;
+    }
+
+    function preparePrivateAudioPlayerIfSupported(player) {
+      if (typeof root.navigator?.mediaDevices?.enumerateDevices !== "function") return null;
+      return preparePrivateAudioPlayer(player);
+    }
+
+    intercept(root.HTMLMediaElement?.prototype, "play", method => typeof method !== "function" ? method : function (...args) {
+      if (disposed || (!owned && !armed)) return method.apply(this, args);
+      return preparePrivateAudio(this).then(usable => {
+        if (!usable) throw new Error("private_audio_lost");
+        return method.apply(this, args);
+      });
+    });
+    const onAudioDevicesChanged = () => {
+      if (owned || armed || privateAudioArmed) void queuePrivateAudioCheck();
+    };
+    root.navigator?.mediaDevices?.addEventListener?.("devicechange", onAudioDevicesChanged);
 
     // STV tokenization is synchronous. Exclude native subtrees during that scan,
     // then restore the same nodes/listeners before yielding to the page.
@@ -291,6 +482,18 @@
         // STV also calls stop() for Pause and before jumping to another sentence.
         // Only removeOverlay() represents closing the listening UI/session.
         gateMethod(player, "stop", false, () => Boolean(guardedReader));
+        intercept(player, "createAudioContext", method => typeof method !== "function" ? method : async function (...args) {
+          const result = await method.apply(this, args);
+          const privateRoute = (owned || armed) ? preparePrivateAudioPlayerIfSupported(this) : null;
+          if (privateRoute && !await privateRoute) throw new Error("private_audio_lost");
+          return result;
+        });
+        intercept(player, "playNextSentence", method => typeof method !== "function" ? method : function (...args) {
+          if (disposed || (!owned && !armed)) return method.apply(this, args);
+          const privateRoute = preparePrivateAudioPlayerIfSupported(this);
+          return privateRoute ? privateRoute.then(usable => usable ? method.apply(this, args) : undefined)
+            : method.apply(this, args);
+        });
         return player;
       });
       return value;
@@ -494,6 +697,34 @@
 
     function playerForPage() {
       return root.ttsUI?.player || null;
+    }
+
+    function stopNativeWatchdog() {
+      if (nativeWatchdogTimer != null) root.clearTimeout?.(nativeWatchdogTimer);
+      nativeWatchdogTimer = null;
+    }
+
+    function startNativeWatchdog() {
+      stopNativeWatchdog();
+      if (typeof root.setTimeout !== "function") return;
+      nativeWatchdogTimer = root.setTimeout(() => {
+        nativeWatchdogTimer = null;
+        if (disposed || !owned || menuPaused || documentComplete || chapterChanged()) return;
+        const player = playerForPage();
+        const sentences = player?.tokenizedSentences;
+        const index = Number(player?.currentSentenceIndex);
+        // A transient native audio failure can leave the watcher detached while
+        // the current sentence is still unfinished. Rebuild the sentence list
+        // and arm the same player; never do this at a real/temporary EOF.
+        if (!player || player.isUserStopped === true || player.isPlaying === true
+          || Boolean(player.watchInterval) || !Array.isArray(sentences)
+          || !Number.isInteger(index) || index < 0 || index >= sentences.length) return;
+        internally(() => {
+          root.ttsUI?.extractSentences?.();
+          if (!player.watchInterval && !documentComplete && !menuPaused) player.watch?.(true);
+        });
+        emitStatus("watchdog_rearmed");
+      }, NATIVE_WATCHDOG_DELAY_MS);
     }
 
     function clearSentenceFocus() {
@@ -734,6 +965,8 @@
       guardedUrl = "";
       guardedReader = null;
       pronunciationReplacer = pronunciation.createReplacer([]);
+      stopNativeWatchdog();
+      resetPrivateAudioRoute();
     }
 
     function chapterChanged() {
@@ -751,12 +984,12 @@
         || String(root.location?.href || "") !== guardedUrl;
     }
 
-    function holdForChapter() {
+    function holdForChapter({ notify = true } = {}) {
       if (!guardedContainer) return;
       pausedByTool = false;
       clearGuard();
       stopPlayer(true);
-      emitStatus("chapter_changed");
+      if (notify) emitStatus("chapter_changed");
     }
 
     function inspectListening(requestId) {
@@ -870,34 +1103,45 @@
       menuPaused = false;
       pausedAtBatchEnd = false;
       setOwned(true);
-      try {
-        if (existing?.player) {
-          existing.player.unWatch?.();
-          existing.player.stop?.();
+      const startPlayer = () => {
+        try {
+          if (existing?.player) {
+            existing.player.unWatch?.();
+            existing.player.stop?.();
+          }
+          if (typeof ui.setDocument === "function") ui.setDocument(reader);
+          else {
+            ui.element = reader;
+            ui.player.setDocument(reader);
+          }
+          ui.extractSentences?.();
+          if (existing || !document.querySelector(".tts-control-overlay")) ui.renderOverlay?.();
+          clearSentenceFocus();
+          ui.player.watch?.(true);
+        } catch (_error) {
+          internally(() => {
+            ui.player.unWatch?.();
+            ui.player.stop?.();
+            if (!existing) ui.removeOverlay?.();
+            else if (previousDocument && previousDocument !== reader) ui.player.setDocument?.(previousDocument);
+          });
+          clearGuard();
+          setOwned(false);
+          return { ok: false, requestId, code: "stv_tts_changed" };
         }
-        if (typeof ui.setDocument === "function") ui.setDocument(reader);
-        else {
-          ui.element = reader;
-          ui.player.setDocument(reader);
-        }
-        ui.extractSentences?.();
-        if (existing || !document.querySelector(".tts-control-overlay")) ui.renderOverlay?.();
-        clearSentenceFocus();
-        ui.player.watch?.(true);
-      } catch (_error) {
-        internally(() => {
-          ui.player.unWatch?.();
-          ui.player.stop?.();
-          if (!existing) ui.removeOverlay?.();
-          else if (previousDocument && previousDocument !== reader) ui.player.setDocument?.(previousDocument);
-        });
+        emitStatus("reader_opened");
+        startNativeWatchdog();
+        pausedByTool = false;
+        return { ok: true, requestId, code: "opened" };
+      };
+      const privateRoute = preparePrivateAudioPlayerIfSupported(ui.player);
+      if (privateRoute) return privateRoute.then(usable => {
+        if (usable) return startPlayer();
         clearGuard();
         setOwned(false);
-        return { ok: false, requestId, code: "stv_tts_changed" };
-      }
-      emitStatus("reader_opened");
-      pausedByTool = false;
-      return { ok: true, requestId, code: "opened" };
+        return { ok: false, requestId, code: "private_audio_lost" };
+      });
+      return startPlayer();
     }
 
     async function previewText(command, player) {
@@ -974,7 +1218,11 @@
         setOwned(false);
         return { ok: true, requestId: command.requestId, code: "stopped" };
       }
-      if (chapterChanged()) holdForChapter();
+      // During a fast same-document transition the next controller can issue
+      // its explicit open before the MutationObserver reports the old reader.
+      // Clear that stale reader silently: publishing chapter_changed here
+      // would be received by the new controller and cancel its own open/resume.
+      if (chapterChanged()) holdForChapter({ notify: command.action !== "open" });
       if (command.action === "inspect") return inspectListening(command.requestId);
       if (command.action === "open") {
         setArmed(true);
@@ -1095,6 +1343,9 @@
         instantListRevealPending = false;
         root.removeEventListener?.("scroll", extendManualScrollDeferral, true);
         root.removeEventListener?.("blur", finishAllReadingPointers);
+        root.navigator?.mediaDevices?.removeEventListener?.("devicechange", onAudioDevicesChanged);
+        resetPrivateAudioRoute();
+        stopNativeWatchdog();
         for (const event of ['wheel', 'touchmove', 'keydown', 'pointerdown']) document.removeEventListener(event, onListReadingInput, true);
         if (guardedReader) stopPlayer(true);
         clearGuard();

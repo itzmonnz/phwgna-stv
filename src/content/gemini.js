@@ -47,6 +47,13 @@
     "[role='button'][aria-label='Cuộc trò chuyện mới' i]",
     "[role='button'][aria-label='New chat' i]"
   ];
+  const SIDEBAR_TOGGLE_SELECTORS = [
+    "button[aria-label*='Trình đơn chính' i]",
+    "button[aria-label*='Main menu' i]",
+    "button[aria-label*='Navigation menu' i]",
+    "[role='button'][aria-label*='Trình đơn chính' i]",
+    "[role='button'][aria-label*='Main menu' i]"
+  ];
 
   function runtimeMessage(chromeApi, message) {
     return new Promise((resolve, reject) => {
@@ -100,6 +107,7 @@
     let lastOwnedComposerPhase = "";
     let activeBatchRequestId = "";
     let learnedCurrentDocument = false;
+    let error1095Seen = false;
     const verifiedReadySteps = new Set();
     const now = options.now || Date.now;
     const temporaryLossGraceMs = Math.max(0, Number(options.temporaryLossGraceMs ?? 500) || 0);
@@ -309,6 +317,20 @@
       return domResolver.resolve("stop", { composer: findComposer() }).element || null;
     }
 
+    function hasError1095() {
+      error1095Seen ||= common.pageHasText(document,
+        ["[role='alert']", ".error-message", "mat-error", "[class*='snack']", "[class*='toast']", ".cdk-overlay-container"],
+        /(?:error|lỗi)[^\n]{0,80}\b1095\b/i);
+      return error1095Seen;
+    }
+    // Gemini's toast can disappear before the response poll. Retain only its
+    // numeric classification in this document, never its text or account label.
+    if (document.defaultView?.MutationObserver && document.documentElement) {
+      const errorObserver = new document.defaultView.MutationObserver(() => { hasError1095(); });
+      errorObserver.observe(document.documentElement, { childList: true, subtree: true, characterData: true });
+      document.defaultView.addEventListener?.("pagehide", () => errorObserver.disconnect(), { once: true });
+    }
+
     function getStatus() {
       if (common.pageHasText(
         document,
@@ -338,6 +360,9 @@
         /usage limit|rate limit|too many requests|try again later|reached (?:the|your) limit/i
       )) {
         return { state: "paused", code: "rate_limited", message: "Gemini đang giới hạn lượt sử dụng." };
+      }
+      if (hasError1095()) {
+        return { state: "paused", code: "gemini_1095", message: "Gemini báo lỗi 1095." };
       }
       if (!findComposer()) {
         return { state: "paused", code: "ui_changed", message: "Không nhận diện được ô nhập của Gemini." };
@@ -549,6 +574,47 @@
       return candidates.sort((left, right) => right.score - left.score)[0]?.element || null;
     }
 
+    function findSidebarToggle() {
+      const candidates = [];
+      const seen = new Set();
+      const append = (element) => {
+        if (!element || seen.has(element) || !common.isVisible(element)
+          || !common.buttonIsEnabled(element)) return;
+        seen.add(element);
+        candidates.push(element);
+      };
+      SIDEBAR_TOGGLE_SELECTORS.forEach(selector => {
+        document.querySelectorAll(selector).forEach(append);
+      });
+      Array.from(document.querySelectorAll("button, [role='button']")).forEach(element => {
+        const label = [element.getAttribute("aria-label"), element.getAttribute("title")]
+          .filter(Boolean).join(" ");
+        if (/main menu|navigation menu|trình đơn chính|menu chính/i.test(label)) append(element);
+      });
+      return candidates[0] || null;
+    }
+
+    async function ensureSidebarOpen({ signal, timeoutMs = 2_000 } = {}) {
+      if (findNewChatControl()) return true;
+      const toggle = findSidebarToggle();
+      if (!toggle || toggle.getAttribute("aria-expanded") === "true") return Boolean(findNewChatControl());
+      if (signal?.aborted) throw new common.ProviderError("cancelled", "Tác vụ đã bị hủy.");
+      toggle.click();
+      try {
+        await common.waitForElement(() => findNewChatControl(), {
+          timeoutMs,
+          intervalMs: options.pollIntervalMs ?? 100,
+          now: options.now,
+          sleep: options.sleep,
+          waitForChange: eventWaiter,
+          signal
+        });
+        return true;
+      } catch (_error) {
+        return Boolean(findNewChatControl());
+      }
+    }
+
     async function waitForStableTemporary(signal, timeoutMs) {
       let consecutiveReads = 0;
       await common.waitForElement(
@@ -618,6 +684,7 @@
           !attempted.has(candidate) && common.buttonIsEnabled(candidate)
         ));
         if (!control) {
+          await ensureSidebarOpen({ signal, timeoutMs: Math.min(750, remaining()) });
           const waitMs = Math.min(options.pollIntervalMs ?? 100, remaining());
           if (eventWaiter) await eventWaiter({ timeoutMs: waitMs, signal });
           else await pollSleep(waitMs);
@@ -642,7 +709,10 @@
     }
 
     async function restartTemporaryChat({ signal, timeoutMs } = {}) {
+      const status = getStatus();
+      if (status.code === "gemini_1095") throw new common.ProviderError(status.code, status.message);
       clearOwnedComposerForRecovery();
+      await ensureSidebarOpen({ signal, timeoutMs: 2_000 });
       const control = findNewChatControl();
       if (!control) {
         throw new common.ProviderError("temporary_unavailable", "Không tìm thấy nút Cuộc trò chuyện mới trên Gemini.");
@@ -663,8 +733,20 @@
       activeBatchRequestId = "";
       learnedCurrentDocument = false;
       verifiedReadySteps.clear();
+      // Gemini sometimes renders New chat as an anchor whose target changes
+      // between responsive layouts. Recovery must reuse this physical tab;
+      // allowing a transient `_blank` target here opens an unmanaged tab,
+      // flashes the browser UI and creates needless login/CAPTCHA pressure.
+      const originalTarget = control.matches?.("a[href]") ? control.getAttribute("target") : null;
+      if (control.matches?.("a[href]")) control.setAttribute("target", "_self");
       control.focus?.();
-      control.click();
+      try { control.click(); }
+      finally {
+        if (control.matches?.("a[href]")) {
+          if (originalTarget === null) control.removeAttribute("target");
+          else control.setAttribute("target", originalTarget);
+        }
+      }
       await common.waitForElement(
         () => {
           if (signal?.aborted) throw new common.ProviderError("cancelled", "Tác vụ đã bị hủy.");
@@ -698,7 +780,15 @@
       const comparablePrompt = comparableComposerText(promptText);
       const setupPrompt = sendOptions.phase === "setup";
       const state = getStatus();
-      if (state.state !== "ready") {
+      // After New chat -> Temporary Chat, Gemini can keep the previous
+      // temporary-route diagnostic for one render cycle even though the
+      // temporary marker and composer are already usable. This is safe only
+      // for the technical READY prompts: chapter batches must still stop on
+      // any non-ready state so we never send content to the wrong chat.
+      const setupTransitionReady = setupPrompt
+        && temporaryPageIsActive()
+        && state.code === "temporary_unavailable";
+      if (state.state !== "ready" && !setupTransitionReady) {
         throw new common.ProviderError(state.code, state.message);
       }
       if (temporaryRequired && !temporaryPageIsActive()) {
@@ -833,7 +923,7 @@
       lastOwnedComposerPhase = setupPrompt ? "setup" : "batch";
       const initialSend = await waitForSafeSendButton(remaining());
       if (initialSend.alreadySent) return { alreadySent: true };
-      const settleMs = Math.max(0, Number(options.sendSettleMs ?? 500) || 0);
+      const settleMs = Math.max(0, Number(options.sendSettleMs ?? 150) || 0);
       if (settleMs) {
         const settleSleep = options.sleep || ((duration) => new Promise((resolve) => setTimeout(resolve, duration)));
         await settleSleep(settleMs);

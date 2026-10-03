@@ -6,6 +6,7 @@ if (typeof importScripts === "function") {
     "background/client-service.js",
     "background/translation-job-service.js",
     "background/provider-pool-service.js",
+    "background/gemini-account-service.js",
     "background/message-router.js",
     "shared/stv-sites.js",
     "shared/native-history.js",

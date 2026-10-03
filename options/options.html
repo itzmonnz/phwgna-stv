@@ -77,6 +77,16 @@
           </div>
 
           <div class="api-panel" id="apiPanel" hidden>
+            <div class="field toggle-field" id="geminiRefusalFallbackRow" hidden>
+              <div>
+                <label for="geminiRefusalFallbackEnabled">Tự cứu batch bị Gemini Web từ chối</label>
+                <p class="field-help">Chỉ batch bị từ chối được gửi sang Gemini API. Tối đa 5 batch mỗi chương; các batch khác vẫn dùng Gemini Web.</p>
+              </div>
+              <label class="switch" for="geminiRefusalFallbackEnabled">
+                <input id="geminiRefusalFallbackEnabled" type="checkbox">
+                <span class="switch__track" aria-hidden="true"><span class="switch__thumb"></span></span>
+              </label>
+            </div>
             <div class="field">
               <label for="apiKey">API key</label>
               <div class="input-action-row">
@@ -100,7 +110,7 @@
             <div class="field toggle-field" id="geminiSafetyRow" hidden>
               <div>
                 <label for="geminiSafetyOff">Off Safety</label>
-                <p class="field-help">Chỉ tắt bốn nhóm có thể điều chỉnh; bảo vệ lõi Gemini vẫn hoạt động.</p>
+                <p class="field-help">Batch cứu từ Gemini Web luôn bật mục này. Chỉ tắt bốn nhóm có thể điều chỉnh; bảo vệ lõi Gemini vẫn hoạt động.</p>
               </div>
               <label class="switch" for="geminiSafetyOff">
                 <input id="geminiSafetyOff" type="checkbox">
@@ -112,6 +122,16 @@
               <p id="apiTestStatus" class="field-help" role="status" aria-live="polite"></p>
             </div>
           </div>
+        </section>
+
+        <section class="settings-card settings-card--compact settings-card--data" aria-labelledby="gemini-accounts-title">
+          <div class="section-heading"><div><h2 id="gemini-accounts-title">Tài khoản Gemini Pro</h2></div></div>
+          <div class="field toggle-field">
+            <div><label for="geminiAccountRotationEnabled">Tự đổi tài khoản khi lỗi 1095</label>
+              <p class="field-help">Thử lại tối đa 5 lần, rồi đổi trên cùng tab. Chỉ dùng tài khoản hiện Pro/Ultra; nhớ tài khoản đã chọn sau khi mở lại. Tài khoản lỗi nghỉ 60 phút. Không đổi khi CAPTCHA hoặc hết hạn mức.</p></div>
+            <label class="switch" for="geminiAccountRotationEnabled"><input id="geminiAccountRotationEnabled" type="checkbox"><span class="switch__track" aria-hidden="true"><span class="switch__thumb"></span></span></label>
+          </div>
+          <p class="field-help">Lần bật đầu tiên, tool kiểm tra các tài khoản đã đăng nhập trước khi dựng READY. Không cần nhập email hoặc mật khẩu.</p>
         </section>
 
         <section class="settings-card settings-card--compact" aria-labelledby="ui-title">
@@ -150,16 +170,16 @@
               <span class="field-badge">Thiết lập vai trò</span>
             </div>
             <textarea id="systemPrompt" name="systemPrompt" rows="7" spellcheck="false"></textarea>
-            <p class="field-help">Hỗ trợ <code>{{sourcelanguage}}</code> và <code>{{targetlanguage}}</code>.</p>
+            <p class="field-help">Hỗ trợ <code>{{sourcelanguage}}</code> và <code>{{targetlanguage}}</code>. Tool tự đính kèm yêu cầu READY khi gửi, không ghi dòng đó vào ô này.</p>
           </div>
 
           <div class="field">
             <div class="label-row">
-              <label for="userPrompt">User Prompt</label>
-              <span class="field-badge">Nội dung chương</span>
+              <label for="refusalSystemPrompt">System Prompt 2</label>
+              <span class="field-badge">Cứu batch bị từ chối</span>
             </div>
-            <textarea id="userPrompt" name="userPrompt" rows="9" spellcheck="false"></textarea>
-            <p class="field-help">Hỗ trợ <code>{{name}}</code> và <code>{{text}}</code>. Nếu thiếu <code>{{text}}</code>, tiện ích sẽ tự nối nội dung.</p>
+            <textarea id="refusalSystemPrompt" name="refusalSystemPrompt" rows="9" spellcheck="false"></textarea>
+            <p class="field-help">Chỉ dùng khi Gemini Web từ chối nội dung. Tool luôn tự đính kèm yêu cầu READY riêng khi gửi và không ghi dòng đó vào ô này.</p>
           </div>
         </section>
 
@@ -225,7 +245,7 @@
           <div id="portableItems" class="portable-list" aria-label="Dữ liệu STV đang đồng bộ"></div>
         </section>
 
-        <section class="settings-card settings-card--compact" aria-labelledby="data-title">
+        <section class="settings-card settings-card--compact settings-card--data" aria-labelledby="data-title">
           <div class="section-heading">
             <div>
               <h2 id="data-title">Sao lưu dữ liệu</h2>

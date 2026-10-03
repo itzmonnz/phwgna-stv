@@ -29,6 +29,7 @@
   const CREDENTIALS_KEY = "apiCredentials";
   const DEVELOPER_KEEP_TABS_KEY = "developerKeepAiTabs";
   const UI_SCALE_KEY = "stvaiUiScale";
+  const UI_SCALE_BACKUP_KEY = "stvaiUiScaleBackup";
   const UI_POSITION_KEYS = Object.freeze([
     "stvaiTtsOverlayPositionV1", "stvaiToolbarPositionV2",
     "stvaiNameEditorPositionV2", "stvaiNameManagerPositionV2"
@@ -55,32 +56,50 @@
     "openaiApiModel",
     "deepseekApiModel",
     "geminiSafetyOff",
+    "geminiRefusalFallbackEnabled",
+    "geminiAccountRotationEnabled",
     "apiTemperature",
     "systemPrompt",
-    "userPrompt",
+    "refusalSystemPrompt",
     "nameGuide",
     "ttsPronunciationGuide"
   ]);
   const MAX_IMPORT_BYTES = 5 * 1024 * 1024;
   const PROMPT_NAME_FORMAT = "phwgna-stv-prompts-name";
 
-  function createPromptNamePayload(settings) {
+  function createPromptNamePayload(settings, ui = {}) {
     const safe = sanitizeSettings(settings);
-    return { format: PROMPT_NAME_FORMAT, version: 1, generatedAt: Date.now(),
-      systemPrompt: safe.systemPrompt, userPrompt: safe.userPrompt, nameGuide: safe.nameGuide,
-      ttsPronunciationGuide: safe.ttsPronunciationGuide };
+    return { format: PROMPT_NAME_FORMAT, version: 3, generatedAt: Date.now(),
+      provider: safe.provider, webAiTabCount: safe.webAiTabCount,
+      temporaryChat: safe.temporaryChat, warmPoolEnabled: safe.warmPoolEnabled,
+      autoTranslateOnChapter: safe.autoTranslateOnChapter,
+      openrouterModel: safe.openrouterModel, geminiApiModel: safe.geminiApiModel,
+      openaiApiModel: safe.openaiApiModel, deepseekApiModel: safe.deepseekApiModel,
+      geminiSafetyOff: safe.geminiSafetyOff,
+      geminiRefusalFallbackEnabled: safe.geminiRefusalFallbackEnabled,
+      geminiAccountRotationEnabled: safe.geminiAccountRotationEnabled,
+      apiTemperature: safe.apiTemperature,
+      systemPrompt: safe.systemPrompt, refusalSystemPrompt: safe.refusalSystemPrompt,
+      nameGuide: safe.nameGuide, ttsPronunciationGuide: safe.ttsPronunciationGuide,
+      ui: sanitizeUi(ui) };
   }
 
   function parsePromptNameImport(text) {
     let payload;
     try { payload = JSON.parse(text); } catch (_) { throw new Error("Tệp Prompt không phải JSON hợp lệ."); }
-    if (!payload || payload.format !== PROMPT_NAME_FORMAT || payload.version !== 1) {
+    if (!payload || payload.format !== PROMPT_NAME_FORMAT || ![1, 2, 3].includes(payload.version)) {
       throw new Error("Tệp không đúng định dạng Prompt + Bộ Name.");
     }
-    for (const key of ["systemPrompt", "userPrompt", "nameGuide"]) {
+    if (payload.version === 3) {
+      const parsed = configFiles?.parseConfigPayload?.(payload);
+      if (!parsed) throw new Error("Tệp cấu hình chứa giá trị không hợp lệ.");
+      return parsed;
+    }
+    for (const key of ["systemPrompt", "nameGuide"]) {
       if (typeof payload[key] !== "string") throw new Error(`Tệp thiếu ${key} hợp lệ.`);
     }
-    const result = { systemPrompt: payload.systemPrompt, userPrompt: payload.userPrompt,
+    const result = { systemPrompt: payload.systemPrompt,
+      refusalSystemPrompt: payload.version >= 2 && typeof payload.refusalSystemPrompt === "string" ? payload.refusalSystemPrompt : "",
       nameGuide: core?.normalizeNameGuide ? core.normalizeNameGuide(payload.nameGuide) : payload.nameGuide };
     if (Object.hasOwn(payload, "ttsPronunciationGuide")) {
       if (typeof payload.ttsPronunciationGuide !== "string" || payload.ttsPronunciationGuide.length > 20_000) {
@@ -147,12 +166,14 @@
     warmPoolEnabled: true,
     autoTranslateOnChapter: true,
     openrouterModel: "openrouter/auto",
-    geminiApiModel: "gemini-2.5-flash",
+    geminiApiModel: "google/gemini-3.8-flash",
     openaiApiModel: "gpt-5.4",
     deepseekApiModel: "deepseek-chat",
     geminiSafetyOff: false,
+    geminiRefusalFallbackEnabled: true,
     apiTemperature: 0.3,
     systemPrompt: core?.DEFAULT_SETTINGS?.systemPrompt || "",
+    refusalSystemPrompt: core?.DEFAULT_SETTINGS?.refusalSystemPrompt || "",
     userPrompt: core?.DEFAULT_SETTINGS?.userPrompt || "",
     nameGuide: core?.DEFAULT_SETTINGS?.nameGuide || "",
     ttsPronunciationGuide: core?.DEFAULT_SETTINGS?.ttsPronunciationGuide || "",
@@ -172,8 +193,11 @@
       openaiApiModel: settings.openaiApiModel,
       deepseekApiModel: settings.deepseekApiModel,
       geminiSafetyOff: settings.geminiSafetyOff,
+      geminiRefusalFallbackEnabled: settings.geminiRefusalFallbackEnabled,
+      geminiAccountRotationEnabled: settings.geminiAccountRotationEnabled === true,
       apiTemperature: settings.apiTemperature,
       systemPrompt: settings.systemPrompt,
+      refusalSystemPrompt: settings.refusalSystemPrompt,
       userPrompt: settings.userPrompt,
       nameGuide: settings.nameGuide,
       ttsPronunciationGuide: settings.ttsPronunciationGuide,
@@ -197,10 +221,15 @@
       openaiApiModel: typeof candidate.openaiApiModel === "string" && candidate.openaiApiModel.trim() ? candidate.openaiApiModel.trim() : FALLBACK_DEFAULTS.openaiApiModel,
       deepseekApiModel: typeof candidate.deepseekApiModel === "string" && candidate.deepseekApiModel.trim() ? candidate.deepseekApiModel.trim() : FALLBACK_DEFAULTS.deepseekApiModel,
       geminiSafetyOff: candidate.geminiSafetyOff === true,
+      geminiRefusalFallbackEnabled: candidate.geminiRefusalFallbackEnabled === true,
+      geminiAccountRotationEnabled: candidate.geminiAccountRotationEnabled === true,
       apiTemperature: Number.isFinite(Number(candidate.apiTemperature))
         ? Math.min(2, Math.max(0, Math.round(Number(candidate.apiTemperature) * 10) / 10))
         : FALLBACK_DEFAULTS.apiTemperature,
-      systemPrompt: typeof candidate.systemPrompt === "string" ? candidate.systemPrompt : FALLBACK_DEFAULTS.systemPrompt,
+      systemPrompt: typeof candidate.systemPrompt === "string"
+        ? (core?.stripToolReadySuffix ? core.stripToolReadySuffix(candidate.systemPrompt) : candidate.systemPrompt)
+        : FALLBACK_DEFAULTS.systemPrompt,
+      refusalSystemPrompt: typeof candidate.refusalSystemPrompt === "string" ? candidate.refusalSystemPrompt : "",
       userPrompt: typeof candidate.userPrompt === "string" ? candidate.userPrompt : FALLBACK_DEFAULTS.userPrompt,
       nameGuide: typeof candidate.nameGuide === "string" ? candidate.nameGuide : "",
       ttsPronunciationGuide: typeof candidate.ttsPronunciationGuide === "string"
@@ -240,11 +269,15 @@
     }
 
     const result = copySettings(DEFAULT_SETTINGS);
+    if (typeof candidate.geminiAccountRotationEnabled === "boolean") result.geminiAccountRotationEnabled = candidate.geminiAccountRotationEnabled;
     if (PROVIDERS.includes(candidate.provider)) result.provider = candidate.provider;
     if (Number.isInteger(Number(candidate.webAiTabCount)) && Number(candidate.webAiTabCount) >= 2 && Number(candidate.webAiTabCount) <= 10) {
       result.webAiTabCount = Number(candidate.webAiTabCount);
     }
     if (typeof candidate.geminiSafetyOff === "boolean") result.geminiSafetyOff = candidate.geminiSafetyOff;
+    if (typeof candidate.geminiRefusalFallbackEnabled === "boolean") {
+      result.geminiRefusalFallbackEnabled = candidate.geminiRefusalFallbackEnabled;
+    }
     if (Object.hasOwn(candidate, "apiTemperature")) {
       const temperature = Number(candidate.apiTemperature);
       if (Number.isFinite(temperature) && temperature >= 0 && temperature <= 2) {
@@ -257,14 +290,14 @@
       if (typeof candidate[key] === "string" && candidate[key].trim()) result[key] = candidate[key].trim();
       else if (strict && Object.hasOwn(candidate, key)) throw new Error(`${key} must be a non-empty string.`);
     }
-    for (const key of ["systemPrompt", "userPrompt", "nameGuide", "ttsPronunciationGuide"]) {
+    for (const key of ["systemPrompt", "refusalSystemPrompt", "userPrompt", "nameGuide", "ttsPronunciationGuide"]) {
       if (typeof candidate[key] === "string") {
         if (key === "ttsPronunciationGuide" && candidate[key].length > 20_000) {
           if (strict) throw new Error("Danh sách phát âm vượt quá giới hạn an toàn.");
           result[key] = candidate[key].slice(0, 20_000);
-        } else result[key] = key === "nameGuide" && core?.normalizeNameGuide
-          ? core.normalizeNameGuide(candidate[key])
-          : candidate[key];
+        } else if (key === "nameGuide" && core?.normalizeNameGuide) result[key] = core.normalizeNameGuide(candidate[key]);
+        else if (key === "systemPrompt" && core?.stripToolReadySuffix) result[key] = core.stripToolReadySuffix(candidate[key]);
+        else result[key] = candidate[key];
       }
       else if (strict && Object.hasOwn(candidate, key)) throw new Error(`Giá trị ${key} phải là chuỗi.`);
     }
@@ -302,12 +335,14 @@
       chromeApi.storage.local.get(key, (result) => {
         const error = chromeApi.runtime?.lastError;
         if (error) reject(new Error(error.message || "Không thể đọc cài đặt."));
-        else resolve(result?.[key]);
+        else if (key !== UI_SCALE_KEY || result?.[UI_SCALE_KEY] != null) resolve(result?.[key]);
+        else chromeApi.storage.local.get(UI_SCALE_BACKUP_KEY, backup => resolve(backup?.[UI_SCALE_BACKUP_KEY]));
       });
     });
   }
 
   function storageWrite(chromeApi, payload) {
+    if (Object.hasOwn(payload || {}, UI_SCALE_KEY)) payload = { ...payload, [UI_SCALE_BACKUP_KEY]: payload[UI_SCALE_KEY] };
     return new Promise((resolve, reject) => {
       chromeApi.storage.local.set(payload, () => {
         const error = chromeApi.runtime?.lastError;
@@ -351,8 +386,10 @@
       provider: document.getElementById("provider").value,
       webAiTabCount: Number(document.getElementById("webAiTabCount").value),
       apiTemperature: Number(document.getElementById("apiTemperature").value),
+      geminiRefusalFallbackEnabled: document.getElementById("geminiRefusalFallbackEnabled").checked,
+      geminiAccountRotationEnabled: document.getElementById("geminiAccountRotationEnabled")?.checked === true,
       systemPrompt: document.getElementById("systemPrompt").value,
-      userPrompt: document.getElementById("userPrompt").value,
+      refusalSystemPrompt: document.getElementById("refusalSystemPrompt").value,
       nameGuide: document.getElementById("nameGuide").value,
       ttsPronunciationGuide: document.getElementById("ttsPronunciationGuide").value
     });
@@ -363,10 +400,12 @@
     document.getElementById("provider").value = safe.provider;
     document.getElementById("webAiTabCount").value = String(safe.webAiTabCount);
     document.getElementById("geminiSafetyOff").checked = safe.geminiSafetyOff;
+    document.getElementById("geminiRefusalFallbackEnabled").checked = safe.geminiRefusalFallbackEnabled;
+    if (document.getElementById("geminiAccountRotationEnabled")) document.getElementById("geminiAccountRotationEnabled").checked = safe.geminiAccountRotationEnabled;
     document.getElementById("apiTemperature").value = String(safe.apiTemperature);
     document.getElementById("apiTemperatureValue").textContent = safe.apiTemperature.toFixed(1);
     document.getElementById("systemPrompt").value = safe.systemPrompt;
-    document.getElementById("userPrompt").value = safe.userPrompt;
+    document.getElementById("refusalSystemPrompt").value = safe.refusalSystemPrompt;
     document.getElementById("nameGuide").value = safe.nameGuide;
     document.getElementById("ttsPronunciationGuide").value = safe.ttsPronunciationGuide;
   }
@@ -457,21 +496,32 @@
       return sanitizeUi(values);
     }
 
+    function selectedApiProvider() {
+      return currentProvider === "gemini" ? "gemini_api" : currentProvider;
+    }
     function captureApiFields() {
-      if (!API_PROVIDERS.includes(currentProvider)) return;
-      credentials[currentProvider] = String(document.getElementById("apiKey").value || "").trim();
+      const apiProvider = selectedApiProvider();
+      if (!API_PROVIDERS.includes(apiProvider)) return;
+      credentials[apiProvider] = String(document.getElementById("apiKey").value || "").trim();
       const model = String(document.getElementById("apiModel").value || "").trim();
-      if (model) draftSettings[MODEL_KEYS[currentProvider]] = model;
-      if (currentProvider === "gemini_api") draftSettings.geminiSafetyOff = document.getElementById("geminiSafetyOff").checked;
+      if (model) draftSettings[MODEL_KEYS[apiProvider]] = model;
+      if (apiProvider === "gemini_api" && currentProvider !== "gemini") {
+        draftSettings.geminiSafetyOff = document.getElementById("geminiSafetyOff").checked;
+      }
     }
     function updateProviderPanel() {
       const isApi = API_PROVIDERS.includes(currentProvider);
-      document.getElementById("apiPanel").hidden = !isApi;
+      const isGeminiWeb = currentProvider === "gemini";
+      const apiProvider = selectedApiProvider();
+      document.getElementById("apiPanel").hidden = !isApi && !isGeminiWeb;
       document.getElementById("webAiTabCountRow").hidden = isApi;
-      document.getElementById("geminiSafetyRow").hidden = currentProvider !== "gemini_api";
-      if (isApi) {
-        document.getElementById("apiKey").value = credentials[currentProvider] || "";
-        document.getElementById("apiModel").value = draftSettings[MODEL_KEYS[currentProvider]] || "";
+      document.getElementById("geminiRefusalFallbackRow").hidden = !isGeminiWeb;
+      document.getElementById("geminiSafetyRow").hidden = !["gemini", "gemini_api"].includes(currentProvider);
+      document.getElementById("geminiSafetyOff").checked = isGeminiWeb ? true : draftSettings.geminiSafetyOff;
+      document.getElementById("geminiSafetyOff").disabled = isGeminiWeb;
+      if (isApi || isGeminiWeb) {
+        document.getElementById("apiKey").value = credentials[apiProvider] || "";
+        document.getElementById("apiModel").value = draftSettings[MODEL_KEYS[apiProvider]] || "";
       }
       document.getElementById("apiTestStatus").textContent = "";
     }
@@ -708,8 +758,9 @@
           if (formSettings[key] !== formBaseline[key]) mergedSettings[key] = formSettings[key];
         }
         draftSettings = sanitizeSettings(mergedSettings);
-        const configText = `${JSON.stringify(createPromptNamePayload(draftSettings), null, 2)}\n`;
-        const configWrite = localConfig?.write?.(configText)
+        const configWrite = readUi().then(ui => localConfig?.write?.(
+          `${JSON.stringify(createPromptNamePayload(draftSettings, ui), null, 2)}\n`
+        ))
           .then(() => ({ ok: true }))
           .catch(error => ({ ok: false, error }));
         developerKeepAiTabs = document.getElementById("developerKeepAiTabs").checked;
@@ -717,7 +768,10 @@
           [STORAGE_KEY]: copySettings(draftSettings),
           [DEVELOPER_KEEP_TABS_KEY]: developerKeepAiTabs
         };
-        if (API_PROVIDERS.includes(draftSettings.provider) || Object.keys(credentials).length) payload[CREDENTIALS_KEY] = { ...credentials };
+        if (API_PROVIDERS.includes(draftSettings.provider)
+          || Object.values(credentials).some(value => String(value || "").trim())) {
+          payload[CREDENTIALS_KEY] = { ...credentials };
+        }
         await storageWrite(chromeApi, payload);
         const configResult = await configWrite;
         formBaseline = copySettings(draftSettings);
@@ -771,11 +825,17 @@
           portable: await storageGet(chromeApi, PORTABLE_KEY)
         });
         rollback.missingUiKeys = UI_BACKUP_KEYS.filter(key => !Object.hasOwn(currentUi, key));
+        const importedUi = sanitizeUi(imported.ui);
         const settings = sanitizeSettings({ ...current, ...imported });
-        await storageWrite(chromeApi, { [ROLLBACK_KEY]: rollback, [STORAGE_KEY]: copySettings(settings) });
+        await storageWrite(chromeApi, {
+          [ROLLBACK_KEY]: rollback,
+          [STORAGE_KEY]: copySettings(settings),
+          ...importedUi
+        });
         draftSettings = settings;
         formBaseline = copySettings(settings);
         currentProvider = settings.provider;
+        if (Object.hasOwn(importedUi, UI_SCALE_KEY)) uiScale = showUiScale(importedUi[UI_SCALE_KEY]);
         writeForm(document, settings);
         updateProviderPanel();
         setStatus(document, "Đã nhập Prompt và Bộ Name.", "success");
@@ -875,7 +935,7 @@
         const nameCount = imported.nameGuide.split("\\n").filter(Boolean).length;
         const pronunciationCount = typeof imported.ttsPronunciationGuide === "string"
           ? imported.ttsPronunciationGuide.split("\\n").filter(Boolean).length : 0;
-        summary = `Tệp Prompt + Bộ Name: system prompt ${imported.systemPrompt.length} ký tự, user prompt ${imported.userPrompt.length} ký tự, ${nameCount} dòng Name và ${pronunciationCount} dòng phát âm.`;
+        summary = `Tệp Prompt + Bộ Name: system prompt ${imported.systemPrompt.length} ký tự, system prompt 2 ${imported.refusalSystemPrompt.length} ký tự, ${nameCount} dòng Name và ${pronunciationCount} dòng phát âm.`;
       } else if (payload?.name && typeof payload.name === 'object' && !Array.isArray(payload.name)) {
         const validated = dataBackup.validateStvExport(payload, {
           history, portable, origins: defaultSites.ORIGINS
@@ -948,7 +1008,7 @@
 
     async function exportPromptNameData() {
       captureApiFields();
-      const payload = createPromptNamePayload(readForm(document, draftSettings));
+      const payload = createPromptNamePayload(readForm(document, draftSettings), await readUi());
       if (!localConfig?.write) throw new Error("Trình duyệt không hỗ trợ tệp cấu hình cố định.");
       await localConfig.write(`${JSON.stringify(payload, null, 2)}\n`, { choose: true });
       setStatus(document, `Đã chọn và ghi đè ${configFiles?.CONFIG_FILENAME || "phwgna-stv-config.json"}.`, "success");
@@ -987,11 +1047,12 @@
       button.disabled = true;
       status.textContent = "Đang kiểm tra…";
       try {
+        const apiProvider = selectedApiProvider();
         const response = await new Promise((resolve, reject) => chromeApi.runtime.sendMessage({
-          type: "STVAI_TEST_API", provider: currentProvider,
-          apiKey: credentials[currentProvider] || "",
-          model: draftSettings[MODEL_KEYS[currentProvider]],
-          safetyOff: currentProvider === "gemini_api" && draftSettings.geminiSafetyOff
+          type: "STVAI_TEST_API", provider: apiProvider,
+          apiKey: credentials[apiProvider] || "",
+          model: draftSettings[MODEL_KEYS[apiProvider]],
+          safetyOff: apiProvider === "gemini_api" && (currentProvider === "gemini" || draftSettings.geminiSafetyOff)
         }, (value) => {
           const error = chromeApi.runtime?.lastError;
           if (error) reject(new Error(error.message)); else resolve(value);

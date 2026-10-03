@@ -4,6 +4,7 @@
   const clientServiceApi = root.STVAIBackgroundClientService || (typeof require === "function" ? require("./client-service.js") : null);
   const translationJobApi = root.STVAITranslationJobService || (typeof require === "function" ? require("./translation-job-service.js") : null);
   const providerPoolApi = root.STVAIProviderPoolService || (typeof require === "function" ? require("./provider-pool-service.js") : null);
+  const accountApi = root.STVAIGeminiAccountService || (typeof require === "function" ? require("./gemini-account-service.js") : null);
   const messageRouterApi = root.STVAIBackgroundMessageRouter || (typeof require === "function" ? require("./message-router.js") : null);
   const core = root.STVAICore || (typeof require === "function" ? require("../shared/core.js") : null);
   const pronunciation = root.STVAITTSPronunciation || (typeof require === "function" ? require("../shared/tts-pronunciation.js") : null);
@@ -17,12 +18,12 @@
   const distributionApi = root.STVAIDistribution || (typeof require === "function" ? require("../shared/distribution-channel.js") : null);
   const onboardingApi = root.STVAIOnboarding || (typeof require === "function" ? require("../shared/onboarding.js") : null);
   const errorJournalApi = root.STVAIErrorJournal || (typeof require === "function" ? require("../shared/error-journal.js") : null);
-  const api = factory(contracts, ttsSessionApi, clientServiceApi, translationJobApi, providerPoolApi, messageRouterApi, core, pronunciation, cacheApi, previewApi, apiProviders, sites, historyApi, portableSyncApi, updateApi, onboardingApi, errorJournalApi, distributionApi);
+  const api = factory(contracts, ttsSessionApi, clientServiceApi, translationJobApi, providerPoolApi, messageRouterApi, core, pronunciation, cacheApi, previewApi, apiProviders, sites, historyApi, portableSyncApi, updateApi, onboardingApi, errorJournalApi, distributionApi, accountApi);
   if (typeof module === "object" && module.exports) {
     module.exports = api;
   }
   root.STVAIBackgroundController = api;
-})(typeof globalThis !== "undefined" ? globalThis : this, function createBackgroundApi(contracts, ttsSessionApi, clientServiceApi, translationJobApi, providerPoolApi, messageRouterApi, defaultCore, pronunciation, cacheApi, previewApi, defaultApiProviders, sites, historyApi, portableSyncApi, defaultUpdateApi, defaultOnboardingApi, defaultErrorJournalApi, defaultDistribution) {
+})(typeof globalThis !== "undefined" ? globalThis : this, function createBackgroundApi(contracts, ttsSessionApi, clientServiceApi, translationJobApi, providerPoolApi, messageRouterApi, defaultCore, pronunciation, cacheApi, previewApi, defaultApiProviders, sites, historyApi, portableSyncApi, defaultUpdateApi, defaultOnboardingApi, defaultErrorJournalApi, defaultDistribution, accountApi) {
   "use strict";
 
   const {
@@ -32,7 +33,7 @@
     MIN_POOL_TABS, MAX_POOL_TABS, READY_TIMEOUT_MS, CHATGPT_READY_TIMEOUT_MS,
     READY_SEND_TIMEOUT_MS, CHATGPT_READY_SEND_TIMEOUT_MS, CHATGPT_SETUP_INACTIVITY_MS,
     CHATGPT_SETUP_HARD_TIMEOUT_MS, READY_MARKER_GRACE_MS, MAX_WARM_REPLACEMENTS,
-    GEMINI_SEND_NOT_CONFIRMED_RETRIES,
+    GEMINI_SEND_NOT_CONFIRMED_RETRIES, GEMINI_SESSION_BATCH_LIMIT,
     PERFORMANCE_HEARTBEAT_MS, JOB_RECORD_VERSION, POOL_RECORD_VERSION,
     OWNED_TABS_RECORD_VERSION, DOM_PROFILE_RECORD_VERSION, AUTHENTICATION_BLOCKERS,
     REPLACEABLE_WARM_FAILURES, sanitizeDomProfileStore, isAuthenticationBlocker,
@@ -55,7 +56,9 @@
     const apiClient = options.apiClient || defaultApiProviders?.createApiClient?.();
     const namePreview = options.namePreview
       || previewApi?.createNamePreviewService?.({ storage: storage?.local });
-    const retryDelayMs = Math.max(0, Number(options.retryDelayMs ?? 1_500));
+    // Keep retries responsive while retaining a short debounce for Gemini's
+    // DOM and the service-worker message channel.
+    const retryDelayMs = Math.max(0, Number(options.retryDelayMs ?? 900));
     const retrySleep = options.retrySleep || ((milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)));
     const setPerformanceInterval = typeof options.setPerformanceInterval === "function"
       ? options.setPerformanceInterval
@@ -311,6 +314,8 @@
         // the tab non-discardable, but leave lifecycle, idle and focus entirely
         // under Chromium/Gemini control so Temporary Chat remains authoritative.
         await protectOwnedProviderTab(tabId);
+        // Preserve the user's window choice. Repeated minimize/unfocus calls
+        // can hide a manually opened provider and change desktop activation.
         return operation();
       }
       if (
@@ -394,7 +399,8 @@
         const providerWindow = await windows.create({
           url,
           type: "normal",
-          focused: false
+          focused: false,
+          state: "minimized"
         });
         const tab = Array.isArray(providerWindow?.tabs) ? providerWindow.tabs[0] : null;
         if (!tab || !Number.isInteger(tab.id)) throw new Error("Provider window did not create a tab");
@@ -594,6 +600,8 @@
         setupServiceWorkerRestarts: Math.max(0, Number(slot.setupServiceWorkerRestarts) || 0),
         setupErrorCode: slot.setupErrorCode || "",
         firstBatchDispatchedAt: Math.max(0, Number(slot.firstBatchDispatchedAt) || 0),
+        batchUseCount: Math.max(0, Math.min(GEMINI_SESSION_BATCH_LIMIT, Number(slot.batchUseCount) || 0)),
+        laneRole: ["normal", "rescue"].includes(slot.laneRole) ? slot.laneRole : "",
         errorCode: slot.errorCode || "",
         jobId: slot.jobId || "",
         recoveryGeneration: Math.max(0, Number(slot.recoveryGeneration) || 0),
@@ -887,6 +895,8 @@
           setupResumeAttempts: Math.max(0, Number(slot.setupResumeAttempts) || 0),
           setupErrorCode: slot.setupErrorCode || "",
           firstBatchDispatchedAt: Math.max(0, Number(slot.firstBatchDispatchedAt) || 0),
+          batchUseCount: Math.max(0, Math.min(GEMINI_SESSION_BATCH_LIMIT, Number(slot.batchUseCount) || 0)),
+          laneRole: ["normal", "rescue"].includes(slot.laneRole) ? slot.laneRole : "",
           errorCode: slot.errorCode || "",
           jobId: slot.jobId || "",
           recoveryJobId: slot.recoveryJobId || "",
@@ -894,6 +904,7 @@
           inPlaceRecoveryAttempts: Math.max(0, Number(slot.inPlaceRecoveryAttempts) || 0),
           recoveryStage: slot.recoveryStage || "",
           recoveryCancelled: slot.recoveryCancelled === true,
+          accountSwitching: slot.accountSwitching === true,
           handoffPredecessorSlotId: slot.handoffPredecessorSlotId || "",
           handoffSuccessorSlotId: slot.handoffSuccessorSlotId || ""
         }))
@@ -943,11 +954,51 @@
         cacheIdentity: job.cacheIdentity,
         blocks: job.blocks,
         batchIndex: job.batchIndex,
+        batchStates: Array.isArray(job.batchStates)
+          ? job.batchStates.slice(0, job.batches?.length || 0).map((state) => (
+            ["pending", "normal_inflight", "rescue_queued", "rescue_inflight", "api_inflight", "completed", "failed"]
+              .includes(state) ? state : "pending"
+          ))
+          : [],
+        dispatchReceipts: Object.fromEntries(Object.entries(job.dispatchReceipts || {})
+          .slice(-24).map(([key, value]) => [key, {
+            jobId: job.id,
+            batchId: typeof value?.batchId === "string" ? value.batchId : "",
+            batchIndex: Math.max(0, Number(value?.batchIndex) || 0),
+            requestId: typeof value?.requestId === "string" ? value.requestId : "",
+            generation: Math.max(0, Number(value?.generation) || 0),
+            lane: value?.lane === "rescue" ? "rescue" : "normal",
+            tabId: Number.isInteger(value?.tabId) ? value.tabId : null,
+            status: typeof value?.status === "string" ? value.status : "unknown",
+            attempts: Math.max(0, Number(value?.attempts) || 0),
+            system2Attempts: Math.max(0, Math.min(2, Number(value?.system2Attempts) || 0)),
+            technicalRecoveryAttempts: Math.max(0, Math.min(3, Number(value?.technicalRecoveryAttempts) || 0)),
+            updatedAt: Math.max(0, Number(value?.updatedAt) || 0),
+            ...(value?.reason ? { reason: String(value.reason).slice(0, 64) } : {}),
+            ...(value?.outcomeCode ? { outcomeCode: String(value.outcomeCode).slice(0, 64) } : {})
+          }])),
+        apiBatchIndexes: Array.from(job.apiBatchIndexes || [])
+          .filter((index) => Number.isInteger(index) && index >= 0 && index < (job.batches?.length || 0)),
+        normalBackpressure: job.normalBackpressure === true,
+        parallelPauseReason: typeof job.parallelPauseReason === "string" ? job.parallelPauseReason : "",
+        rescueLane: job.rescueLane && typeof job.rescueLane === "object" ? {
+          slotId: typeof job.rescueLane.slotId === "string" ? job.rescueLane.slotId : "",
+          providerTabId: Number.isInteger(job.rescueLane.providerTabId) ? job.rescueLane.providerTabId : null,
+          warmSessionId: typeof job.rescueLane.warmSessionId === "string" ? job.rescueLane.warmSessionId : "",
+          settingsHash: typeof job.rescueLane.settingsHash === "string" ? job.rescueLane.settingsHash : "",
+          ready: job.rescueLane.ready === true,
+          batchUseCount: Math.max(0, Math.min(GEMINI_SESSION_BATCH_LIMIT, Number(job.rescueLane.batchUseCount) || 0)),
+          current: job.rescueLane.current || null,
+          queue: Array.isArray(job.rescueLane.queue) ? job.rescueLane.queue.slice(0, 2) : []
+        } : null,
+        rescueApiActive: job.rescueApiActive || null,
+        rescueApiQueue: Array.isArray(job.rescueApiQueue) ? job.rescueApiQueue.slice(0, 2) : [],
         setupId: job.setupId,
         setupIndex: job.setupIndex,
         setupAttempts: job.setupAttempts,
         retryAttempts: job.retryAttempts || 0,
         sendNotConfirmedAttempts: job.sendNotConfirmedAttempts || 0,
+        receiptMissingAttempts: Math.max(0, Math.min(2, Number(job.receiptMissingAttempts) || 0)),
         automaticRecoveryCycles: job.automaticRecoveryCycles || 0,
         phase: job.phase,
         repairBlocks: job.repairBlocks,
@@ -959,6 +1010,7 @@
         recoveryRequests: job.recoveryRequests || 0,
         usedRequestIds: Array.from(job.usedRequestIds || []),
         workState: job.workState || "queued",
+        resetContinuationPending: job.resetContinuationPending === true,
         batchAttempts: job.batchAttempts || 0,
         batchSwitched: job.batchSwitched === true,
         recoveryStage: job.recoveryStage || "initial",
@@ -971,6 +1023,15 @@
         busyRetryCount: Math.max(0, Number(job.busyRetryCount) || 0),
         busyRequestId: job.busyRequestId || "",
         refusalReplacementAttempts: job.refusalReplacementAttempts || 0,
+        refusalApiBatchIds: Array.from(job.refusalApiBatchIds || []),
+        refusalApiPending: job.refusalApiPending === true,
+        refusalApiRequestId: job.refusalApiRequestId || "",
+        refusalApiAttempts: Math.max(0, Number(job.refusalApiAttempts) || 0),
+        refusalSanitizeAttempted: job.refusalSanitizeAttempted === true,
+        refusalRescueAttempted: job.refusalRescueAttempted === true,
+        refusalRescueActive: job.refusalRescueActive === true,
+        refusalRescueOutcome: ["pending", "ready", "succeeded", "api_fallback", "failed"].includes(job.refusalRescueOutcome)
+          ? job.refusalRescueOutcome : "none",
         apiTemperatureFallback: job.apiTemperatureFallback === true,
         pauseReason: job.pauseReason || ""
       };
@@ -1101,12 +1162,29 @@
     async function notifyPrefetch(job, status, reason) {
       await sendToTab(job.sourceTabId, { type: 'STVAI_PREFETCH_STATUS', jobId: job.id,
         status, completed: job.completed.size, total: job.batches.length, cacheable: job.cacheable !== false,
+        normalBatchIndex: Number.isInteger(job.parallelStatus?.normalBatchIndex) ? job.parallelStatus.normalBatchIndex : null,
+        rescueBatchIndex: Number.isInteger(job.parallelStatus?.rescueBatchIndex) ? job.parallelStatus.rescueBatchIndex : null,
+        rescueQueueCount: Math.max(0, Math.min(2, Number(job.parallelStatus?.rescueQueueCount) || 0)),
+        rescueActive: job.parallelStatus?.rescueActive === true,
+        apiFallbackActive: job.parallelStatus?.apiFallbackActive === true,
+        ...(['refusal_api_fallback', 'refusal_api_retry'].includes(reason) ? {
+          apiModel: String(job.settings?.geminiApiModel || core.DEFAULT_SETTINGS.geminiApiModel).slice(0, 128)
+        } : {}),
         ...(reason ? { reason } : {}) });
     }
 
     async function notifyStatus(job, status, reason) {
       await persistJob(job);
       if (job.prefetch) return notifyPrefetch(job, status, reason);
+      const rescueDiagnosticTask = job.rescueLane?.current
+        || job.rescueLane?.queue?.[0]
+        || job.rescueApiActive
+        || job.rescueApiQueue?.[0]
+        || null;
+      const latestReceipt = Object.values(job.dispatchReceipts || {})
+        .sort((a, b) => Number(b?.updatedAt || 0) - Number(a?.updatedAt || 0))[0] || null;
+      const diagnosticBatchIndex = Number.isInteger(latestReceipt?.batchIndex)
+        ? latestReceipt.batchIndex : job.batchIndex;
       const message = {
         type: "STV_JOB_STATUS",
         jobId: job.id,
@@ -1114,19 +1192,42 @@
         provider: job.provider,
         completedBatches: job.completed.size,
         totalBatches: job.batches.length,
+        normalBatchIndex: Number.isInteger(job.parallelStatus?.normalBatchIndex) ? job.parallelStatus.normalBatchIndex : null,
+        rescueBatchIndex: Number.isInteger(job.parallelStatus?.rescueBatchIndex) ? job.parallelStatus.rescueBatchIndex : null,
+        rescueQueueCount: Math.max(0, Math.min(2, Number(job.parallelStatus?.rescueQueueCount) || 0)),
+        rescueActive: job.parallelStatus?.rescueActive === true,
+        apiFallbackActive: job.parallelStatus?.apiFallbackActive === true,
         batchDiagnostic: {
-          batchIndex: job.batchIndex,
+          batchIndex: diagnosticBatchIndex,
           attempt: job.batchAttempts || 0,
           stage: job.recoveryStage || "initial",
           expectedCount: currentBatch(job)?.length || 0,
           actualCount: job.validationDiagnostic?.actualCount ?? null,
           reason: job.validationDiagnostic?.reason || job.lastBatchError || "none",
-          requestState: job.workState || "queued"
+          requestState: job.workState || "queued",
+          activeRequestId: typeof job.activeRequestId === "string" ? job.activeRequestId : "",
+          normalTabId: Number.isInteger(job.providerTabId) ? job.providerTabId : null,
+          rescueTabId: Number.isInteger(job.rescueLane?.providerTabId) ? job.rescueLane.providerTabId : null,
+          rescueSystem2Attempts: Math.max(0, Math.min(2, Number(rescueDiagnosticTask?.system2Attempts) || 0)),
+          receipt: latestReceipt ? {
+            lane: latestReceipt.lane,
+            tabId: Number.isInteger(latestReceipt.tabId) ? latestReceipt.tabId : null,
+            requestId: latestReceipt.requestId,
+            status: latestReceipt.status,
+            reason: latestReceipt.reason || "none"
+          } : null
         },
         fallbackCount: Array.from(job.completed.values()).flat()
           .filter((item) => item?.origin === "convert").length
       };
+      message.recoveryOutcome = ["pending", "ready", "succeeded", "api_fallback", "failed"].includes(job.refusalRescueOutcome)
+        ? job.refusalRescueOutcome : "none";
       if (reason) message.reason = reason;
+      message.system2Attempts = Math.max(0, Math.min(2, Number(rescueDiagnosticTask?.system2Attempts) || 0));
+      message.technicalRecoveryAttempts = Math.max(0, Math.min(3, Number(rescueDiagnosticTask?.technicalRecoveryAttempts) || Number(job.receiptMissingAttempts) || 0));
+      if (["refusal_api_fallback", "refusal_api_retry"].includes(reason)) {
+        message.apiModel = String(job.settings?.geminiApiModel || core.DEFAULT_SETTINGS.geminiApiModel).slice(0, 128);
+      }
       if (reason === "auto_retry") message.retryAttempt = job.retryAttempts || 0;
       if (["rechecking_send", "recovering_temporary_chat"].includes(reason)) {
         message.retryAttempt = job.sendNotConfirmedAttempts || 0;
@@ -1145,6 +1246,8 @@
       job.status = "paused";
       job.pauseReason = reason || "provider_error";
       job.pending = false;
+      job.apiAbortController?.abort?.();
+      job.rescueApiAbortController?.abort?.();
       await errorJournal?.append?.(`${job.id}:${job.batchIndex}`, {
         kind: "job_paused",
         provider: job.provider,
@@ -1197,7 +1300,7 @@
     async function cacheIdentity(chapter, settings, blocks, allBatches) {
       const promptPayload = core.stableSettingsPayload
         ? core.stableSettingsPayload({ ...settings, nameGuide: "" })
-        : JSON.stringify({ systemPrompt: settings.systemPrompt, userPrompt: settings.userPrompt });
+      : JSON.stringify({ systemPrompt: settings.systemPrompt, refusalSystemPrompt: settings.refusalSystemPrompt });
       const relevantNameGuide = core.selectRelevantNameGuide
         ? core.selectRelevantNameGuide(settings.nameGuide, blocks)
         : (core.normalizeNameGuide ? core.normalizeNameGuide(settings.nameGuide) : settings.nameGuide || "");
@@ -1261,7 +1364,7 @@
     }
 
     async function restoreStoredJob(record) {
-      if (!record || ![1, JOB_RECORD_VERSION].includes(record.version) || typeof record.id !== "string") return null;
+      if (!record || ![1, 2, 3, 4, JOB_RECORD_VERSION].includes(record.version) || typeof record.id !== "string") return null;
       if (!Number.isInteger(record.sourceTabId) || !Array.isArray(record.blocks)) return null;
       const blocks = record.blocks.map((block) => ({
         id: String(block && block.id || ""),
@@ -1300,6 +1403,51 @@
       }
       let batchIndex = 0;
       while (batchIndex < batches.length && completed.has(batchIdAt(batchIndex))) batchIndex += 1;
+      const allowedBatchStates = new Set([
+        "pending", "normal_inflight", "rescue_queued", "rescue_inflight", "api_inflight", "completed", "failed"
+      ]);
+      const batchStates = Array.from({ length: batches.length }, (_value, index) => {
+        if (completed.has(batchIdAt(index))) return "completed";
+        const savedState = Array.isArray(record.batchStates) ? record.batchStates[index] : "pending";
+        if (!["rescue_queued", "rescue_inflight", "api_inflight"].includes(savedState)) return "pending";
+        return allowedBatchStates.has(savedState) ? savedState : "pending";
+      });
+      const sanitizeLaneTask = (value) => {
+        const index = Math.trunc(Number(value?.batchIndex));
+        const requestId = String(value?.requestId || "");
+        if (index < 0 || index >= batches.length || completed.has(batchIdAt(index))
+          || !/^batch_\d+_\d{4}$/.test(requestId)) return null;
+        return {
+          batchIndex: index,
+          requestId,
+          attempts: Math.max(0, Math.min(3, Math.trunc(Number(value?.attempts)) || 0)),
+          system2Attempts: Math.max(0, Math.min(2, Math.trunc(Number(value?.system2Attempts)) || 0)),
+          technicalRecoveryAttempts: Math.max(0, Math.min(3, Math.trunc(Number(value?.technicalRecoveryAttempts)) || 0)),
+          receiptAttempts: Math.max(0, Math.min(3, Math.trunc(Number(value?.receiptAttempts)) || 0))
+        };
+      };
+      const savedRescue = record.rescueLane && typeof record.rescueLane === "object" ? record.rescueLane : null;
+      const refusalApiPending = record.refusalApiPending === true;
+      const rescueCurrent = sanitizeLaneTask(savedRescue?.current);
+      const rescueQueue = (Array.isArray(savedRescue?.queue) ? savedRescue.queue : [])
+        .map(sanitizeLaneTask).filter(Boolean).slice(0, 2);
+      if (rescueCurrent) rescueQueue.unshift(rescueCurrent);
+      const uniqueRescueQueue = Array.from(new Map(rescueQueue.map(task => [task.batchIndex, task])).values()).slice(0, 3);
+      for (const task of uniqueRescueQueue) batchStates[task.batchIndex] = "rescue_queued";
+      const rescueApiTasks = [record.rescueApiActive, ...(Array.isArray(record.rescueApiQueue) ? record.rescueApiQueue : [])]
+        .map(sanitizeLaneTask).filter(Boolean);
+      if (refusalApiPending && !rescueApiTasks.length) {
+        const legacyApiTask = sanitizeLaneTask({
+          batchIndex: Math.max(0, Math.trunc(Number(record.batchIndex)) || 0),
+          requestId: record.refusalApiRequestId
+        });
+        if (legacyApiTask) rescueApiTasks.push(legacyApiTask);
+      }
+      const uniqueApiQueue = Array.from(new Map(rescueApiTasks.map(task => [task.batchIndex, task])).values()).slice(0, 3);
+      for (const task of uniqueApiQueue) batchStates[task.batchIndex] = "api_inflight";
+      const savedNormalIndex = Math.max(0, Math.min(batches.length, Math.trunc(Number(record.batchIndex)) || 0));
+      batchIndex = record.version >= 3 ? savedNormalIndex : batchIndex;
+      while (batchIndex < batches.length && batchStates[batchIndex] !== "pending") batchIndex += 1;
 
       const setupId = typeof record.setupId === "string" && record.setupId
         ? record.setupId
@@ -1338,14 +1486,31 @@
         batches,
         completed,
         batchIndex,
+        batchStates,
+        normalBackpressure: record.normalBackpressure === true,
+        parallelPauseReason: "",
+        rescueLane: savedRescue && (uniqueRescueQueue.length || Number.isInteger(savedRescue.providerTabId)) ? {
+          slotId: typeof savedRescue.slotId === "string" ? savedRescue.slotId : "",
+          providerTabId: Number.isInteger(savedRescue.providerTabId) ? savedRescue.providerTabId : null,
+          warmSessionId: typeof savedRescue.warmSessionId === "string" ? savedRescue.warmSessionId : "",
+          settingsHash: typeof savedRescue.settingsHash === "string" ? savedRescue.settingsHash : "",
+          ready: false,
+          batchUseCount: Math.max(0, Math.min(GEMINI_SESSION_BATCH_LIMIT, Number(savedRescue.batchUseCount) || 0)),
+          current: null,
+          queue: uniqueRescueQueue,
+          running: false
+        } : null,
+        rescueApiActive: null,
+        rescueApiQueue: uniqueApiQueue,
         setupId,
         setupMessages: core.isApiProvider(settings.provider) ? [] : core.createSetupMessages({ setupId, jobId: record.id, settings }),
         setupIndex: core.isApiProvider(settings.provider) ? 0 : (restoredPoolSlotId ? core.createSetupMessages({ setupId, jobId: record.id, settings }).length : 0),
         setupAttempts: Math.max(0, Number(record.setupAttempts) || 0),
         retryAttempts: Math.max(0, Number(record.retryAttempts) || 0),
         sendNotConfirmedAttempts: Math.max(0, Math.min(GEMINI_SEND_NOT_CONFIRMED_RETRIES, Number(record.sendNotConfirmedAttempts) || 0)),
+        receiptMissingAttempts: Math.max(0, Math.min(2, Number(record.receiptMissingAttempts) || 0)),
         automaticRecoveryCycles: Math.max(0, Math.min(1, Number(record.automaticRecoveryCycles) || 0)),
-        phase: core.isApiProvider(settings.provider)
+        phase: refusalApiPending ? "batch" : core.isApiProvider(settings.provider)
           ? (["batch", "repair"].includes(phase) ? phase : "batch")
           : (restoredPoolSlotId && ["batch", "repair"].includes(phase) ? phase : "setup"),
         pending: false,
@@ -1363,13 +1528,50 @@
         activeRequestId: /^batch_\d+_\d{4}$/.test(record.activeRequestId || '') ? record.activeRequestId : '',
         validationDiagnostic: record.validationDiagnostic || null,
         lastBatchError: typeof record.lastBatchError === 'string' ? record.lastBatchError : '',
+        dispatchReceipts: record.dispatchReceipts && typeof record.dispatchReceipts === "object"
+          ? Object.fromEntries(Object.entries(record.dispatchReceipts).slice(-24).map(([key, value]) => [key, {
+            jobId: record.id,
+            batchId: typeof value?.batchId === "string" ? value.batchId : "",
+            batchIndex: Math.max(0, Number(value?.batchIndex) || 0),
+            requestId: typeof value?.requestId === "string" ? value.requestId : "",
+            generation: Math.max(0, Number(value?.generation) || 0),
+            lane: value?.lane === "rescue" ? "rescue" : "normal",
+            tabId: Number.isInteger(value?.tabId) ? value.tabId : null,
+            status: typeof value?.status === "string" ? value.status : "unknown",
+            attempts: Math.max(0, Number(value?.attempts) || 0),
+            system2Attempts: Math.max(0, Math.min(2, Number(value?.system2Attempts) || 0)),
+            technicalRecoveryAttempts: Math.max(0, Math.min(3, Number(value?.technicalRecoveryAttempts) || 0)),
+            updatedAt: Math.max(0, Number(value?.updatedAt) || 0),
+            ...(value?.reason ? { reason: String(value.reason).slice(0, 64) } : {}),
+            ...(value?.outcomeCode ? { outcomeCode: String(value.outcomeCode).slice(0, 64) } : {})
+          }])) : {},
+        apiBatchIndexes: new Set(Array.isArray(record.apiBatchIndexes)
+          ? record.apiBatchIndexes
+            .map(Number)
+            .filter((index) => Number.isInteger(index) && index >= 0 && index < batches.length)
+          : []),
         usedRequestIds: new Set(record.usedRequestIds || []),
-        workState: "queued",
+        workState: record.status === "running" && record.resetContinuationPending === true
+          && record.workState === "settled" ? "settled" : "queued",
+        resetContinuationPending: record.status === "running" && record.resetContinuationPending === true
+          && record.workState === "settled",
         unsentRequestId: /^batch_\d+_\d{4}$/.test(record.unsentRequestId || "") ? record.unsentRequestId : "",
         busyStartedAt: Math.max(0, Number(record.busyStartedAt) || 0),
         busyRetryCount: Math.max(0, Number(record.busyRetryCount) || 0),
         busyRequestId: /^batch_\d+_\d{4}$/.test(record.busyRequestId || "") ? record.busyRequestId : "",
         refusalReplacementAttempts: Math.max(0, Number(record.refusalReplacementAttempts) || 0),
+        refusalApiBatchIds: new Set(Array.isArray(record.refusalApiBatchIds)
+          ? record.refusalApiBatchIds.filter(value => /^B\d{4}$/.test(String(value))).slice(0, 5)
+          : []),
+        refusalApiPending,
+        refusalApiRequestId: /^batch_\d+_\d{4}$/.test(record.refusalApiRequestId || "")
+          ? record.refusalApiRequestId : "",
+        refusalApiAttempts: Math.max(0, Math.min(2, Number(record.refusalApiAttempts) || 0)),
+        refusalSanitizeAttempted: record.refusalSanitizeAttempted === true,
+        refusalRescueAttempted: record.refusalRescueAttempted === true,
+        refusalRescueActive: record.refusalRescueActive === true,
+        refusalRescueOutcome: ["pending", "ready", "succeeded", "api_fallback", "failed"].includes(record.refusalRescueOutcome)
+          ? record.refusalRescueOutcome : "none",
         stableSignature: "",
         stableReads: 0,
         apiAbortController: null,
@@ -1432,7 +1634,11 @@
     }
 
     let translationJobs;
+    const geminiAccounts = options.geminiAccounts || accountApi.createGeminiAccountService({
+      storage, storageCall, tabs, now, sleep: retrySleep, preferAlternateAccount: true
+    });
     const providerPool = providerPoolApi.createProviderPoolService({
+      geminiAccounts,
       core, tabs, windows, storage, sessionStorage, runtime, debuggerApi, alarms, now,
       warmTemporaryTimeoutMs, providerReadyAttempts, providerReadyDelayMs,
       providerReadyPasses, poolCleanupDelayMs, poolCleanupSleep, jobs, warmPool,
@@ -1452,6 +1658,7 @@
       hasPrefetchParent, notifyStatus, diagnosticPhase, pause, loadSettings,
       acquireRecoverySlot: (...args) => acquireRecoverySlotPort(...args),
       dispatchCurrent: (...args) => translationJobs.dispatchCurrent(...args),
+      recoverOrphanedReadyLease: (...args) => translationJobs.recoverOrphanedReadyLease(...args),
       probeProvider: (...args) => translationJobs.probeProvider(...args),
       restoreJobs: (...args) => restoreJobs(...args),
       didRestoreJobs: () => jobsRestoredSuccessfully, retrySleep,
@@ -1471,12 +1678,13 @@
       verifiedReadySlotByPriority, acquireJapaneseLookupSlot,
       releaseJapaneseLookupSlot, cancelJapaneseLookup, markWarmSlotFailed,
       markWarmSlotRecovered, validateSetupProviderResult, recheckSetupMarker,
-      prepareWarmSlot, restartLeasedGeminiSlot, recoverGeminiSlotInPlace, cancelGeminiRecovery, handleGeminiRecoveryAlarm, createWarmSlot, replaceFailedWarmSlot, fillWarmPool,
+      prepareWarmSlot, restartLeasedGeminiSlot, wakeOrphanedReadyLease, recoverGeminiSlotInPlace, recoverGemini1095Slot, cancelGeminiRecovery, handleGeminiRecoveryAlarm, createWarmSlot, replaceFailedWarmSlot, fillWarmPool,
       ensureWarmPool, performWarmPoolReconfiguration, reconfigureWarmPool,
       cleanupWarmPool, scheduleLastStvCleanup, assignWarmSlot, acquireWarmSlot,
       drainWarmWaiters, spendJobSlot, closeLegacyProviderTab, openProvider
     } = providerPool;
     translationJobs = translationJobApi.createTranslationJobService({
+      geminiAccounts, recoverGemini1095Slot,
       core, cache, apiClient, retryDelayMs, retrySleep, now, tabs, storage,
       sessionStorage, createId, jobs, warmPool, ttsSession, errorJournal,
       retainTerminalJob, withPoolLock, storageCall, loadSettings, loadApiKey,
@@ -1488,6 +1696,7 @@
       hasEligibleStvTab, hasPrefetchParent, isStvUrl, markWarmSlotFailed,
       markWarmSlotRecovered, notifyPoolStatus, openProvider, persistPool,
       prepareWarmSlot, restartLeasedGeminiSlot, recoverGeminiSlotInPlace, cancelGeminiRecovery, providerTabMatches, readySendTimeoutFor, readyTimeoutFor,
+      wakeOrphanedReadyLease,
       registerStvTab, releaseChatGPTSetupPerformanceLease, rememberPrefetchParent,
       removeOwnedSlot, recycleOwnedSlot, requestedPurposePriorities, resolveStvSenderChapter,
       restoreJobs, restorePoolMetadata, sendProviderMessage, spendJobSlot,
@@ -1803,12 +2012,15 @@
           if (sender?.tab || !senderUrl.startsWith("chrome-extension://") || !senderUrl.includes("/popup/popup.html")) {
             return { ok: false, reason: "trusted-context-required" };
           }
+          const incidents = await errorJournal?.recent?.(5) || [];
+          const latestIncident = incidents[0] || await errorJournal?.latest?.() || null;
           return {
             ok: true,
             report: {
               schemaVersion: 1,
               generatedAt: now(),
-              incident: await errorJournal?.latest?.() || null
+              incident: latestIncident,
+              incidents: incidents.length ? incidents : (latestIncident ? [latestIncident] : [])
             }
           };
         }
@@ -1902,7 +2114,10 @@
         case "STVAI_PROVIDER_PAUSED": {
           const job = await ensureJob(String(message.jobId || ""));
           if (!job) return { ok: false, reason: "stale-job" };
-          if (sender?.tab?.id !== job.providerTabId) return { ok: false, reason: "wrong-provider-tab" };
+          if (sender?.tab?.id !== job.providerTabId
+            && sender?.tab?.id !== job.rescueLane?.providerTabId) {
+            return { ok: false, reason: "wrong-provider-tab" };
+          }
           return pause(job, message.reason);
         }
         case "STVAI_PROVIDER_READY":
@@ -1959,6 +2174,8 @@
     const handleMessage = messageRouter.handleMessage;
 
     async function handleTabUpdated(tabId, changeInfo, tab = {}) {
+      // Intermediate account chooser documents belong to the switching operation.
+      if (findPoolSlotByTab(tabId)?.accountSwitching === true) return;
       const navigationUrl = String(changeInfo?.url || tab?.url || "");
       const stvUrlChanged = typeof changeInfo?.url === "string" && isStvUrl(navigationUrl);
       if ((changeInfo?.status === "loading" || stvUrlChanged) && isStvUrl(navigationUrl)) {
@@ -2054,6 +2271,18 @@
           }
           slot.state = "failed";
           slot.errorCode = failureCode;
+          if (isAuthenticationBlocker(failureCode)) {
+            // Authentication blocks apply to the whole provider session. Stop
+            // every parallel READY preparation without closing or replacing
+            // its physical tab; otherwise each in-flight slot can create more
+            // Google verification traffic before the user sees the warning.
+            for (const candidate of warmPool.slots) {
+              if (candidate === slot || !["opening", "preparing", "restoring", "recovering"].includes(candidate.state)) continue;
+              candidate.preparationAttemptId = createId("authentication-blocked");
+              candidate.state = "opening";
+              candidate.preparationRequested = false;
+            }
+          }
           exposeSlotFailureToPool(slot);
           await persistPool();
           await notifyPoolStatus();
@@ -2153,11 +2382,14 @@
           sourceJob.pending = false;
           sourceJob.apiAbortController?.abort();
           sourceJob.apiAbortController = null;
+          sourceJob.rescueApiAbortController?.abort?.();
+          sourceJob.rescueApiAbortController = null;
           await sendToTab(sourceJob.providerTabId, {
             type: "STVAI_PROVIDER_CANCEL",
             jobId: sourceJob.id
           });
           await removePersistedJob(sourceJob.id);
+          if (sourceJob.rescueLane) await translationJobs.releaseParallelRescueLane(sourceJob);
           if (sourceJob.poolSlotId) {
             await spendJobSlot(sourceJob, lastStvTabClosed
               ? { preserveWithoutStv: true, deferDrain: true }
@@ -2180,8 +2412,14 @@
         const index = warmPool.slots.indexOf(poolSlot);
         if (index >= 0) warmPool.slots.splice(index, 1);
         if (leasedJob && !["cancelled", "completed"].includes(leasedJob.status)) {
-          leasedJob.providerTabId = null;
-          leasedJob.poolSlotId = "";
+          if (poolSlot.laneRole === "rescue" && leasedJob.rescueLane?.providerTabId === tabId) {
+            leasedJob.rescueLane.providerTabId = null;
+            leasedJob.rescueLane.slotId = "";
+            leasedJob.rescueLane.ready = false;
+          } else {
+            leasedJob.providerTabId = null;
+            leasedJob.poolSlotId = "";
+          }
           await pause(leasedJob, "provider_tab_closed");
         }
         await persistPool();

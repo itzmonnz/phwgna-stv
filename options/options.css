@@ -236,6 +236,16 @@ h2 {
   gap: 28px;
 }
 
+/* The backup card contains several actions. Keep its description full width
+   so a narrow action column cannot squeeze Vietnamese text into one-word lines. */
+.settings-card--data {
+  grid-template-columns: 1fr;
+}
+
+.settings-card--data .data-actions {
+  min-width: 0;
+}
+
 .section-heading {
   display: grid;
   grid-template-columns: minmax(180px, 0.72fr) minmax(260px, 1fr);

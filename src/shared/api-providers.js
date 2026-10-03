@@ -7,7 +7,7 @@
   const API_PROVIDERS = Object.freeze(["openrouter_api", "gemini_api", "openai_api", "deepseek_api"]);
   const DEFAULT_MODELS = Object.freeze({
     openrouter_api: "openrouter/auto",
-    gemini_api: "gemini-2.5-flash",
+    gemini_api: "google/gemini-3.8-flash",
     openai_api: "gpt-5.4",
     deepseek_api: "deepseek-chat"
   });
@@ -46,7 +46,8 @@
     let url;
     let body;
     if (input.provider === "gemini_api") {
-      url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
+      const endpointModel = model.replace(/^google\//i, "");
+      url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(endpointModel)}:generateContent`;
       headers["x-goog-api-key"] = String(input.apiKey).trim();
       body = {
         systemInstruction: { parts: [{ text: system }] },

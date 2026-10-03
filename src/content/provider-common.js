@@ -36,7 +36,8 @@
     sendButtonState: "not_found",
     clickAttempted: false,
     submissionConfirmed: false,
-    requestAlreadyPresent: false
+    requestAlreadyPresent: false,
+    sendFailures: []
   };
 
   function setDiagnosticState(stage, phase, errorCode = "none") {
@@ -64,7 +65,7 @@
   }
 
   function getDiagnosticState() {
-    return { ...diagnosticState };
+    return { ...diagnosticState, sendFailures: diagnosticState.sendFailures.map(entry => ({ ...entry })) };
   }
 
   function updateSubmissionDiagnostic(adapter) {
@@ -582,6 +583,7 @@
       security_verification: "Trang AI đang yêu cầu xác minh bảo mật thủ công.",
       login_browser_rejected: "Google đã từ chối cửa sổ tự động. Hãy đăng nhập bằng cửa sổ Chrome AI thường.",
       rate_limited: "Trang AI đang giới hạn lượt sử dụng. Hãy thử lại sau.",
+      gemini_1095: "Gemini báo lỗi 1095; đang thử lại hoặc chuyển tài khoản Pro.",
       ui_changed: "Không nhận diện được giao diện trang AI hiện tại.",
       ab_comparison: "Trang AI đang yêu cầu lựa chọn phản hồi thủ công.",
       temporary_unavailable: "Không thể bật chế độ trò chuyện tạm thời trên giao diện hiện tại.",
@@ -603,6 +605,23 @@
     let activeJob = null;
     let preparedEvidence = null;
     let acceptedStaleStop = null;
+    const acceptedSetupReceipts = new Set();
+
+    function setupReceiptKey(message) {
+      if (message?.phase !== "setup") return "";
+      const setupId = String(message.setupId || `setup-${message.jobId || ""}`);
+      const part = String(message.setupPart || "");
+      const marker = String(message.responseMarker || "");
+      return setupId && part && marker ? `${setupId}\u0000${part}\u0000${marker}` : "";
+    }
+
+    function rememberSetupReceipt(key) {
+      if (!key) return;
+      acceptedSetupReceipts.add(key);
+      while (acceptedSetupReceipts.size > 8) {
+        acceptedSetupReceipts.delete(acceptedSetupReceipts.values().next().value);
+      }
+    }
 
     return async function handleProviderMessage(message) {
       const type = message?.type;
@@ -639,9 +658,12 @@
 
       if (type === "STVAI_PROVIDER_READY_RECHECK") {
         const part = String(message?.setupPart || "");
-        const expectedMarker = String(core?.READY_MARKERS?.[part] || "");
         const requestedMarker = String(message?.responseMarker || "");
-        if (!expectedMarker || requestedMarker !== expectedMarker) {
+        const ordinaryMarker = String(core?.READY_MARKERS?.[part] || "");
+        const refusalMarker = String(core?.REFUSAL_READY_MARKER || "");
+        const markerAllowed = requestedMarker === ordinaryMarker
+          || (part === "introduction" && refusalMarker && requestedMarker === refusalMarker);
+        if (!requestedMarker || !markerAllowed) {
           return { ok: false, confirmed: false, error: { code: "invalid_message" } };
         }
         const responseState = typeof adapter.readResponseState === "function"
@@ -650,11 +672,12 @@
         const generating = responseState?.generating === true;
         const latestMatches = extractProtocolResponse(responseState?.text, {
           phase: "setup",
-          responseMarker: expectedMarker
-        }) === expectedMarker;
-        const markerFound = adapter.hasResponseMarker?.(expectedMarker) === true || latestMatches;
+          responseMarker: requestedMarker
+        }) === requestedMarker;
+        const markerFound = adapter.hasResponseMarker?.(requestedMarker) === true || latestMatches;
         const confirmed = markerFound && !generating;
-        if (confirmed && part === "system" && message?.warmSessionId && message?.settingsHash) {
+        const finalReadyMarker = part === "system" || requestedMarker === refusalMarker;
+        if (confirmed && finalReadyMarker && message?.warmSessionId && message?.settingsHash) {
           preparedEvidence = {
             warmSessionId: String(message.warmSessionId),
             settingsHash: String(message.settingsHash)
@@ -664,7 +687,7 @@
           ok: true,
           confirmed,
           part,
-          marker: expectedMarker,
+          marker: requestedMarker,
           ...(!confirmed ? { reason: generating ? "generating" : "marker_missing" } : {})
         };
       }
@@ -703,10 +726,17 @@
         if (defaults.provider !== "gemini" || typeof adapter.restartTemporaryChat !== "function") {
           return { ok: false, error: { code: "unsupported" } };
         }
+        // A liveness/recovery alarm can arrive while READY 1 is still waiting
+        // for Gemini. Navigating here would discard that response and turn a
+        // healthy Temporary Chat into a normal-chat recovery loop.
+        if (activeJob) {
+          return { ok: false, error: { code: "provider_busy" } };
+        }
         // Evidence belongs to the conversation that is about to be discarded.
         // Clear it before navigation starts, including when Gemini rejects the
         // reset, so a later STATUS probe cannot revive this tab as READY.
         preparedEvidence = null;
+        acceptedSetupReceipts.clear();
         resetReadyDiagnostic({ phase: "setup", setupIndex: 0 });
         setDiagnosticState("preparing", "setup", "none");
         try {
@@ -828,8 +858,20 @@
         const previousResponse = typeof adapter.readLatestResponse === "function"
           ? adapter.readLatestResponse()
           : "";
+        const currentSetupReceiptKey = setupReceiptKey(message);
+        const existingSetupState = currentSetupReceiptKey
+          && acceptedSetupReceipts.has(currentSetupReceiptKey)
+          && message.responseMarker
+          && typeof adapter.hasResponseMarker === "function"
+          && adapter.hasResponseMarker(message.responseMarker)
+          && (typeof adapter.readResponseState !== "function"
+            || adapter.readResponseState()?.generating !== true);
         setDiagnosticState("sending", message.phase);
-        const submission = await adapter.sendPrompt(message.prompt, {
+        // READY setup has no batch requestId, so the ordinary duplicate-send
+        // guard cannot identify it. Reconcile only a marker accepted for the
+        // exact setupId + part on this tab; an older conversation's identical
+        // READY marker must never make a fresh setup look complete.
+        const submission = existingSetupState ? { alreadySent: true } : await adapter.sendPrompt(message.prompt, {
           phase: message.phase,
           signal: controller.signal,
           requestId: message.requestId,
@@ -940,6 +982,7 @@
           };
         diagnosticState.acceptedAt = Date.now();
         if (message.phase === "setup" && outcome.stability) updateReadyDiagnostic(outcome.stability);
+        if (message.phase === "setup") rememberSetupReceipt(currentSetupReceiptKey);
         if (message.phase === "setup"
           && typeof message.warmSessionId === "string"
           && message.warmSessionId
@@ -970,7 +1013,7 @@
           })
           : null;
         if (setupValidation) diagnosticState.validationReason = setupValidation.reason;
-        return {
+        const acceptedResult = {
           ok: true,
           jobId,
           response: outcome.response,
@@ -993,6 +1036,23 @@
           } : {}),
           ...(message.phase === "setup" ? { stability: outcome.stability } : {})
         };
+        if (message.phase === "batch" && typeof defaults.publishSettledResult === "function") {
+          defaults.publishSettledResult({
+            type: "STVAI_PROVIDER_RESULT",
+            phase: "batch",
+            jobId,
+            batchId: String(message.batchId || ""),
+            requestId: String(message.requestId || ""),
+            text: acceptedResult.response,
+            outcomeCode: acceptedResult.outcomeCode,
+            ...(acceptedResult.completionMode ? { completionMode: acceptedResult.completionMode } : {}),
+            ...(acceptedResult.providerTabDisposition
+              ? { providerTabDisposition: acceptedResult.providerTabDisposition }
+              : {}),
+            ...(acceptedResult.stableMs != null ? { stableMs: acceptedResult.stableMs } : {})
+          });
+        }
+        return acceptedResult;
       } catch (error) {
         if (typeof adapter.onFailure === "function") {
           try {
@@ -1016,6 +1076,23 @@
         if (reportedError?.code === "send_not_confirmed") diagnosticState.sendState = "unconfirmed";
         setDiagnosticState("error", message.phase,
           typeof reportedError?.code === "string" ? reportedError.code : "provider_error");
+        if (message.phase === "batch" && diagnosticState.sendState !== "confirmed"
+          && diagnosticState.sendState !== "reconciled") {
+          const code = ["send_not_confirmed", "provider_busy_timeout", "provider_busy", "ui_changed",
+            "captcha", "temporary_unavailable", "temporary_session_lost", "gemini_1095", "cancelled"]
+            .includes(reportedError?.code) ? reportedError.code : "provider_error";
+          // Retry may replace the current diagnostic. Preserve only bounded
+          // enums/booleans and protocol identity, never prompt or response text.
+          diagnosticState.sendFailures.push({
+            at: Date.now(), code,
+            requestId: /^batch_\d+_\d{4}$/.test(String(message.requestId || "")) ? message.requestId : "",
+            batchAttempt: diagnosticState.batchAttempt,
+            composerState: diagnosticState.composerState,
+            sendButtonState: diagnosticState.sendButtonState,
+            clickAttempted: diagnosticState.clickAttempted
+          });
+          diagnosticState.sendFailures = diagnosticState.sendFailures.slice(-8);
+        }
         return { ok: false, jobId, error: serializeError(reportedError) };
       } finally {
         if (activeJob?.jobId === jobId) activeJob = null;
@@ -1265,7 +1342,24 @@
     let coordinator;
     const handler = createProviderMessageHandler(adapter, {
       ...options,
-      getSetupState: () => coordinator?.getState() || null
+      getSetupState: () => coordinator?.getState() || null,
+      publishSettledResult(message) {
+        // The direct tabs.sendMessage response remains the fast path. This
+        // deferred push is a recovery receipt: it wakes a restarted MV3
+        // worker and lets it reclaim a response that is already stable on the
+        // same physical provider tab. Deferring until the current listener has
+        // returned also guarantees activeJob is clear before background can
+        // dispatch the next batch to this tab.
+        setTimeout(() => {
+          try {
+            const delivery = chromeApi.runtime.sendMessage(message);
+            delivery?.catch?.(() => undefined);
+          } catch (_error) {
+            // Best-effort duplicate-safe recovery; the direct reply normally
+            // completes the batch first.
+          }
+        }, 0);
+      }
     });
     coordinator = createProviderSetupCoordinator(adapter, handler, chromeApi, options);
     chromeApi.runtime.onMessage.addListener((message, _sender, sendResponse) => {
