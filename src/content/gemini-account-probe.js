@@ -4,6 +4,8 @@
   if (root.chrome?.runtime?.onMessage && root.document) api.install(root);
 })(typeof globalThis !== "undefined" ? globalThis : this, function () {
   "use strict";
+  const sidebarsOpenedByProbe = new WeakSet();
+
   function openCollapsedSidebar(document) {
     const controls = [...document.querySelectorAll("button")];
     const toggle = controls.find(button => {
@@ -11,6 +13,21 @@
       return /^(?:Mở thanh bên|Open sidebar|Expand sidebar|Show navigation)$/i.test(label)
         && !button.disabled && button.getAttribute("aria-disabled") !== "true";
     });
+    if (!toggle) return false;
+    sidebarsOpenedByProbe.add(document);
+    toggle.click();
+    return true;
+  }
+
+  function restoreSidebar(document) {
+    if (!sidebarsOpenedByProbe.has(document)) return false;
+    const controls = [...document.querySelectorAll("button")];
+    const toggle = controls.find(button => {
+      const label = String(button.getAttribute("aria-label") || button.getAttribute("title") || "").trim();
+      return /^(?:\u0110\u00f3ng thanh b\u00ean|Close sidebar|Collapse sidebar|Hide navigation)$/i.test(label)
+        && !button.disabled && button.getAttribute("aria-disabled") !== "true";
+    });
+    sidebarsOpenedByProbe.delete(document);
     if (!toggle) return false;
     toggle.click();
     return true;
@@ -48,7 +65,7 @@
         chooserUrl = "https://accounts.google.com/SignOutOptions?continue=https://gemini.google.com";
       }
     } catch (_) { /* incomplete page */ }
-    return {
+    const snapshot = {
       kind: avatar && email ? "gemini" : "loading",
       key: email ? await digest(email) : "",
       paid: /^(?:Pro|Ultra|Advanced|Google AI Pro|Google AI Ultra)$/i.test(tier),
@@ -56,6 +73,8 @@
       busy: Boolean(document.querySelector('button[aria-label*="Stop"],button[aria-label*="Dừng"]')),
       chooserUrl
     };
+    restoreSidebar(document);
+    return snapshot;
   }
 
   function install(root) {
@@ -71,5 +90,5 @@
       return true;
     });
   }
-  return Object.freeze({ readAccountDom, openCollapsedSidebar, install });
+  return Object.freeze({ readAccountDom, openCollapsedSidebar, restoreSidebar, install });
 });

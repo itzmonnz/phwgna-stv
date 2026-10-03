@@ -1923,6 +1923,41 @@
           // sessionState may still be the pre-Temp probe's "normal_chat";
           // treating that stale value as a lost session restarts the chat
           // underneath an in-flight READY prompt.
+          // The provider can finish READY 2 just before the long-lived
+          // sendMessage reply channel disappears with an MV3 worker. In that
+          // case the content script already holds the exact warm identity,
+          // while the persisted slot remains `preparing` forever. Recover the
+          // completed checkpoint from that identity and wake queued work.
+          const inspection = await inspectPreparedSlot(slot);
+          if (inspection.verified) {
+            slot.setupCheckpoint = SETUP_PARTS.length;
+            slot.setupState = "completed";
+            slot.setupLastProgressAt = now();
+            slot.state = "ready";
+            slot.sessionState = "temporary_active";
+            slot.preparationRequested = false;
+            slot.preparationPasses = 0;
+            slot.errorCode = "";
+            warmPool.errorCode = "";
+            await markWarmSlotRecovered(slot);
+            await persistPool();
+            // `ensureWarmPool` may still own the pool lock while the original
+            // READY 2 reply is stranded. Release its first-ready wait before
+            // draining queued jobs so this watchdog cannot deadlock behind
+            // the setup call it is repairing.
+            poolFillOperation?.resolveFirstReady?.();
+            await notifyPoolStatus();
+            await scheduleGeminiLivenessAlarm(slot);
+            await wakeOrphanedReadyLease(slot);
+            await drainWarmWaiters();
+            return true;
+          }
+          const setupStartedAt = Math.max(0, Number(slot.setupStageStartedAt) || 0);
+          if (setupStartedAt && now() - setupStartedAt >= GEMINI_SETUP_HARD_TIMEOUT_MS) {
+            slot.errorCode = inspection.code || "warm_evidence_missing";
+            await beginGeminiSessionRecovery(slot, slot.errorCode);
+            return true;
+          }
           await scheduleGeminiLivenessAlarm(slot);
           return true;
         }
@@ -2196,14 +2231,15 @@
       }
       if (!createdSlots.length) return;
       let cursor = 0;
-      let resolveFirstReady;
-      const operation = { firstReady: null, all: null };
-      operation.firstReady = new Promise((resolve) => { resolveFirstReady = resolve; });
+      const operation = { firstReady: null, all: null, resolveFirstReady: null };
+      operation.firstReady = new Promise((resolve) => {
+        operation.resolveFirstReady = resolve;
+      });
       const worker = async () => {
         while (cursor < createdSlots.length) {
           const slot = createdSlots[cursor++];
           await prepareWarmSlot(slot, settings, { deferUnavailable: true });
-          if (slot.state === "ready") resolveFirstReady();
+          if (slot.state === "ready") operation.resolveFirstReady?.();
           setTimeout(() => {
             void notifyPoolStatus();
             void drainWarmWaiters();
@@ -2215,7 +2251,7 @@
       const preparationConcurrency = settings.provider === "gemini" ? createdSlots.length : 2;
       const workers = Array.from({ length: Math.min(preparationConcurrency, createdSlots.length) }, () => worker());
       operation.all = Promise.all(workers).finally(() => {
-        resolveFirstReady();
+        operation.resolveFirstReady?.();
         if (poolFillOperation === operation) poolFillOperation = null;
       });
       poolFillOperation = operation;
