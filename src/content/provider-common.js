@@ -745,7 +745,15 @@
         // reset, so a later STATUS probe cannot revive this tab as READY.
         preparedEvidence = null;
         acceptedSetupReceipts.clear();
-        resetReadyDiagnostic({ phase: "setup", setupIndex: 0 });
+        // Reset is navigation, not a fresh READY 1 submission. Old timestamps
+        // must not make a failed reset look like a confirmed setup send.
+        resetReadyDiagnostic({ phase: "idle" });
+        diagnosticState.acceptedAt = 0;
+        diagnosticState.completionSeenAt = 0;
+        diagnosticState.sendConfirmedAt = 0;
+        diagnosticState.sendState = "idle";
+        diagnosticState.submissionConfirmed = false;
+        diagnosticState.clickAttempted = false;
         setDiagnosticState("preparing", "setup", "none");
         try {
           const result = await adapter.restartTemporaryChat({

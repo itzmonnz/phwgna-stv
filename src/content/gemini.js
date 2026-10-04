@@ -49,6 +49,8 @@
     "[role='button'][aria-label='New chat' i]"
   ];
   const SIDEBAR_TOGGLE_SELECTORS = [
+    "button[aria-label='Mở thanh bên' i]",
+    "button[aria-label='Open sidebar' i]",
     "button[aria-label*='Trình đơn chính' i]",
     "button[aria-label*='Main menu' i]",
     "button[aria-label*='Navigation menu' i]",
@@ -611,7 +613,7 @@
       Array.from(document.querySelectorAll("button, [role='button']")).forEach(element => {
         const label = [element.getAttribute("aria-label"), element.getAttribute("title")]
           .filter(Boolean).join(" ");
-        if (/main menu|navigation menu|trình đơn chính|menu chính/i.test(label)) append(element);
+        if (/main menu|navigation menu|trình đơn chính|menu chính|^(?:Mở thanh bên|Open sidebar)$/i.test(label)) append(element);
       });
       return candidates[0] || null;
     }
@@ -635,6 +637,32 @@
       } catch (_error) {
         return Boolean(findNewChatControl());
       }
+    }
+
+    async function releaseChatMask({ signal, timeoutMs = 1_000 } = {}) {
+      const masked = () => document.querySelector('chat-app.side-nav-open bard-sidenav-content[aria-hidden="true"]');
+      if (!masked()) return;
+      const status = getStatus();
+      if (status.state !== "ready" && !["ui_changed", "temporary_unavailable", "send_not_confirmed"].includes(status.code)) {
+        throw new common.ProviderError(status.code, status.message);
+      }
+      if (signal?.aborted) throw new common.ProviderError("cancelled", "Tác vụ đã bị hủy.");
+      const close = Array.from(document.querySelectorAll("button, [role='button']")).find(control => (
+        /^(?:Đóng thanh bên|Close sidebar|Collapse sidebar|Hide navigation)$/i.test(String(control.getAttribute("aria-label") || "").trim())
+        && common.isVisible(control) && common.buttonIsEnabled(control)
+      ));
+      if (!close) throw new common.ProviderError("ui_changed", "Thanh bên Gemini đang che vùng chat và không có nút đóng hợp lệ.");
+      clickNavigationControl(close);
+      await common.waitForElement(() => !masked(), {
+        timeoutMs, intervalMs: options.pollIntervalMs ?? 100,
+        now: options.now, sleep: options.sleep, waitForChange: eventWaiter, signal
+      });
+    }
+
+    async function waitUntilReady({ signal, timeoutMs = 1_000 } = {}) {
+      // Called by the message handler before its status gate. Do not invent
+      // READY evidence or navigate; only release a drawer masking the chat.
+      await releaseChatMask({ signal, timeoutMs: Math.min(1_000, Math.max(1, timeoutMs)) });
     }
 
     async function waitForStableTemporary(signal, timeoutMs) {
@@ -670,6 +698,7 @@
       const stageTimeoutMs = timeoutMs ?? options.temporaryTimeoutMs ?? 10_000;
       const startedAt = now();
       const remaining = () => Math.max(0, stageTimeoutMs - (now() - startedAt));
+      await releaseChatMask({ signal, timeoutMs: Math.min(1_000, Math.max(1, remaining())) });
       if (temporaryPageIsActive()) {
         try {
           await waitForStableTemporary(signal, remaining());
@@ -707,6 +736,7 @@
         ));
         if (!control) {
           await ensureSidebarOpen({ signal, timeoutMs: Math.min(750, remaining()) });
+          await releaseChatMask({ signal, timeoutMs: Math.min(1_000, Math.max(1, remaining())) });
           const waitMs = Math.min(options.pollIntervalMs ?? 100, remaining());
           if (eventWaiter) await eventWaiter({ timeoutMs: waitMs, signal });
           else await pollSleep(waitMs);
@@ -733,6 +763,9 @@
       const status = getStatus();
       if (status.code === "gemini_1095") throw new common.ProviderError(status.code, status.message);
       const deadline = now() + Math.max(1, Number(timeoutMs ?? options.temporaryTimeoutMs ?? 10_000) || 10_000);
+      // Responsive drawers hide the editor from the resolver. Release the
+      // actual drawer before waiting for that editor, not after the wait.
+      await releaseChatMask({ signal, timeoutMs: Math.min(1_000, Math.max(1, deadline - now())) });
       // Gemini can replace its editor after finishing READY or a batch. A
       // transient missing editor is not evidence that the physical tab failed.
       // Wait before clearing owned text or clicking navigation, and recheck
@@ -787,6 +820,7 @@
           else control.setAttribute("target", originalTarget);
         }
       }
+      await releaseChatMask({ signal, timeoutMs: Math.min(1_000, Math.max(1, deadline - now())) });
       await common.waitForElement(
         () => {
           if (signal?.aborted) throw new common.ProviderError("cancelled", "Tác vụ đã bị hủy.");
@@ -815,6 +849,7 @@
 
     async function sendPrompt(prompt, sendOptions = {}) {
       await domResolver.ready?.();
+      await releaseChatMask({ signal: sendOptions.signal, timeoutMs: Math.min(1_000, Math.max(1, sendOptions.timeoutMs ?? 1_000)) });
       submissionDiagnostic = createSubmissionDiagnostic();
       const promptText = String(prompt || "").trim();
       const comparablePrompt = comparableComposerText(promptText);
@@ -1232,6 +1267,7 @@
       readResponseState,
       recoverStaleStop,
       restartTemporaryChat,
+      waitUntilReady,
       setPerformanceMode,
       waitForResponseChange: eventWaiter,
       sendPrompt
