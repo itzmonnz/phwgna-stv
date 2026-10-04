@@ -876,6 +876,7 @@
           phase: message.phase,
           signal: controller.signal,
           requestId: message.requestId,
+          responseMarker: message.phase === "setup" ? message.responseMarker : undefined,
           timeoutMs: message.sendTimeoutMs,
           onBusyState: defaults.provider === "gemini" ? (state) => {
             if (!chromeApi?.runtime?.sendMessage || !["waiting", "cleared", "timeout"].includes(state)) return;
@@ -914,7 +915,9 @@
                 && currentStatus.code === "temporary_unavailable"
                 && ["confirmed", "reconciled"].includes(diagnosticState.sendState);
               const submittedGeminiUiTransition = defaults.provider === "gemini"
-                && message.phase === "batch"
+                && (message.phase === "batch" || (message.phase === "setup"
+                  && submission?.setupResponseConfirmed === true
+                  && responseMatchesMessage(state?.text, message)))
                 && currentStatus.code === "ui_changed"
                 && ["confirmed", "reconciled"].includes(diagnosticState.sendState);
               // Once a batch Send is confirmed, losing Gemini's temporary-route
@@ -922,7 +925,8 @@
               // Gemini may also rebuild/remove its composer while the response
               // remains readable. UI structure is no longer send evidence after
               // confirmation; response evidence and its timeout decide recovery.
-              // READY setup is intentionally stricter.
+              // READY setup may survive composer replacement only with a
+              // newly appearing exact marker corroborated by the adapter.
               if (!submittedGeminiTemporaryChat && !submittedGeminiUiTransition) {
                 throw new ProviderError(currentStatus.code || "ui_changed", currentStatus.message);
               }

@@ -799,6 +799,18 @@
       const promptText = String(prompt || "").trim();
       const comparablePrompt = comparableComposerText(promptText);
       const setupPrompt = sendOptions.phase === "setup";
+      const setupMarker = setupPrompt
+        && /^(?:phwgna_stv_ready_[12]|phwgna_ready_1)$/.test(String(sendOptions.responseMarker || ""))
+        ? String(sendOptions.responseMarker) : "";
+      const hadSetupMarker = setupMarker ? hasResponseMarker(setupMarker) : false;
+      // READY has no batch request ID. Only a newly appearing, exact marker
+      // can corroborate this Send; an older marker is never a receipt.
+      const freshSetupResponse = () => setupMarker && !hadSetupMarker
+        && (!temporaryRequired || Boolean(domResolver.resolve("temporaryActive").element)
+          || TEMPORARY_ACTIVE_INDICATORS.some(selector => document.querySelector(selector)))
+        && [undefined, "ui_changed"].includes(getStatus().code)
+        && !findStopButton()
+        && hasResponseMarker(setupMarker);
       const state = getStatus();
       // After New chat -> Temporary Chat, Gemini can keep the previous
       // temporary-route diagnostic for one render cycle even though the
@@ -992,6 +1004,7 @@
       submissionDiagnostic.sendButtonState = "clicked";
       settledButton.click();
       let sawComposerClear = false;
+      let sawFreshSetupResponse = false;
       let composerClearSince = 0;
       const confirmationStableMs = Math.max(0, Number(
         options.sendConfirmationStableMs ?? (setupPrompt ? 750 : 0)
@@ -1003,6 +1016,10 @@
             if (!setupPrompt && responseOrGenerationStarted) return document.body;
             const current = findComposer();
             const currentText = readComposerText(current);
+            if (freshSetupResponse() && comparableComposerText(currentText) !== comparablePrompt) {
+              sawFreshSetupResponse = true;
+              return document.body;
+            }
             if (sawComposerClear && comparableComposerText(currentText) === comparablePrompt) {
               common.setComposerText(current, "", { focus: false });
               submissionDiagnostic.composerState = "cleared_returned_prompt";
@@ -1033,7 +1050,7 @@
         }
         const currentComposer = findComposer();
         if (currentComposer && !common.textOf(currentComposer).trim()) submissionDiagnostic.composerState = "cleared_after_send";
-        return;
+        return sawFreshSetupResponse ? { setupResponseConfirmed: true } : undefined;
       } catch (error) {
         if (error?.code === "cancelled") throw error;
       }
