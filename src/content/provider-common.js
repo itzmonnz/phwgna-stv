@@ -602,6 +602,7 @@
   }
 
   function createProviderMessageHandler(adapter, defaults = {}) {
+    const chromeApi = defaults.chromeApi;
     let activeJob = null;
     let preparedEvidence = null;
     let acceptedStaleStop = null;
@@ -1361,6 +1362,7 @@
     let coordinator;
     const handler = createProviderMessageHandler(adapter, {
       ...options,
+      chromeApi,
       getSetupState: () => coordinator?.getState() || null,
       publishSettledResult(message) {
         // The direct tabs.sendMessage response remains the fast path. This
