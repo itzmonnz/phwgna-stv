@@ -3098,7 +3098,8 @@
       // starting another setup pass; this is what wakes a chapter otherwise
       // stuck at "waiting for AI" with two visible READY replies.
       if (warmSlot && warmSlot.provider === "gemini"
-        && warmSlot.state === "preparing" && message.status === "ready"
+        && ["preparing", "restoring"].includes(warmSlot.state)
+        && message.status === "ready"
         && message.type === "STVAI_PROVIDER_READY") {
         try {
           const live = await tabs.sendMessage(warmSlot.providerTabId, { type: "STVAI_PROVIDER_STATUS" });
@@ -3138,7 +3139,7 @@
           await persistPool();
         });
       }
-      if (warmSlot && ["opening", "preparing"].includes(warmSlot.state)) {
+      if (warmSlot && ["opening", "preparing", "restoring"].includes(warmSlot.state)) {
         if (message.status && message.status !== "ready") {
           await markWarmSlotFailed(warmSlot, message.reason || message.status);
           return { ok: false, reason: warmSlot.errorCode };
