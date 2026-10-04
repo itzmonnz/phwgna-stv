@@ -683,6 +683,13 @@
             warmSessionId: String(message.warmSessionId),
             settingsHash: String(message.settingsHash)
           };
+          // A drawer can mask READY while setup is collecting its response.
+          // Once the exact final marker is rechecked on an idle, usable tab,
+          // do not leave that settled UI error poisoning every future lease.
+          if (defaults.provider === "gemini" && !activeJob && adapter.getStatus()?.state === "ready"
+            && diagnosticState.stage === "error" && diagnosticState.errorCode === "ui_changed") {
+            setDiagnosticState("completed", "setup", "none");
+          }
         }
         return {
           ok: true,

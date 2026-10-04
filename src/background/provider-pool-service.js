@@ -107,7 +107,7 @@
       // otherwise restorePoolMetadata discards it before Temporary Chat can be
       // reopened.
       if (slot.state === "failed"
-        && ["gemini_account_probe_failed", "gemini_paid_account_missing"].includes(slot.errorCode)) return true;
+        && ["gemini_account_probe_failed", "gemini_paid_account_missing", "ui_changed"].includes(slot.errorCode)) return true;
       if (slot.accountSwitching === true) return true;
       if (slot.state === "recovering"
         && GEMINI_IN_PLACE_RECOVERY_CODES.has(String(slot.errorCode || ""))) return true;

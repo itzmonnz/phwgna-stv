@@ -26,6 +26,31 @@
     return true;
   }
 
+  async function releaseBlockingSidebar(document) {
+    const content = document.querySelector('chat-app.side-nav-open bard-sidenav-content[aria-hidden="true"]');
+    if (!content) return true;
+    const close = [...document.querySelectorAll('button')].find(button =>
+      /^(?:Đóng thanh bên|Close sidebar|Collapse sidebar|Hide navigation)$/i.test(
+        String(button.getAttribute('aria-label') || '').trim())
+      && visibleControl(button) && !button.disabled && button.getAttribute('aria-disabled') !== 'true');
+    if (!close) return false;
+    // On Gemini's mobile layout an open drawer masks the entire chat to DOM
+    // readers, even though both READY replies are already rendered. Finish the
+    // drawer transition before background may start/validate provider setup.
+    return new Promise(resolve => {
+      let timer;
+      const observer = new document.defaultView.MutationObserver(check);
+      function finish(value) { observer.disconnect(); clearTimeout(timer); resolve(value); }
+      function check() {
+        if (!document.querySelector('chat-app.side-nav-open bard-sidenav-content[aria-hidden="true"]')) finish(true);
+      }
+      observer.observe(document.documentElement, { subtree: true, childList: true, attributes: true, attributeFilter: ['aria-hidden', 'class'] });
+      timer = setTimeout(() => finish(false), 1_000);
+      close.click();
+      check();
+    });
+  }
+
   // Read only account controls. Personal labels never cross the page boundary.
   async function readAccountDom(document, location, crypto) {
     const digest = async value => [...new Uint8Array(await crypto.subtle.digest(
@@ -72,9 +97,9 @@
       busy: Boolean(document.querySelector('button[aria-label*="Stop"],button[aria-label*="Dừng"]')),
       chooserUrl
     };
-    // Keep the sidebar open after account probing. The same physical tab may
-    // immediately enter Temporary Chat; closing it here races that navigation
-    // and leaves the provider in regular chat with no useful error.
+    // Keep desktop navigation intact. Only close a drawer that actually masks
+    // the chat, and await its completion to avoid racing Temporary Chat.
+    if (snapshot.kind === 'gemini' && !await releaseBlockingSidebar(document)) return { kind: 'loading' };
     return snapshot;
   }
 
