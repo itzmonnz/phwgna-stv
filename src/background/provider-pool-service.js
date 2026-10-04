@@ -106,7 +106,8 @@
       // physical tab across worker restart and promote it to recovery below;
       // otherwise restorePoolMetadata discards it before Temporary Chat can be
       // reopened.
-      if (slot.state === "failed" && slot.errorCode === "gemini_account_probe_failed") return true;
+      if (slot.state === "failed"
+        && ["gemini_account_probe_failed", "gemini_paid_account_missing"].includes(slot.errorCode)) return true;
       if (slot.accountSwitching === true) return true;
       if (slot.state === "recovering"
         && GEMINI_IN_PLACE_RECOVERY_CODES.has(String(slot.errorCode || ""))) return true;
@@ -581,7 +582,11 @@
               setupServiceWorkerRestarts: Math.max(0, Number(slot?.setupServiceWorkerRestarts) || 0) + 1,
               setupResumeAttempts: Math.max(0, Number(slot?.setupResumeAttempts) || 0),
               setupErrorCode: String(slot?.setupErrorCode || ""),
-              accountInitialized: slot?.accountInitialized === true,
+              // A missing badge may have been recorded as a subscription
+              // failure. Reverify on the retained tab before any READY setup;
+              // never trust the previous account initialization in this case.
+              accountInitialized: slot?.accountInitialized === true
+                && slot?.errorCode !== "gemini_paid_account_missing",
               bridgeRecoveryReloadAt: Math.max(0, Number(slot?.bridgeRecoveryReloadAt) || 0),
               accountProbeRecoveryAttempts: Math.max(0, Number(slot?.accountProbeRecoveryAttempts) || 0),
               firstBatchDispatchedAt: Math.max(0, Number(slot?.firstBatchDispatchedAt) || 0),

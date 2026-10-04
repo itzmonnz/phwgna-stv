@@ -1772,6 +1772,11 @@
         updateToolbar("Gemini đang yêu cầu CAPTCHA — xác thực trên tab AI, rồi bấm Dịch lại nếu chương đang tạm dừng.");
         return;
       }
+      if (state.status === "waiting-provider" && pool.state === "error"
+        && pool.readyCount === 0 && pool.leasedCount === 0) {
+        updateToolbar(`Chưa có tab AI dùng được: ${reasonLabel(pool.errorCode)} (${pool.errorCode})`);
+        return;
+      }
       if (state.status === 'completed' && prefetchStatus) return;
       if (["running", "waiting-provider", "paused", "error", "cancelled"].includes(state.status)) return;
       if (pool.reconfiguring) {

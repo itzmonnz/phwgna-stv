@@ -4,12 +4,22 @@
   if (root.chrome?.runtime?.onMessage && root.document) api.install(root);
 })(typeof globalThis !== "undefined" ? globalThis : this, function () {
   "use strict";
+  function visibleControl(element) {
+    if (!element) return false;
+    for (let node = element; node?.nodeType === 1; node = node.parentElement) {
+      if (node.hidden || node.getAttribute("aria-hidden") === "true") return false;
+      const style = element.ownerDocument.defaultView?.getComputedStyle?.(node);
+      if (style?.display === "none" || /^(hidden|collapse)$/.test(style?.visibility || "")) return false;
+    }
+    return true;
+  }
+
   function openCollapsedSidebar(document) {
     const controls = [...document.querySelectorAll("button")];
     const toggle = controls.find(button => {
       const label = String(button.getAttribute("aria-label") || button.getAttribute("title") || "").trim();
       return /^(?:Mở thanh bên|Open sidebar|Expand sidebar|Show navigation)$/i.test(label)
-        && !button.disabled && button.getAttribute("aria-disabled") !== "true";
+        && visibleControl(button) && !button.disabled && button.getAttribute("aria-disabled") !== "true";
     });
     if (!toggle) return false;
     toggle.click();
@@ -37,8 +47,14 @@
     // Free account and reject every signed-in Pro account before Temporary
     // Chat could start. Open the existing sidebar once and let the background
     // probe retry after Gemini renders the trusted account controls.
-    if (!tierElement && openCollapsedSidebar(document)) return { kind: "loading" };
     const tier = String(tierElement?.textContent || "").trim();
+    if (!tier || !visibleControl(tierElement)) {
+      openCollapsedSidebar(document);
+      return { kind: "loading" };
+    }
+    // No badge (or an unfinished badge) is unknown, not Free. The background
+    // has a bounded probe deadline; do not permanently reject a verified Pro
+    // account merely because Angular has not mounted its account footer yet.
     const chooser = avatar?.getAttribute("href");
     let chooserUrl = "";
     try {
