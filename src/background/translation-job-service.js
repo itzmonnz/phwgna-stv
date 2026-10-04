@@ -3091,7 +3091,51 @@
 
     async function providerStatus(message, sender) {
       await restoreJobs();
-      const warmSlot = findPoolSlotByTab(sender?.tab?.id);
+      let warmSlot = findPoolSlotByTab(sender?.tab?.id);
+      // Chrome can restore the visible Gemini tabs with fresh tab IDs after
+      // Turbo restarts.  The persisted pool still points at the old IDs, so a
+      // perfectly valid READY heartbeat would otherwise be reported as an
+      // unknown provider tab and leave STV waiting forever.  Rebind only when
+      // the old physical tab is gone and the new tab proves the exact warm
+      // identity; never claim an unrelated Gemini tab.
+      if (!warmSlot && Number.isInteger(sender?.tab?.id)
+        && await providerTabMatches("gemini", sender.tab.id, sender?.url || sender?.tab?.url || "")) {
+        const candidates = warmPool.slots.filter((slot) => slot.provider === "gemini"
+          && ["restoring", "preparing", "ready"].includes(slot.state)
+          && Number.isInteger(slot.providerTabId)
+          && slot.providerTabId !== sender.tab.id
+          && slot.warmSessionId && slot.settingsHash);
+        for (const candidate of candidates) {
+          if (await providerTabMatches("gemini", candidate.providerTabId, candidate.lastKnownUrl || "")) continue;
+          try {
+            const live = await tabs.sendMessage(sender.tab.id, { type: "STVAI_PROVIDER_STATUS" });
+            const state = live?.state;
+            const prepared = state?.prepared;
+            const exactReady = state?.state === "ready"
+              && state?.operation?.active !== true
+              && state?.runtime?.stage !== "error"
+              && prepared?.warmSessionId === candidate.warmSessionId
+              && prepared?.settingsHash === candidate.settingsHash;
+            if (!exactReady) continue;
+            candidate.providerTabId = sender.tab.id;
+            if (Number.isInteger(sender.tab.windowId)) candidate.providerWindowId = sender.tab.windowId;
+            candidate.state = "ready";
+            candidate.restoreState = "ready";
+            candidate.sessionState = String(state?.session?.state || "temporary_active");
+            candidate.setupState = "completed";
+            candidate.setupCheckpoint = SETUP_PARTS.length;
+            candidate.setupStage = "completed";
+            candidate.errorCode = "";
+            await persistPool();
+            await notifyPoolStatus();
+            await drainWarmWaiters();
+            warmSlot = candidate;
+            break;
+          } catch (_error) {
+            // Try the next persisted slot; no new tab is created here.
+          }
+        }
+      }
       // Gemini can complete READY 2 in the content script after the original
       // setup reply channel has disappeared.  The tab then sends a metadata-
       // only READY heartbeat.  Reclaim the prepared evidence directly before

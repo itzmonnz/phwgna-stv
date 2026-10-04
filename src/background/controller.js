@@ -1346,16 +1346,30 @@
     async function autoResumeRestoredJobs(candidates) {
       for (const job of candidates) {
         if (!job.resumeAfterRestore || job.status !== "paused") continue;
-        let sourceUrl = "";
+        let sourceTab = null;
         try {
-          const sourceTab = typeof tabs?.get === "function"
+          sourceTab = typeof tabs?.get === "function"
             ? await tabs.get(job.sourceTabId)
             : null;
-          sourceUrl = String(sourceTab?.url || "");
         } catch (_error) {
-          sourceUrl = "";
+          sourceTab = null;
         }
         job.resumeAfterRestore = false;
+        const sourceUrl = String(sourceTab?.url || "");
+        const sourceChapter = sites.parseChapter(sourceUrl);
+        const sourceChanged = sourceUrl && (!isStvUrl(sourceUrl)
+          || (!job.prefetch && job.cacheIdentity?.chapterKey
+            && sourceChapter?.chapterKey !== job.cacheIdentity.chapterKey));
+        if (typeof tabs?.get === "function" && (!sourceTab || sourceChanged)) {
+          // Chrome does not emit tabs.onRemoved for tabs from the previous
+          // browser session. Never revive their jobs against a missing or
+          // reused STV tab ID: the old lease would monopolize a READY slot
+          // while the reader's new chapter waits for the pool forever.
+          job.status = "cancelled";
+          job.pending = false;
+          await removePersistedJob(job.id);
+          continue;
+        }
         await translationJobs.resumeJob(
           { jobId: job.id },
           { tab: { id: job.sourceTabId, url: sourceUrl } }
