@@ -15,10 +15,13 @@
   }
 
   function openCollapsedSidebar(document) {
+    // Mobile keeps its header menu mounted even with the drawer open. It is
+    // a toggle, so never click it again while waiting for the paid badge.
+    if (document.querySelector('chat-app.side-nav-open')) return false;
     const controls = [...document.querySelectorAll("button")];
     const toggle = controls.find(button => {
       const label = String(button.getAttribute("aria-label") || button.getAttribute("title") || "").trim();
-      return /^(?:Mở thanh bên|Open sidebar|Expand sidebar|Show navigation)$/i.test(label)
+      return /^(?:Mở thanh bên|Open sidebar|Expand sidebar|Show navigation|Trình đơn chính|Main menu|Navigation menu)$/i.test(label)
         && visibleControl(button) && !button.disabled && button.getAttribute("aria-disabled") !== "true";
     });
     if (!toggle) return false;
