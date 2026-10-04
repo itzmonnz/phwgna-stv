@@ -712,6 +712,23 @@
       }
       response = await ensureIsolatedGeminiIsResponsive(slot, response);
       if (!response) return { verified: false, code: "background_performance_degraded" };
+      if (slot.provider === "gemini" && slot.warmSessionId && slot.settingsHash
+        && response.state?.code === "ui_changed"
+        && response.state?.runtime?.stage !== "error"
+        && response.state?.operation?.active !== true
+        && response.state?.prepared?.warmSessionId === slot.warmSessionId
+        && response.state?.prepared?.settingsHash === slot.settingsHash) {
+        // A completed READY session can briefly lose its editor during an
+        // Angular layout update. Re-probe before invalidating that identity
+        // and navigating away from a healthy conversation. This is not a
+        // Send retry; the second probe still has to pass every check below.
+        await retrySleep(150);
+        try {
+          response = await tabs.sendMessage(slot.providerTabId, { type: "STVAI_PROVIDER_STATUS" });
+        } catch (_error) {
+          return { verified: false, code: "provider_unreachable" };
+        }
+      }
       const state = response?.state;
       if (isAuthenticationBlocker(state?.code) || state?.code === "rate_limited") return { verified: false, code: state.code, state };
       if (state?.code === "gemini_1095") return { verified: false, code: "gemini_1095", state };

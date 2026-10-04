@@ -732,15 +732,35 @@
     async function restartTemporaryChat({ signal, timeoutMs } = {}) {
       const status = getStatus();
       if (status.code === "gemini_1095") throw new common.ProviderError(status.code, status.message);
+      const deadline = now() + Math.max(1, Number(timeoutMs ?? options.temporaryTimeoutMs ?? 10_000) || 10_000);
+      // Gemini can replace its editor after finishing READY or a batch. A
+      // transient missing editor is not evidence that the physical tab failed.
+      // Wait before clearing owned text or clicking navigation, and recheck
+      // blockers so CAPTCHA/login/1095 never become an automatic reset.
+      await common.waitForElement(() => {
+        const currentStatus = getStatus();
+        if (currentStatus.state !== "ready" && currentStatus.code !== "ui_changed"
+          && currentStatus.code !== "temporary_unavailable"
+          && currentStatus.code !== "send_not_confirmed") {
+          throw new common.ProviderError(currentStatus.code, currentStatus.message);
+        }
+        return findComposer();
+      }, {
+        timeoutMs: Math.max(1, deadline - now()),
+        intervalMs: options.pollIntervalMs ?? 100,
+        now: options.now,
+        sleep: options.sleep,
+        waitForChange: eventWaiter,
+        signal
+      });
       clearOwnedComposerForRecovery();
-      await ensureSidebarOpen({ signal, timeoutMs: 2_000 });
+      await ensureSidebarOpen({ signal, timeoutMs: Math.min(2_000, Math.max(1, deadline - now())) });
       const control = findNewChatControl();
       if (!control) {
         throw new common.ProviderError("temporary_unavailable", "Không tìm thấy nút Cuộc trò chuyện mới trên Gemini.");
       }
       if (signal?.aborted) throw new common.ProviderError("cancelled", "Tác vụ đã bị hủy.");
       const sleep = options.sleep || ((duration) => new Promise(resolve => setTimeout(resolve, duration)));
-      const deadline = now() + Math.max(1, Number(timeoutMs ?? options.temporaryTimeoutMs ?? 10_000) || 10_000);
       const previousComposer = findComposer();
       const previousChatWindow = document.querySelector("chat-window");
       const previousTurnCount = document.querySelectorAll("user-query, model-response").length;
