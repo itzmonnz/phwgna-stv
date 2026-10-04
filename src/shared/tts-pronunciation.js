@@ -280,6 +280,12 @@
     const wordCharacter = new RegExp(`[${WORD_CHARACTER}]`, "u");
     return input => {
       const original = String(input ?? "");
+      // Keep inserted pauses separate from punctuation in the original text
+      // until numeric reading is done; 1-5 must never become decimal 1.5.
+      let pauseToken = "\uE000";
+      while (original.includes(pauseToken) || rules.some(rule => rule.spoken.includes(pauseToken))) {
+        pauseToken += "\uE000";
+      }
       const decimals = decimalMatches(original);
       const fractions = fractionMatches(original);
       const dates = dateMatches(original);
@@ -297,14 +303,24 @@
         const after = Array.from(text.slice(offset + match.length))[0] || "";
         if (UNIT_SOURCES.has(rule.source)) {
           if (!hasNumericUnitPrefix(text, offset) || wordCharacter.test(after)) return match;
-          if (rule.spoken === SILENT_VALUE) return "";
+          if (rule.spoken === SILENT_VALUE) return pauseToken;
           return `${/\s$/u.test(text.slice(0, offset)) ? "" : " "}${rule.spoken}`;
         }
         const containsWordCharacter = characters.some(character => wordCharacter.test(character));
         if (containsWordCharacter && (wordCharacter.test(before) || wordCharacter.test(after))) return match;
-        return rule.spoken === SILENT_VALUE ? "" : rule.spoken;
+        return rule.spoken === SILENT_VALUE ? pauseToken : rule.spoken;
       });
-      return normalizeAutomaticNumbers(replaced);
+      const spoken = normalizeAutomaticNumbers(replaced);
+      if (!spoken.includes(pauseToken)) return spoken;
+      const grouped = spoken.replace(new RegExp(`(?:\\s*${pauseToken}\\s*)+`, "gu"), pauseToken);
+      return grouped.split(pauseToken).reduce((before, after) => {
+        const left = before.trimEnd().replace(/[,;:]+$/u, "");
+        const right = after.trimStart().replace(/^[,;:]+\s*/u, "");
+        if (!left) return right;
+        if (/[.!?…]$/u.test(left)) return left + (right ? ` ${right}` : "");
+        if (/^[.!?…]/u.test(right)) return left + right;
+        return `${left}.${right ? ` ${right}` : ""}`;
+      });
     };
   }
 

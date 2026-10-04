@@ -1107,7 +1107,7 @@
       hint.append(
         'Từ viết hoa toàn bộ tính là 1 trường hợp phát âm riêng, ',
         element(document, 'br'),
-        'nhập [bỏ qua] để TTS không đọc từ đó.'
+        'nhập [bỏ qua] để TTS không đọc từ đó và nghỉ như gặp dấu chấm.'
       );
       const sample = element(document, 'div', 'stvai-tts-pronunciation-sample');
       const sampleLabel = element(document, 'label', 'stvai-tts-pronunciation-sample-label', 'Thử cách đọc');
@@ -1248,7 +1248,7 @@
           const text = row.querySelector('.stvai-tts-pronunciation-spoken').value.trim();
           if (!text) { status.textContent = 'Nhập Cách đọc để nghe thử.'; return; }
           if (text.toLocaleLowerCase('vi') === '[bỏ qua]') {
-            status.textContent = 'Từ hoặc ký tự này sẽ không được đọc.';
+            status.textContent = 'Từ hoặc ký tự này sẽ không được đọc; TTS sẽ nghỉ như gặp dấu chấm.';
             return;
           }
           if (typeof options.previewPronunciation !== 'function') { status.textContent = 'Mở Nghe sách trước khi nghe thử.'; return; }
