@@ -1686,14 +1686,25 @@
       const id = String(jobId || "");
       if (!id) return false;
       let cancelled = false;
+      let changed = false;
       for (const slot of warmPool.slots) {
         if (slot.provider !== "gemini" || slot.recoveryJobId !== id
           || ["failed", "retiring"].includes(slot.state)) continue;
+        // Handoff has already returned this physical tab to the pool. Its
+        // READY rebuild serves the next chapter, not the cancelled batch.
+        // A manual stop suspends the reader before reaching this function;
+        // without an eligible reader the recovery is still cancelled below.
+        if (!slot.jobId && hasEligibleStvTab()) {
+          slot.recoveryJobId = createId("setup-recovery");
+          changed = true;
+          continue;
+        }
         slot.recoveryCancelled = true;
         slot.errorCode = "recovery_cancelled";
         cancelled = true;
+        changed = true;
       }
-      if (cancelled) await persistPool();
+      if (changed) await persistPool();
       return cancelled;
     }
 
