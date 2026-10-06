@@ -63,7 +63,7 @@
     },
     {
       "path": "manifest.json",
-      "sha256": "846a3f8c50b9c0bf73b296dbb93d7bfe2995a91d0cbdedcea3f44a06b70b56fb"
+      "sha256": "43462225dc60d6c58ff4fc61ae85b92477a95d11106572d77ed276dc04d2cd08"
     },
     {
       "path": "onboarding/onboarding.css",
@@ -156,6 +156,10 @@
     {
       "path": "src/content/chatgpt.js",
       "sha256": "ca2622c6fdaba25c6ff162507c88eb1b49bc7d45b50213d8d4fa973a02c4dcde"
+    },
+    {
+      "path": "src/content/fanqie-ui.js",
+      "sha256": "c9f2a3d7f39bff5ce8c0f2b247214c2d51bc14fffc5d33d857c2f9106d1c0b11"
     },
     {
       "path": "src/content/gemini-account-probe.js",
@@ -274,6 +278,10 @@
       "sha256": "017cbbad724040f3b13276175318c22f0433f72bf003345109a12160a090fa0c"
     },
     {
+      "path": "src/shared/fanqie-ui-dictionary.js",
+      "sha256": "a925d1078e5ac1a860d977e242cdeaf68c675876774039bfbae09a07f3b35163"
+    },
+    {
       "path": "src/shared/history-sync.js",
       "sha256": "706577791c14f5d149d983897c551f70f991db426b7833d7569c591dde13b090"
     },
@@ -355,7 +363,7 @@
     }
   ],
   "product": "Phwgna Stv",
-  "sourceCommit": "58bf5ae3583e424be50dfc8083b0b40dc28c41c5",
+  "sourceCommit": "46fea5cb6a5d736c31b04ef0b5ff52b4d5fac1fa",
   "officialRepository": "https://github.com/itzmonnz/phwgna-stv",
   "officialReleaseUrl": "https://github.com/itzmonnz/phwgna-stv/releases/tag/v0.2.8",
   "publicKeyFingerprint": "85ac74c199d0a6028bce843d6f68d7632317912b460aad1a7431193767ec9871"

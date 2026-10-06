@@ -64,6 +64,11 @@
   ],
   "content_scripts": [
     {
+      "matches": ["https://fanqienovel.com/*"],
+      "js": ["src/shared/fanqie-ui-dictionary.js", "src/content/fanqie-ui.js"],
+      "run_at": "document_idle"
+    },
+    {
       "matches": [
         "https://sangtacviet.app/*",
         "https://sangtacviet.com/*",
