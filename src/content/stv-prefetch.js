@@ -203,6 +203,7 @@
     if (signal.aborted) throw new Error("next_chapter_cancelled");
     const [, , host, style, bookId, chapterId] = new URL(url).pathname.split('/');
     let root = sites.chapterRoot(document, url);
+    const pageHasMatchingRoot = Boolean(root);
     const otherChapterRoots = Array.from(document.querySelectorAll('#content-container .contentbox[cid]'))
       .filter(node => !node.closest('template,script,style,noscript,[hidden]'));
     trace?.update({ pageDom: {
@@ -229,165 +230,177 @@
     }
     if (root.getAttribute('cid') !== chapterId) throw new Error("next_chapter_identity_mismatch");
     let renderedChapter = null;
+    async function readRenderedTarget(primaryChapter) {
+      trace?.update({ stage: 'validate_rendered_source', renderedSource: { attempted: true, state: 'loading', reason: 'none' } });
+      let chapter;
+      try {
+        chapter = prepareChapter(await options.loadRenderedChapter({ url, signal }));
+      } catch (error) {
+        if (signal.aborted || error?.message === 'next_chapter_cancelled') throw prefetchError('next_chapter_cancelled');
+        throw prefetchError(error?.message === 'next_chapter_identity_mismatch'
+          ? 'next_chapter_identity_mismatch' : 'next_chapter_source_unstable', true);
+      }
+      if (signal.aborted) throw prefetchError('next_chapter_cancelled');
+      if (chapter?.chapterId !== chapterId || !chapter?.translatableBlocks?.length) {
+        throw prefetchError('next_chapter_identity_mismatch');
+      }
+      trace?.update({ renderedSource: { attempted: true, state: 'ok',
+        ...(primaryChapter ? { endpointMatch: chapter.sourceText === primaryChapter.sourceText } : {}) } });
+      return chapter;
+    }
     if (!root.querySelector('i[t]:not([t=""])')) {
-      // Observed STV readchapter endpoints. Never rescan, copy dynamic challenge
-      // values, or execute scripts from the fetched page.
-      const endpoint = new URL('/index.php', url);
-      endpoint.search = new URLSearchParams({ bookid: bookId, h: host, c: chapterId, ngmar: 'readc', sajax: 'readchapter', sty: style, exts: '' }).toString();
-      trace?.update({ stage: "request_source_api", endpoint: { attempted: true } });
-      let payload;
-      let payloadTransport = 'POST';
-      let warmupSent = false;
-      const retryDelays = (Array.isArray(options.sourceRetryDelaysMs)
-        ? options.sourceRetryDelaysMs : [1_000, 1_200])
-        .slice(0, 2).map(value => Math.min(5_000, Math.max(0, Number(value) || 0)));
-      for (let attempt = 0; ; attempt += 1) {
-        let dataResponse;
-        try {
-          dataResponse = await options.request(endpoint.href, { ...fetchOptions, method: 'POST', body: '', headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
-        } catch (_) {
-          throw prefetchError(signal.aborted ? 'next_chapter_cancelled' : 'next_chapter_fetch_failed', !signal.aborted);
-        }
-        trace?.update({ endpoint: { responseClass: responseClass(dataResponse?.status, dataResponse?.ok),
-          redirectState: !dataResponse?.url || dataResponse.url === endpoint.href ? "same_url" : "changed" } });
-        if (!dataResponse?.ok) throw prefetchError('next_chapter_fetch_failed', true);
-        if (dataResponse.url && dataResponse.url !== endpoint.href) throw new Error('next_chapter_redirect_invalid');
-        const parsed = parseReadChapterPayload(await dataResponse.text());
-        payload = parsed.payload;
-        trace?.update({ stage: "parse_source_api", endpoint: { jsonValid: Boolean(payload), jsonEnvelope: parsed.envelope,
-          dataBytesBucket: bytesBucket(payload?.data) } });
-        if (!payload && parsed.envelope !== 'empty') throw prefetchError('next_chapter_source_unavailable');
-        if (signal.aborted) throw new Error('next_chapter_cancelled');
-        const payloadCodeOk = [0, '0'].includes(payload?.code) && typeof payload.data === 'string' && Boolean(payload.data.trim());
-        const payloadIdentityMatch = String(payload?.bookid) === bookId && payload?.bookhost === host;
-        const payloadHasIdentity = payload?.bookid != null || payload?.bookhost != null;
-        const payloadSourceEmpty = typeof payload?.data !== 'string' || !payload.data.trim();
-        trace?.update({ endpoint: { payloadCodeOk, payloadIdentityMatch } });
-        if (payloadHasIdentity && !payloadIdentityMatch) {
-          throw new Error('next_chapter_identity_mismatch');
-        }
-        // STV's reader normally asks readchapter with a GET query.  Keep the
-        // POST probe for installations that prepare the source through it,
-        // but do not mistake an empty POST response for a missing chapter:
-        // some STV hosts only return the source on the native GET transport.
-        if (payloadSourceEmpty && attempt === 0) {
-          let getResponse;
+      sourceApi: {
+        // Observed STV readchapter endpoints. Never rescan, copy dynamic challenge
+        // values, or execute scripts from the fetched page.
+        const endpoint = new URL('/index.php', url);
+        endpoint.search = new URLSearchParams({ bookid: bookId, h: host, c: chapterId, ngmar: 'readc', sajax: 'readchapter', sty: style, exts: '' }).toString();
+        trace?.update({ stage: "request_source_api", endpoint: { attempted: true } });
+        let payload;
+        let payloadTransport = 'POST';
+        let warmupSent = false;
+        const retryDelays = (Array.isArray(options.sourceRetryDelaysMs)
+          ? options.sourceRetryDelaysMs : [1_000, 1_200])
+          .slice(0, 2).map(value => Math.min(5_000, Math.max(0, Number(value) || 0)));
+        for (let attempt = 0; ; attempt += 1) {
+          let dataResponse;
           try {
-            getResponse = await options.request(endpoint.href, {
-              ...fetchOptions,
-              method: 'GET',
-              body: undefined,
-              headers: undefined
-            });
+            dataResponse = await options.request(endpoint.href, { ...fetchOptions, method: 'POST', body: '', headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
           } catch (_) {
-            if (signal.aborted) throw prefetchError('next_chapter_cancelled');
+            throw prefetchError(signal.aborted ? 'next_chapter_cancelled' : 'next_chapter_fetch_failed', !signal.aborted);
           }
-          trace?.update({ endpoint: { getFallbackAttempted: true,
-            getFallbackResponseClass: responseClass(getResponse?.status, getResponse?.ok) } });
-          if (getResponse?.ok && (!getResponse.url || getResponse.url === endpoint.href)) {
-            const getParsed = parseReadChapterPayload(await getResponse.text());
-            const getPayload = getParsed.payload;
-            const getIdentityMatch = String(getPayload?.bookid) === bookId && getPayload?.bookhost === host;
-            const getHasIdentity = getPayload?.bookid != null || getPayload?.bookhost != null;
-            const getCodeOk = [0, '0'].includes(getPayload?.code) && typeof getPayload.data === 'string' && Boolean(getPayload.data.trim());
-            trace?.update({ endpoint: { getFallbackJsonValid: Boolean(getPayload),
-              getFallbackEnvelope: getParsed.envelope, getFallbackIdentityMatch: getIdentityMatch,
-              getFallbackPayloadCodeOk: getCodeOk, getFallbackDataBytesBucket: bytesBucket(getPayload?.data) } });
-            if (getHasIdentity && !getIdentityMatch) throw new Error('next_chapter_identity_mismatch');
-            if (getCodeOk) {
-              payload = getPayload;
-              payloadTransport = 'GET';
-              break;
+          trace?.update({ endpoint: { responseClass: responseClass(dataResponse?.status, dataResponse?.ok),
+            redirectState: !dataResponse?.url || dataResponse.url === endpoint.href ? "same_url" : "changed" } });
+          if (!dataResponse?.ok) throw prefetchError('next_chapter_fetch_failed', true);
+          if (dataResponse.url && dataResponse.url !== endpoint.href) throw new Error('next_chapter_redirect_invalid');
+          const parsed = parseReadChapterPayload(await dataResponse.text());
+          payload = parsed.payload;
+          trace?.update({ stage: "parse_source_api", endpoint: { jsonValid: Boolean(payload), jsonEnvelope: parsed.envelope,
+            dataBytesBucket: bytesBucket(payload?.data) } });
+          if (!payload && parsed.envelope !== 'empty') throw prefetchError('next_chapter_source_unavailable');
+          if (signal.aborted) throw new Error('next_chapter_cancelled');
+          const payloadCodeOk = [0, '0'].includes(payload?.code) && typeof payload.data === 'string' && Boolean(payload.data.trim());
+          const payloadIdentityMatch = String(payload?.bookid) === bookId && payload?.bookhost === host;
+          const payloadHasIdentity = payload?.bookid != null || payload?.bookhost != null;
+          const payloadSourceEmpty = typeof payload?.data !== 'string' || !payload.data.trim();
+          trace?.update({ endpoint: { payloadCodeOk, payloadIdentityMatch } });
+          if (payloadHasIdentity && !payloadIdentityMatch) {
+            throw new Error('next_chapter_identity_mismatch');
+          }
+          // STV's reader normally asks readchapter with a GET query.  Keep the
+          // POST probe for installations that prepare the source through it,
+          // but do not mistake an empty POST response for a missing chapter:
+          // some STV hosts only return the source on the native GET transport.
+          if (payloadSourceEmpty && attempt === 0) {
+            let getResponse;
+            try {
+              getResponse = await options.request(endpoint.href, {
+                ...fetchOptions,
+                method: 'GET',
+                body: undefined,
+                headers: undefined
+              });
+            } catch (_) {
+              if (signal.aborted) throw prefetchError('next_chapter_cancelled');
+            }
+            trace?.update({ endpoint: { getFallbackAttempted: true,
+              getFallbackResponseClass: responseClass(getResponse?.status, getResponse?.ok) } });
+            if (getResponse?.ok && (!getResponse.url || getResponse.url === endpoint.href)) {
+              const getParsed = parseReadChapterPayload(await getResponse.text());
+              const getPayload = getParsed.payload;
+              const getIdentityMatch = String(getPayload?.bookid) === bookId && getPayload?.bookhost === host;
+              const getHasIdentity = getPayload?.bookid != null || getPayload?.bookhost != null;
+              const getCodeOk = [0, '0'].includes(getPayload?.code) && typeof getPayload.data === 'string' && Boolean(getPayload.data.trim());
+              trace?.update({ endpoint: { getFallbackJsonValid: Boolean(getPayload),
+                getFallbackEnvelope: getParsed.envelope, getFallbackIdentityMatch: getIdentityMatch,
+                getFallbackPayloadCodeOk: getCodeOk, getFallbackDataBytesBucket: bytesBucket(getPayload?.data) } });
+              if (getHasIdentity && !getIdentityMatch) throw new Error('next_chapter_identity_mismatch');
+              if (getCodeOk) {
+                payload = getPayload;
+                payloadTransport = 'GET';
+                break;
+              }
             }
           }
-        }
-        if (payloadCodeOk) {
-          if (!payloadIdentityMatch) throw new Error('next_chapter_identity_mismatch');
-          break;
-        }
-        if (!payloadSourceEmpty || attempt >= retryDelays.length) {
-          throw prefetchError('next_chapter_source_unavailable', payloadSourceEmpty);
-        }
-        if (!warmupSent) {
-          await wakeChapterSource(options, signal, { url, bookId, host, chapterId, style });
-          warmupSent = true;
-        }
-        await waitForSourceRetry(retryDelays[attempt], signal);
-        trace?.update({ stage: "request_source_api" });
-      }
-      // Readchapter responses identify only the book and host, not the exact
-      // chapter. STV can therefore return a stale or different chapter while
-      // keeping otherwise valid metadata. Confirm every endpoint-sourced
-      // chapter once more before spending AI work or writing it to cache.
-      let primaryChapter;
-      try {
-        primaryChapter = extractPayloadChapter(options, url, chapterId, payload.data);
-      } catch (_) {
-        throw new Error('next_chapter_source_unavailable');
-      }
-      let confirmationResponse;
-      const confirmationOptions = payloadTransport === 'GET'
-        ? { ...fetchOptions, method: 'GET', body: undefined, headers: undefined }
-        : { ...fetchOptions, method: 'POST', body: '', headers: { 'Content-Type': 'application/x-www-form-urlencoded' } };
-      try {
-        confirmationResponse = await options.request(endpoint.href, confirmationOptions);
-      } catch (_) {
-        if (signal.aborted) throw prefetchError('next_chapter_cancelled');
-        throw prefetchError('next_chapter_source_unstable', true);
-      }
-      if (!confirmationResponse?.ok || (confirmationResponse.url && confirmationResponse.url !== endpoint.href)) {
-        throw prefetchError('next_chapter_source_unstable', true);
-      }
-      const confirmationPayload = parseReadChapterPayload(await confirmationResponse.text()).payload;
-      const confirmationIdentityMatch = String(confirmationPayload?.bookid) === bookId
-        && confirmationPayload?.bookhost === host;
-      const confirmationCodeOk = [0, '0'].includes(confirmationPayload?.code)
-        && typeof confirmationPayload?.data === 'string' && Boolean(confirmationPayload.data.trim());
-      if (!confirmationIdentityMatch || !confirmationCodeOk) {
-        throw prefetchError('next_chapter_source_unstable', true);
-      }
-      let confirmationChapter;
-      try {
-        confirmationChapter = extractPayloadChapter(options, url, chapterId, confirmationPayload.data);
-      } catch (_) {
-        throw prefetchError('next_chapter_source_unstable', true);
-      }
-      if (primaryChapter.sourceText !== confirmationChapter.sourceText) {
-        throw prefetchError('next_chapter_source_unstable', true);
-      }
-      // The readchapter payload does not identify its chapter. In production STV
-      // can return a stable, successful payload for another chapter until a real
-      // document navigation has initialized the requested one. Confirm the
-      // endpoint source against a hidden same-origin rendered page before any AI
-      // work or cache write. The rendered page is authoritative when they differ.
-      if (typeof options.loadRenderedChapter === 'function') {
-        trace?.update({ stage: 'validate_rendered_source', renderedSource: { attempted: true, state: 'loading', reason: 'none' } });
-        try {
-          renderedChapter = prepareChapter(await options.loadRenderedChapter({ url, signal }));
-        } catch (error) {
-          if (signal.aborted || error?.message === 'next_chapter_cancelled') {
-            throw prefetchError('next_chapter_cancelled');
+          if (payloadCodeOk) {
+            if (!payloadIdentityMatch) throw new Error('next_chapter_identity_mismatch');
+            break;
           }
-          throw prefetchError(error?.message === 'next_chapter_identity_mismatch'
-            ? 'next_chapter_identity_mismatch' : 'next_chapter_source_unstable', true);
+          if (!payloadSourceEmpty || attempt >= retryDelays.length) {
+            // An empty API response cannot initialize STV's native reader. Only
+            // a fetched page with the exact chapter shell may use the existing
+            // history-protected rendered loader; never accept endpoint errors as
+            // source or relax the identity check.
+            if (payloadSourceEmpty && pageHasMatchingRoot
+              && response?.ok && typeof options.loadRenderedChapter === 'function') {
+              renderedChapter = await readRenderedTarget();
+              break sourceApi;
+            }
+            throw prefetchError('next_chapter_source_unavailable', payloadSourceEmpty);
+          }
+          if (!warmupSent) {
+            await wakeChapterSource(options, signal, { url, bookId, host, chapterId, style });
+            warmupSent = true;
+          }
+          await waitForSourceRetry(retryDelays[attempt], signal);
+          trace?.update({ stage: "request_source_api" });
         }
-        if (renderedChapter?.chapterId !== chapterId || !renderedChapter?.translatableBlocks?.length) {
-          throw prefetchError('next_chapter_identity_mismatch');
+        // Readchapter responses identify only the book and host, not the exact
+        // chapter. STV can therefore return a stale or different chapter while
+        // keeping otherwise valid metadata. Confirm every endpoint-sourced
+        // chapter once more before spending AI work or writing it to cache.
+        let primaryChapter;
+        try {
+          primaryChapter = extractPayloadChapter(options, url, chapterId, payload.data);
+        } catch (_) {
+          throw new Error('next_chapter_source_unavailable');
         }
-        trace?.update({ renderedSource: {
-          attempted: true,
-          state: 'ok',
-          endpointMatch: renderedChapter.sourceText === primaryChapter.sourceText
-        } });
-      }
-      if (!renderedChapter) {
-        // Test/fallback environments without a rendered loader keep the inert
-        // endpoint parser. Browser production always provides the loader above.
-        const html = payload.data.replace(/<br\s*\/?>/gi, '<br><br>').replace(/\r?\n+/g, '<br><br>');
-        const content = options.parse(html, url);
-        content.querySelectorAll('script, style, noscript, iframe, object, embed').forEach(node => node.remove());
-        root.replaceChildren(...Array.from(content.body.childNodes));
-        trace?.update({ pageDom: { initialSourceMarkers: markerBucket(root.querySelectorAll('i[t]:not([t=""])').length) } });
+        let confirmationResponse;
+        const confirmationOptions = payloadTransport === 'GET'
+          ? { ...fetchOptions, method: 'GET', body: undefined, headers: undefined }
+          : { ...fetchOptions, method: 'POST', body: '', headers: { 'Content-Type': 'application/x-www-form-urlencoded' } };
+        try {
+          confirmationResponse = await options.request(endpoint.href, confirmationOptions);
+        } catch (_) {
+          if (signal.aborted) throw prefetchError('next_chapter_cancelled');
+          throw prefetchError('next_chapter_source_unstable', true);
+        }
+        if (!confirmationResponse?.ok || (confirmationResponse.url && confirmationResponse.url !== endpoint.href)) {
+          throw prefetchError('next_chapter_source_unstable', true);
+        }
+        const confirmationPayload = parseReadChapterPayload(await confirmationResponse.text()).payload;
+        const confirmationIdentityMatch = String(confirmationPayload?.bookid) === bookId
+          && confirmationPayload?.bookhost === host;
+        const confirmationCodeOk = [0, '0'].includes(confirmationPayload?.code)
+          && typeof confirmationPayload?.data === 'string' && Boolean(confirmationPayload.data.trim());
+        if (!confirmationIdentityMatch || !confirmationCodeOk) {
+          throw prefetchError('next_chapter_source_unstable', true);
+        }
+        let confirmationChapter;
+        try {
+          confirmationChapter = extractPayloadChapter(options, url, chapterId, confirmationPayload.data);
+        } catch (_) {
+          throw prefetchError('next_chapter_source_unstable', true);
+        }
+        if (primaryChapter.sourceText !== confirmationChapter.sourceText) {
+          throw prefetchError('next_chapter_source_unstable', true);
+        }
+        // The readchapter payload does not identify its chapter. In production STV
+        // can return a stable, successful payload for another chapter until a real
+        // document navigation has initialized the requested one. Confirm the
+        // endpoint source against a hidden same-origin rendered page before any AI
+        // work or cache write. The rendered page is authoritative when they differ.
+        if (typeof options.loadRenderedChapter === 'function') {
+          renderedChapter = await readRenderedTarget(primaryChapter);
+        }
+        if (!renderedChapter) {
+          // Test/fallback environments without a rendered loader keep the inert
+          // endpoint parser. Browser production always provides the loader above.
+          const html = payload.data.replace(/<br\s*\/?>/gi, '<br><br>').replace(/\r?\n+/g, '<br><br>');
+          const content = options.parse(html, url);
+          content.querySelectorAll('script, style, noscript, iframe, object, embed').forEach(node => node.remove());
+          root.replaceChildren(...Array.from(content.body.childNodes));
+          trace?.update({ pageDom: { initialSourceMarkers: markerBucket(root.querySelectorAll('i[t]:not([t=""])').length) } });
+        }
       }
     }
     let chapter;
