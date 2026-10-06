@@ -52,9 +52,34 @@
     ['中国互联网举报中心', 'Trung tâm báo cáo vi phạm Internet Trung Quốc'],
     ['站点地图', 'Sơ đồ website'],
     ['打开微信扫码关注微信公众号', 'Mở WeChat, quét QR để theo dõi kênh chính thức'],
-    ['打开抖音扫码关注官方帐号', 'Mở Douyin, quét QR để theo dõi tài khoản chính thức']
+    ['打开抖音扫码关注官方帐号', 'Mở Douyin, quét QR để theo dõi tài khoản chính thức'],
+    ['兑换会员', 'Đổi mã hội viên'], ['退出登录', 'Đăng xuất'], ['番茄小说', 'Fanqie Novel'],
+    ['搜索', 'Tìm kiếm'], ['相关', 'Liên quan'], ['筛选', 'Bộ lọc'],
+    ['更新时间：', 'Thời gian cập nhật:'], ['过去三十分钟', '30 phút gần đây'],
+    ['今天', 'Hôm nay'], ['本周', 'Tuần này'], ['本月', 'Tháng này'], ['今年', 'Năm nay'],
+    ['30万字以下', 'Dưới 300.000 chữ'],
+    ['广告投放：', 'Quảng cáo:'], ['不良信息举报邮箱：', 'Email báo cáo nội dung vi phạm:'],
+    ['意见建议邮箱：', 'Email góp ý:'], ['违法和不良信息举报电话：', 'Điện thoại báo cáo vi phạm:'],
+    ['版权咨询：', 'Liên hệ bản quyền:'], ['友情链接', 'Liên kết đối tác'],
+    ['西方奇幻', 'Kỳ ảo phương Tây'], ['东方仙侠', 'Tiên hiệp phương Đông'],
+    ['科幻末世', 'Khoa học viễn tưởng, tận thế'], ['都市日常', 'Đời sống đô thị'],
+    ['都市修真', 'Tu chân đô thị'], ['都市高武', 'Đô thị võ đạo'],
+    ['历史古代', 'Lịch sử, cổ đại'], ['战神赘婿', 'Chiến thần, ở rể'],
+    ['都市种田', 'Đô thị điền văn'], ['传统玄幻', 'Huyền huyễn truyền thống'],
+    ['历史脑洞', 'Lịch sử giả tưởng'], ['悬疑脑洞', 'Bí ẩn giả tưởng'],
+    ['都市脑洞', 'Đô thị giả tưởng'], ['玄幻脑洞', 'Huyền huyễn giả tưởng'],
+    ['悬疑灵异', 'Bí ẩn, linh dị'], ['抗战谍战', 'Kháng chiến, điệp chiến'],
+    ['游戏体育', 'Trò chơi, thể thao'], ['动漫衍生', 'Đồng nhân anime/manga'],
+    ['男频衍生', 'Đồng nhân dành cho nam'], ['女频衍生', 'Đồng nhân dành cho nữ'],
+    ['古风世情', 'Đời sống, nhân tình cổ đại'], ['玄幻言情', 'Ngôn tình huyền huyễn'],
+    ['种田', 'Điền văn'], ['年代', 'Niên đại'], ['现言脑洞', 'Ngôn tình hiện đại giả tưởng'],
+    ['宫斗宅斗', 'Cung đấu, trạch đấu'], ['古言脑洞', 'Ngôn tình cổ đại giả tưởng'],
+    ['快穿', 'Xuyên nhanh'], ['青春甜宠', 'Thanh xuân ngọt sủng'],
+    ['星光璀璨', 'Giới giải trí'], ['女频悬疑', 'Truyện bí ẩn dành cho nữ'],
+    ['职场婚恋', 'Công sở, hôn nhân, tình yêu'], ['豪门总裁', 'Hào môn, tổng tài'],
+    ['民国言情', 'Ngôn tình thời Dân Quốc']
   ].map(([source, vietnamese]) => Object.freeze({ source, vietnamese }));
   // Shared by the content script and its narrow language-storage broker.
-  const allowedPath = path => /^\/$|^\/(library|rank|welfare)\/?$|^\/(page|reader)\/\d+\/?$|^\/main\/writer\/login\/?$|^\/writer\/zone(?:\/[a-zA-Z0-9_-]+)*\/?$/.test(path);
-  return Object.freeze({ version: 2, entries: Object.freeze(entries), allowedPath });
+  const allowedPath = path => /^\/$|^\/(library|rank|welfare)\/?$|^\/search\/[^/]+\/?$|^\/(page|reader)\/\d+\/?$|^\/main\/writer\/login\/?$|^\/writer\/zone(?:\/[a-zA-Z0-9_-]+)*\/?$/.test(path);
+  return Object.freeze({ version: 3, entries: Object.freeze(entries), allowedPath });
 });

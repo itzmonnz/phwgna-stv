@@ -18,13 +18,35 @@
     '.writer-login .slogin-form-input__error', '.writer-login .slogin-form-input__button-text',
     '.writer-login .slogin-form-protocol__text', '.writer-login .slogin-form-button',
     'a[href^="/writer/zone/tutorial"]', 'a[href^="/writer/zone/help"]',
-    'a[href^="/welfare"]', 'a[href^="/protocal/agreement"]', 'a[href^="/protocal/privacy"]'
+    'a[href^="/welfare"]', 'a[href^="/protocal/agreement"]', 'a[href^="/protocal/privacy"]',
+    '.slogin-user-avatar__menu-item__content', '.muye-category-item',
+    '.zone-footer-ctn-left a', '.zone-footer-ctn-left p',
+    '.zone-footer-ctn-right-wechat-desc', '.zone-footer-ctn-right-tiktok-desc',
+    '.muye-search-bar .search-btn', '.muye-search-filter .byte-tabs-header-title',
+    '.muye-search-filter .filter-entry', '.muye-search-filter-panel', '.muye-search-hint'
   ].join(',');
   const excluded = 'script,style,textarea,[contenteditable],.muye-home-news-content-item,.muye-stack-book-list,.page-directory-content,.reader-content,[class*="comment"]';
   const translations = new Map(dictionary.entries.flatMap(entry => entry.source.endsWith('：')
     ? [[entry.source, entry.vietnamese], [entry.source.slice(0, -1), entry.vietnamese.replace(/:$/, '')]]
     : [[entry.source, entry.vietnamese]]));
   const allowedPath = dictionary.allowedPath;
+  const footerPrefixes = ['广告投放：', '不良信息举报邮箱：', '意见建议邮箱：',
+    '违法和不良信息举报电话：', '版权咨询：'];
+
+  function translateNode(node) {
+    const source = node.data.trim();
+    const parent = node.parentElement;
+    if (source === '和' && parent?.closest('.writer-login .slogin-form-protocol__text')) return 'và';
+    if (parent?.closest('.muye-search-hint')) {
+      if (source === '共') return 'Có';
+      if (source === '项相关的结果') return 'kết quả liên quan';
+    }
+    if (parent?.closest('.zone-footer-ctn-left p')) {
+      const prefix = footerPrefixes.find(label => source.startsWith(label));
+      if (prefix) return source.replace(prefix, translations.get(prefix));
+    }
+    return translations.get(source);
+  }
 
   function createRuntimeStorage(runtime) {
     return {
@@ -57,9 +79,7 @@
         while ((node = walker.nextNode())) {
           if (node.parentElement?.closest(excluded)) continue;
           const source = node.data.trim();
-          // A conjunction is meaningful only within the consent sentence.
-          const translated = source === '和' && node.parentElement?.closest('.writer-login .slogin-form-protocol__text')
-            ? 'và' : translations.get(source);
+          const translated = translateNode(node);
           if (!translated) continue;
           const replacement = node.data.replace(source, translated);
           remember(node, node.data, replacement);
@@ -67,7 +87,7 @@
           count += 1;
         }
       }
-      for (const input of document.querySelectorAll('.muye-header-search input[placeholder], .writer-login input[placeholder]')) {
+      for (const input of document.querySelectorAll('.muye-header-search input[placeholder], .writer-login input[placeholder], .muye-search-bar .search-input[placeholder]')) {
         const source = input.getAttribute('placeholder');
         const translated = translations.get(source);
         if (!translated) continue;
