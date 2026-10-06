@@ -44,7 +44,7 @@
         try {
           const url = new URL(value);
           return url.origin === 'https://fanqienovel.com'
-            && /^\/$|^\/(library|rank)\/?$|^\/(page|reader)\/\d+\/?$/.test(url.pathname);
+            && fanqieDictionary?.allowedPath(url.pathname);
         } catch (_) { return false; }
       });
     }

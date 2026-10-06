@@ -13,13 +13,18 @@
     '.muye-home-block-title', '.muye-bottom-choiceness-title', '.muye-bottom-rank-header',
     '.muye-bottom-block-title', '.update-list-header', '.float-wrapper-item',
     '.muye-stack-filter-panel', '.stack-order-tab', '.page-directory-header h3 span',
-    '.info-btn', '.reader-toolbar'
+    '.info-btn', '.reader-toolbar', '.muye-header-nav-item',
+    '.writer-login .slogin-pc-form-header__title__tab',
+    '.writer-login .slogin-form-input__error', '.writer-login .slogin-form-input__button-text',
+    '.writer-login .slogin-form-protocol__text', '.writer-login .slogin-form-button',
+    'a[href^="/writer/zone/tutorial"]', 'a[href^="/writer/zone/help"]',
+    'a[href^="/welfare"]', 'a[href^="/protocal/agreement"]', 'a[href^="/protocal/privacy"]'
   ].join(',');
   const excluded = 'script,style,textarea,[contenteditable],.muye-home-news-content-item,.muye-stack-book-list,.page-directory-content,.reader-content,[class*="comment"]';
   const translations = new Map(dictionary.entries.flatMap(entry => entry.source.endsWith('：')
     ? [[entry.source, entry.vietnamese], [entry.source.slice(0, -1), entry.vietnamese.replace(/:$/, '')]]
     : [[entry.source, entry.vietnamese]]));
-  const allowedPath = path => /^\/$|^\/(library|rank)\/?$|^\/(page|reader)\/\d+\/?$/.test(path);
+  const allowedPath = dictionary.allowedPath;
 
   function createRuntimeStorage(runtime) {
     return {
@@ -52,7 +57,9 @@
         while ((node = walker.nextNode())) {
           if (node.parentElement?.closest(excluded)) continue;
           const source = node.data.trim();
-          const translated = translations.get(source);
+          // A conjunction is meaningful only within the consent sentence.
+          const translated = source === '和' && node.parentElement?.closest('.writer-login .slogin-form-protocol__text')
+            ? 'và' : translations.get(source);
           if (!translated) continue;
           const replacement = node.data.replace(source, translated);
           remember(node, node.data, replacement);
@@ -60,7 +67,7 @@
           count += 1;
         }
       }
-      for (const input of document.querySelectorAll('.muye-header-search input[placeholder]')) {
+      for (const input of document.querySelectorAll('.muye-header-search input[placeholder], .writer-login input[placeholder]')) {
         const source = input.getAttribute('placeholder');
         const translated = translations.get(source);
         if (!translated) continue;
