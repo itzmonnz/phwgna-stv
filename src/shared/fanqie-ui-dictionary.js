@@ -79,9 +79,17 @@
     ['快穿', 'Xuyên nhanh'], ['青春甜宠', 'Thanh xuân ngọt sủng'],
     ['星光璀璨', 'Giới giải trí'], ['女频悬疑', 'Truyện bí ẩn dành cho nữ'],
     ['职场婚恋', 'Công sở, hôn nhân, tình yêu'], ['豪门总裁', 'Hào môn, tổng tài'],
-    ['民国言情', 'Ngôn tình thời Dân Quốc']
+    ['民国言情', 'Ngôn tình thời Dân Quốc'],
+    ['作品简介', 'Giới thiệu truyện'], ['加入书架', 'Thêm vào tủ sách'],
+    ['万字', 'vạn chữ'], ['玄幻', 'Huyền huyễn'], ['扮猪吃虎', 'Giả yếu thắng mạnh'],
+    ['剑道', 'Kiếm đạo'], ['无后宫', 'Không hậu cung'], ['非后宫', 'Không hậu cung'],
+    ['完结', 'Hoàn thành'], ['都市', 'Đô thị'], ['仙侠', 'Tiên hiệp'],
+    ['穿越', 'Xuyên không'], ['重生', 'Trọng sinh'], ['系统', 'Hệ thống'],
+    ['无敌', 'Vô địch'], ['爽文', 'Truyện sảng'], ['单女主', 'Một nữ chính'],
+    ['多女主', 'Nhiều nữ chính'], ['历史', 'Lịch sử'], ['科幻', 'Khoa học viễn tưởng'],
+    ['悬疑', 'Bí ẩn'], ['言情', 'Ngôn tình'], ['修仙', 'Tu tiên']
   ].map(([source, vietnamese]) => Object.freeze({ source, vietnamese }));
   // Shared by the content script and its narrow language-storage broker.
   const allowedPath = path => /^\/$|^\/(library|rank|welfare)\/?$|^\/search\/[^/]+\/?$|^\/(page|reader)\/\d+\/?$|^\/main\/writer\/login\/?$|^\/writer\/zone(?:\/[a-zA-Z0-9_-]+)*\/?$/.test(path);
-  return Object.freeze({ version: 4, entries: Object.freeze(entries), allowedPath });
+  return Object.freeze({ version: 5, entries: Object.freeze(entries), allowedPath });
 });

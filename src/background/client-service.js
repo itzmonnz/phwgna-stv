@@ -37,9 +37,9 @@
       read: async key => (await storageCall(storage.local, 'get', [key]))?.[key],
       write: (key, value) => storageCall(storage.local, 'set', { [key]: value }),
       request: options.titleRequest,
-      enabled: async () => {
+      enabled: async kind => {
         const pref = (await storageCall(storage.local, 'get', ['stvai-fanqie-ui-v1']))?.['stvai-fanqie-ui-v1'];
-        return pref?.titleProvider !== 'local' && pref?.language !== 'zh';
+        return pref?.language !== 'zh' && (kind !== 'title' || pref?.titleProvider !== 'local');
       }
     });
 
@@ -103,6 +103,11 @@
       const pref = (await storageCall(storage.local, 'get', ['stvai-fanqie-ui-v1']))?.['stvai-fanqie-ui-v1'];
       if (pref?.titleProvider === 'local' || pref?.language === 'zh') return { ok: false, reason: 'disabled' };
       return titleService.translate(message.source);
+    }
+    async function fanqieIntroductionTranslate(message, sender) {
+      if (!isFanqieSender(sender) || ![sender.url, sender.tab.url].filter(Boolean)
+        .every(value => /^\/page\/\d+\/?$/.test(new URL(value).pathname))) return { ok: false, reason: 'unauthorized-sender' };
+      return titleService.translateIntroduction(message.source);
     }
 
     function safeSettings(value) {
@@ -337,6 +342,7 @@
       fanqieUIGet,
       fanqieUISet,
       fanqieTitleTranslate,
+      fanqieIntroductionTranslate,
       changeZoom,
       restoreZoom,
       restoreZoomForTab,

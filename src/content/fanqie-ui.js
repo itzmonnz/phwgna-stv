@@ -25,7 +25,9 @@
     '.zone-footer-ctn-right-wechat-desc', '.zone-footer-ctn-right-tiktok-desc',
     '.muye-search-bar .search-btn', '.muye-search-filter .byte-tabs-header-title',
     '.muye-search-filter .filter-entry', '.muye-search-filter-panel', '.muye-search-hint',
-    '.book-item-btn'
+    '.book-item-btn', '.info-label', '.page-abstract-header', '.add-bookshelf-btn',
+    '.info-count-word .text', '.book-route-trackers a:first-child', '.info-last-title',
+    '.book-item-text .tags', '.book-item .book-item-label'
   ].join(',');
   const excluded = 'script,style,textarea,[contenteditable],.muye-home-news-content-item,.muye-stack-book-list,.page-directory-content,.reader-content,[class*="comment"]';
   const translations = new Map(dictionary.entries.flatMap(entry => entry.source.endsWith('：')
@@ -38,6 +40,7 @@
   function translateNode(node) {
     const source = node.data.trim();
     const parent = node.parentElement;
+    if (parent?.closest('.info-last-title') && source.startsWith('最近更新：')) return source.replace('最近更新：', 'Mới cập nhật: ');
     if (source === '和' && parent?.closest('.writer-login .slogin-form-protocol__text')) return 'và';
     if (parent?.closest('.muye-search-hint')) {
       if (source === '共') return 'Có';
@@ -69,7 +72,8 @@
         const result = await runtime.sendMessage({ type: 'STVAI_FANQIE_UI_SET', ...values[storageKey] });
         if (!result?.ok) throw new Error('fanqie_storage_unavailable');
       },
-      translateTitle(source) { return runtime.sendMessage({ type: 'STVAI_FANQIE_TITLE_TRANSLATE', source }); }
+      translateTitle(source) { return runtime.sendMessage({ type: 'STVAI_FANQIE_TITLE_TRANSLATE', source }); },
+      translateIntroduction(source) { return runtime.sendMessage({ type: 'STVAI_FANQIE_INTRODUCTION_TRANSLATE', source }); }
     };
   }
 
@@ -85,7 +89,7 @@
     }
     return null;
   }
-  function createTranslator(document, titleEngine) {
+  function createTranslator(document, titleEngine, introductionEngine) {
     const originals = new Map();
     let layoutStyle;
     let enabled = true;
@@ -100,7 +104,25 @@
         layoutStyle = document.createElement('style');
         layoutStyle.dataset.stvaiFanqieLayout = 'vi';
         // Fanqie pins this at left:202px, overlapping the longer Vietnamese tabs.
-        layoutStyle.textContent = '.muye-search-filter .filter-entry{left:auto!important;right:0!important}';
+        layoutStyle.textContent = `
+          .muye-search-filter .filter-entry{left:auto!important;right:0!important}
+          .muye-header .muye-header-content{width:100%;max-width:1280px;padding:0 24px;box-sizing:border-box;gap:20px}
+          .muye-header .muye-header-right{min-width:0;flex:1;gap:14px;height:auto;justify-content:flex-end}
+          .muye-header .nav-item{margin:0!important;padding:0!important;flex:0 0 auto;font-size:13px;line-height:20px;white-space:nowrap}
+          .muye-header .muye-header-search{flex:1 1 180px;min-width:130px;max-width:220px;margin:0!important}
+          .muye-header .serial-divider{margin:0!important}
+          .muye-header .slogin-user-avatar__info__name{max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+          .page-header-info .info-label{display:flex;flex-wrap:wrap;gap:8px;height:auto;line-height:1.5}
+          .page-header-info .info-label span{height:auto;white-space:normal;margin:0;padding:3px 9px;font-size:12px;line-height:1.5}
+          .page-header .page-header-info{height:auto!important;min-height:234px;overflow:visible!important;display:flow-root}
+          .page-header-info .info{min-width:0;height:auto!important;min-height:234px;overflow:visible!important}
+          .page-header-info .info-last{margin-top:18px!important;flex-wrap:wrap;height:auto!important;gap:6px 12px}
+          .page-header-info .info-btn,.page-header-info .add-bookshelf-btn{position:static!important;display:inline-flex!important;vertical-align:top;align-items:center;justify-content:center;width:auto!important;min-width:132px!important;padding:0 16px!important;font-size:14px!important;white-space:nowrap;margin:16px 12px 0 0!important}
+          .page-header-info .download-icon{position:static!important;display:inline-block!important;vertical-align:middle;margin-top:16px}
+          .page-abstract-content{height:auto!important;max-height:none!important;-webkit-line-clamp:unset!important;-webkit-box-orient:initial!important;display:block!important;overflow:visible!important;margin-top:24px!important;margin-bottom:32px!important}
+          .page-abstract-content p{font-family:Arial,sans-serif;font-size:16px;line-height:1.8;white-space:pre-line;overflow-wrap:anywhere}
+          @media(max-width:1100px){.muye-header .muye-header-content{padding:0 14px;gap:12px}.muye-header .muye-header-right{gap:10px;flex-wrap:wrap}.muye-header .muye-header-search{flex-basis:140px}.muye-header{height:auto;min-height:64px}.muye-header .muye-header-content{height:auto;min-height:64px;padding-top:10px;padding-bottom:10px}}
+        `;
         (document.head || document.documentElement).append(layoutStyle);
       }
       for (const node of originals.keys()) if (!node.isConnected) originals.delete(node);
@@ -170,6 +192,26 @@
         region.setAttribute('title', tooltip);
         count++;
       }
+      if (introductionEngine && /^\/page\/\d+\/?$/.test(document.location.pathname)) {
+        for (const region of document.querySelectorAll('.page-abstract-content p')) {
+          const walker = document.createTreeWalker(region, 4), nodes = [];
+          let node; while ((node = walker.nextNode())) nodes.push(node);
+          if (!nodes.length || nodes.every(n => originals.get(n)?.translated === n.data)) continue;
+          const source = nodes.map(n => n.data).join('');
+          if (!/[\u3400-\u9fff]/.test(source)) continue;
+          const old = pending.get(region);
+          if (old?.source === source && old.generation === generation && old.path === document.location.pathname) continue;
+          const request = { source, generation, path: document.location.pathname, values: nodes.map(n => n.data) };
+          pending.set(region, request);
+          Promise.resolve().then(() => introductionEngine(source)).then(result => {
+            if (!result?.ok || result.source !== source.normalize('NFC').trim() || result.provider !== 'mymemory'
+              || pending.get(region) !== request || !enabled || generation !== request.generation
+              || document.location.pathname !== request.path || region.textContent !== source
+              || nodes.some((n, i) => !n.isConnected || !region.contains(n) || n.data !== request.values[i])) return;
+            nodes.forEach((n, i) => { const text = i ? '' : result.text; remember(n, n.data, text); n.data = text; });
+          }).catch(() => { /* Leave source intact; no partial introduction. */ });
+        }
+      }
       return count;
     }
     function restore() {
@@ -191,7 +233,18 @@
 
   async function start(document, storage, engineLoader) {
     if (!allowedPath(document.location.pathname) || document.getElementById('stvai-fanqie-ui')) return null;
-    const translator = createTranslator(document);
+    const translator = createTranslator(document, null, storage?.translateIntroduction ? async source => {
+      const path = document.location.pathname;
+      introStatus.textContent = 'Giới thiệu: đang dịch MyMemory…';
+      let response;
+      try { response = await storage.translateIntroduction(source); }
+      catch (_) { response = { ok: false, reason: 'api_unavailable' }; }
+      if (!stopped && language === 'vi' && path === document.location.pathname) introStatus.textContent = response?.ok
+        ? `Giới thiệu: MyMemory${response.cacheHit ? ' · dùng cache' : ' · đã dịch'}`
+        : ['daily_limit', 'quota_exceeded', 'api_backoff'].includes(response?.reason)
+          ? 'Giới thiệu: hết hạn mức/tạm chờ API; giữ bản gốc' : 'Giới thiệu: API chưa dịch được; giữ bản gốc';
+      return response;
+    } : null);
     let stopped = false, loading = false, loaded = false, retryAfter = 0, loadGeneration = 0;
     const loadTitles = () => {
       if (stopped || loading || loaded || language !== 'vi' || Date.now() < retryAfter || !document.querySelector(titleRegions)) return;
@@ -277,7 +330,10 @@
       toolbar.recoveryStatus, toolbar.miniProgress, toolbar.miniCompleteRing, toolbar.miniTomoe]) node.remove();
     const controls = document.createElement('div'); controls.className = 'stvai-fanqie-controls';
     const context = document.createElement('p'); context.className = 'stvai-fanqie-context';
-    context.textContent = 'Fanqie · giao diện và tên truyện';
+    context.textContent = 'Fanqie · giao diện, tên và giới thiệu truyện';
+    const introStatus = document.createElement('p'); introStatus.className = 'stvai-fanqie-context';
+    introStatus.setAttribute('role', 'status');
+    context.append(introStatus);
     const providerButton = document.createElement('button');
     providerButton.type = 'button'; providerButton.className = 'stvai-button stvai-button--quiet';
     providerButton.dataset.fanqieAction = 'provider';
@@ -290,10 +346,11 @@
     button.className = 'stvai-button stvai-button--primary';
     button.dataset.fanqieAction = 'language';
     const updateButton = () => {
+      introStatus.hidden = language !== 'vi';
       button.textContent = language === 'vi' ? 'Tiếng Việt · 中文' : '中文 · Tiếng Việt';
       button.title = 'Phwgna: dịch nhãn giao diện; tên truyện dùng nguồn đã chọn. Rê chuột tên để xem gốc. Không dịch chương hoặc bình luận.';
       providerButton.textContent = titleProvider === 'mymemory' ? 'Tên: MyMemory · đổi sang từ điển' : 'Tên: từ điển · bật MyMemory';
-      providerButton.title = 'MyMemory gửi tên truyện đang hiện tới dịch vụ dịch, không cần tài khoản. Không gửi chương, giới thiệu hoặc bình luận.';
+      providerButton.title = 'MyMemory dịch tên khi được chọn. Khi bật tiếng Việt, giới thiệu truyện cũng gửi tới MyMemory và lưu cache; dùng chung hạn mức 4.500 ký tự/ngày. Không gửi chương hoặc bình luận.';
     };
     const persist = async (patch = {}) => {
       host.dataset.storageState = 'saving';
