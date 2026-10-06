@@ -1,8 +1,9 @@
 (function attachClientService(root, factory) {
-  const api = factory();
+  const api = factory(root.STVAIFanqieDictionary || (typeof require === 'function'
+    ? require('../shared/fanqie-ui-dictionary.js') : null));
   if (typeof module === "object" && module.exports) module.exports = api;
   root.STVAIBackgroundClientService = api;
-})(typeof globalThis !== "undefined" ? globalThis : this, function createClientServiceApi() {
+})(typeof globalThis !== "undefined" ? globalThis : this, function createClientServiceApi(fanqieDictionary) {
   "use strict";
 
   const CLIENT_STORAGE_KEYS = Object.freeze([
@@ -34,6 +35,34 @@
     function isStvSender(sender) {
       return (sender?.frameId == null || sender.frameId === 0)
         && isStvUrl(sender?.url || sender?.tab?.url);
+    }
+
+    function isFanqieSender(sender) {
+      if (sender?.frameId !== 0 || !Number.isInteger(sender?.tab?.id)) return false;
+      const urls = [sender.url, sender.tab.url].filter(Boolean);
+      return urls.length > 0 && urls.every(value => {
+        try {
+          const url = new URL(value);
+          return url.origin === 'https://fanqienovel.com'
+            && /^\/$|^\/(library|rank)\/?$|^\/(page|reader)\/\d+\/?$/.test(url.pathname);
+        } catch (_) { return false; }
+      });
+    }
+
+    async function fanqieUIGet(message, sender) {
+      if (!isFanqieSender(sender)) return { ok: false, reason: 'unauthorized-sender' };
+      const values = await storageCall(storage.local, 'get', ['stvai-fanqie-ui-v1']);
+      return { ok: true, language: values?.['stvai-fanqie-ui-v1']?.language === 'zh' ? 'zh' : 'vi' };
+    }
+
+    async function fanqieUISet(message, sender) {
+      if (!isFanqieSender(sender)) return { ok: false, reason: 'unauthorized-sender' };
+      if (!['vi', 'zh'].includes(message.language) || !fanqieDictionary) return { ok: false, reason: 'invalid-language' };
+      // No caller-selected keys, dictionary, prompts or private settings.
+      await storageCall(storage.local, 'set', { 'stvai-fanqie-ui-v1': {
+        version: fanqieDictionary.version, language: message.language, entries: fanqieDictionary.entries
+      } });
+      return { ok: true };
     }
 
     function safeSettings(value) {
@@ -265,6 +294,8 @@
       uiScale,
       storageGet,
       storageSet,
+      fanqieUIGet,
+      fanqieUISet,
       changeZoom,
       restoreZoom,
       restoreZoomForTab,

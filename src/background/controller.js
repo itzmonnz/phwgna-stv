@@ -2171,6 +2171,8 @@
         STVAI_PAGE_ZOOM_RESTORE: (message, sender) => clientService.restoreZoom(message, sender),
         STVAI_STORAGE_GET: (message, sender) => clientService.storageGet(message, sender),
         STVAI_STORAGE_SET: (message, sender) => clientService.storageSet(message, sender),
+        STVAI_FANQIE_UI_GET: (message, sender) => clientService.fanqieUIGet(message, sender),
+        STVAI_FANQIE_UI_SET: (message, sender) => clientService.fanqieUISet(message, sender),
         STVAI_TTS_SESSION_START: (message, sender) => ttsSession.handle(message, sender),
         STVAI_TTS_SESSION_CLAIM_NEXT: (message, sender) => ttsSession.handle(message, sender),
         STVAI_TTS_SESSION_UPDATE: (message, sender) => ttsSession.handle(message, sender),

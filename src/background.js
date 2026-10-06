@@ -1,6 +1,7 @@
 if (typeof importScripts === "function") {
   importScripts("shared/distribution-channel.js");
   const backgroundImports = [
+    "shared/fanqie-ui-dictionary.js",
     "background/contracts.js",
     "background/tts-session-service.js",
     "background/client-service.js",

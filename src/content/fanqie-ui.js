@@ -3,7 +3,7 @@
     ? require('../shared/fanqie-ui-dictionary.js') : null));
   if (typeof module === 'object' && module.exports) module.exports = api;
   else if (root.document && root.location.hostname === 'fanqienovel.com'
-    && root.location.protocol === 'https:') api.start(root.document, root.chrome?.storage?.local);
+    && root.location.protocol === 'https:') api.start(root.document, api.createRuntimeStorage(root.chrome?.runtime));
 })(typeof globalThis !== 'undefined' ? globalThis : this, function (dictionary) {
   'use strict';
   const storageKey = 'stvai-fanqie-ui-v1';
@@ -16,8 +16,24 @@
     '.info-btn', '.reader-toolbar'
   ].join(',');
   const excluded = 'script,style,textarea,[contenteditable],.muye-home-news-content-item,.muye-stack-book-list,.page-directory-content,.reader-content,[class*="comment"]';
-  const translations = new Map(dictionary.entries.map(entry => [entry.source, entry.vietnamese]));
+  const translations = new Map(dictionary.entries.flatMap(entry => entry.source.endsWith('：')
+    ? [[entry.source, entry.vietnamese], [entry.source.slice(0, -1), entry.vietnamese.replace(/:$/, '')]]
+    : [[entry.source, entry.vietnamese]]));
   const allowedPath = path => /^\/$|^\/(library|rank)\/?$|^\/(page|reader)\/\d+\/?$/.test(path);
+
+  function createRuntimeStorage(runtime) {
+    return {
+      async get() {
+        const result = await runtime.sendMessage({ type: 'STVAI_FANQIE_UI_GET' });
+        if (!result?.ok) throw new Error('fanqie_storage_unavailable');
+        return { [storageKey]: { language: result.language } };
+      },
+      async set(values) {
+        const result = await runtime.sendMessage({ type: 'STVAI_FANQIE_UI_SET', language: values[storageKey].language });
+        if (!result?.ok) throw new Error('fanqie_storage_unavailable');
+      }
+    };
+  }
 
   function createTranslator(document) {
     const originals = new Map();
@@ -88,11 +104,16 @@
       button.title = 'Phwgna: chỉ dịch nhãn giao diện cố định; không dịch truyện hoặc bình luận';
     };
     const persist = async () => {
+      host.dataset.storageState = 'saving';
       try {
         await storage?.set({ [storageKey]: {
           version: dictionary.version, language, entries: dictionary.entries
         } });
-      } catch (_) { /* Translation still works if local storage is unavailable. */ }
+        host.dataset.storageState = 'saved';
+      } catch (_) {
+        host.dataset.storageState = 'failed';
+        button.title = 'Chưa lưu được ngôn ngữ và bộ nhãn; lựa chọn có thể mất khi tải lại trang.';
+      }
     };
     button.addEventListener('click', () => {
       language = language === 'vi' ? 'zh' : 'vi';
@@ -112,5 +133,5 @@
     observer.observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['placeholder'] });
     return { translator, destroy() { observer.disconnect(); document.defaultView.clearTimeout(timer); translator.restore(); host.remove(); } };
   }
-  return Object.freeze({ createTranslator, start, storageKey, allowedPath });
+  return Object.freeze({ createTranslator, createRuntimeStorage, start, storageKey, allowedPath });
 });
