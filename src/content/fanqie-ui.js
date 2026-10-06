@@ -23,7 +23,8 @@
     '.zone-footer-ctn-left a', '.zone-footer-ctn-left p',
     '.zone-footer-ctn-right-wechat-desc', '.zone-footer-ctn-right-tiktok-desc',
     '.muye-search-bar .search-btn', '.muye-search-filter .byte-tabs-header-title',
-    '.muye-search-filter .filter-entry', '.muye-search-filter-panel', '.muye-search-hint'
+    '.muye-search-filter .filter-entry', '.muye-search-filter-panel', '.muye-search-hint',
+    '.book-item-btn'
   ].join(',');
   const excluded = 'script,style,textarea,[contenteditable],.muye-home-news-content-item,.muye-stack-book-list,.page-directory-content,.reader-content,[class*="comment"]';
   const translations = new Map(dictionary.entries.flatMap(entry => entry.source.endsWith('：')
@@ -64,12 +65,20 @@
 
   function createTranslator(document) {
     const originals = new Map();
+    let layoutStyle;
     let enabled = true;
     function remember(node, source, translated, attribute) {
       originals.set(node, { source, translated, attribute });
     }
     function apply() {
       if (!enabled || !allowedPath(document.location.pathname)) return 0;
+      if (!layoutStyle?.isConnected) {
+        layoutStyle = document.createElement('style');
+        layoutStyle.dataset.stvaiFanqieLayout = 'vi';
+        // Fanqie pins this at left:202px, overlapping the longer Vietnamese tabs.
+        layoutStyle.textContent = '.muye-search-filter .filter-entry{left:auto!important;right:0!important}';
+        (document.head || document.documentElement).append(layoutStyle);
+      }
       for (const node of originals.keys()) if (!node.isConnected) originals.delete(node);
       let count = 0;
       for (const region of document.querySelectorAll(regions)) {
@@ -98,6 +107,7 @@
       return count;
     }
     function restore() {
+      layoutStyle?.remove(); layoutStyle = null;
       for (const [node, entry] of originals) {
         // React/site updates own the latest value: never restore stale text.
         const current = entry.attribute ? node.getAttribute(entry.attribute) : node.data;

@@ -55,6 +55,8 @@
     ['打开抖音扫码关注官方帐号', 'Mở Douyin, quét QR để theo dõi tài khoản chính thức'],
     ['兑换会员', 'Đổi mã hội viên'], ['退出登录', 'Đăng xuất'], ['番茄小说', 'Fanqie Novel'],
     ['搜索', 'Tìm kiếm'], ['相关', 'Liên quan'], ['筛选', 'Bộ lọc'],
+    ['获取搜索结果中，请稍等...', 'Đang lấy kết quả tìm kiếm, vui lòng đợi…'],
+    ['立即阅读', 'Đọc ngay'],
     ['更新时间：', 'Thời gian cập nhật:'], ['过去三十分钟', '30 phút gần đây'],
     ['今天', 'Hôm nay'], ['本周', 'Tuần này'], ['本月', 'Tháng này'], ['今年', 'Năm nay'],
     ['30万字以下', 'Dưới 300.000 chữ'],
@@ -81,5 +83,5 @@
   ].map(([source, vietnamese]) => Object.freeze({ source, vietnamese }));
   // Shared by the content script and its narrow language-storage broker.
   const allowedPath = path => /^\/$|^\/(library|rank|welfare)\/?$|^\/search\/[^/]+\/?$|^\/(page|reader)\/\d+\/?$|^\/main\/writer\/login\/?$|^\/writer\/zone(?:\/[a-zA-Z0-9_-]+)*\/?$/.test(path);
-  return Object.freeze({ version: 3, entries: Object.freeze(entries), allowedPath });
+  return Object.freeze({ version: 4, entries: Object.freeze(entries), allowedPath });
 });
