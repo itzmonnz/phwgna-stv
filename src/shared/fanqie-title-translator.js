@@ -79,7 +79,7 @@
     }
     return Object.freeze({ convert, get cacheSize() { return cache.size; } });
   }
-  async function loadEngine(runtime, fetcher) {
+  async function loadEngine(runtime, fetcher, fontsOnly = false) {
     const base = 'src/shared/fanqie-title-data/';
     const get = async path => {
       const url = new URL(runtime.getURL(base + path));
@@ -93,7 +93,7 @@
     if (index.version !== 1 || !Number.isInteger(index.chunks) || index.chunks < 1 || index.chunks > 20)
       throw new Error('title_dictionary_invalid');
     const [chunks, libraryFont, searchFont] = await Promise.all([
-      Promise.all(Array.from({ length: index.chunks }, (_, i) => get(`${i}.json`))),
+      fontsOnly ? [] : Promise.all(Array.from({ length: index.chunks }, (_, i) => get(`${i}.json`))),
       get('font-library.json'), get('font-search.json')
     ]);
     return createEngine(chunks.flat(), 512, { e26e946d8b2ccb7: libraryFont, c207f68a84deae3: searchFont });

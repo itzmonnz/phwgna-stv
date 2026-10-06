@@ -31,6 +31,16 @@
     const { core, pronunciation, sites, storage, tabs, storageCall, isStvUrl } = options;
     const zoomQueues = new Map();
     const zoomNavigations = new Map();
+    const titleApi = globalThis.STVAIFanqieTitleApi || (typeof require === 'function' ? require('../shared/fanqie-title-api.js') : null);
+    const titleService = titleApi.createService({
+      read: async key => (await storageCall(storage.local, 'get', [key]))?.[key],
+      write: (key, value) => storageCall(storage.local, 'set', { [key]: value }),
+      request: options.titleRequest,
+      enabled: async () => {
+        const pref = (await storageCall(storage.local, 'get', ['stvai-fanqie-ui-v1']))?.['stvai-fanqie-ui-v1'];
+        return pref?.titleProvider !== 'local' && pref?.language !== 'zh';
+      }
+    });
 
     function isStvSender(sender) {
       return (sender?.frameId == null || sender.frameId === 0)
@@ -52,17 +62,27 @@
     async function fanqieUIGet(message, sender) {
       if (!isFanqieSender(sender)) return { ok: false, reason: 'unauthorized-sender' };
       const values = await storageCall(storage.local, 'get', ['stvai-fanqie-ui-v1']);
-      return { ok: true, language: values?.['stvai-fanqie-ui-v1']?.language === 'zh' ? 'zh' : 'vi' };
+      return { ok: true, language: values?.['stvai-fanqie-ui-v1']?.language === 'zh' ? 'zh' : 'vi',
+        titleProvider: values?.['stvai-fanqie-ui-v1']?.titleProvider === 'local' ? 'local' : 'mymemory' };
     }
 
     async function fanqieUISet(message, sender) {
       if (!isFanqieSender(sender)) return { ok: false, reason: 'unauthorized-sender' };
       if (!['vi', 'zh'].includes(message.language) || !fanqieDictionary) return { ok: false, reason: 'invalid-language' };
       // No caller-selected keys, dictionary, prompts or private settings.
+      const old = (await storageCall(storage.local, 'get', ['stvai-fanqie-ui-v1']))?.['stvai-fanqie-ui-v1'];
       await storageCall(storage.local, 'set', { 'stvai-fanqie-ui-v1': {
-        version: fanqieDictionary.version, language: message.language, entries: fanqieDictionary.entries
+        version: fanqieDictionary.version, language: message.language, entries: fanqieDictionary.entries,
+        titleProvider: ['local', 'mymemory'].includes(message.titleProvider) ? message.titleProvider : old?.titleProvider || 'mymemory'
       } });
       return { ok: true };
+    }
+
+    async function fanqieTitleTranslate(message, sender) {
+      if (!isFanqieSender(sender)) return { ok: false, reason: 'unauthorized-sender' };
+      const pref = (await storageCall(storage.local, 'get', ['stvai-fanqie-ui-v1']))?.['stvai-fanqie-ui-v1'];
+      if (pref?.titleProvider === 'local' || pref?.language === 'zh') return { ok: false, reason: 'disabled' };
+      return titleService.translate(message.source);
     }
 
     function safeSettings(value) {
@@ -296,6 +316,7 @@
       storageSet,
       fanqieUIGet,
       fanqieUISet,
+      fanqieTitleTranslate,
       changeZoom,
       restoreZoom,
       restoreZoomForTab,

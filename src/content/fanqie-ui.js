@@ -55,12 +55,13 @@
       async get() {
         const result = await runtime.sendMessage({ type: 'STVAI_FANQIE_UI_GET' });
         if (!result?.ok) throw new Error('fanqie_storage_unavailable');
-        return { [storageKey]: { language: result.language } };
+        return { [storageKey]: { language: result.language, titleProvider: result.titleProvider } };
       },
       async set(values) {
-        const result = await runtime.sendMessage({ type: 'STVAI_FANQIE_UI_SET', language: values[storageKey].language });
+        const result = await runtime.sendMessage({ type: 'STVAI_FANQIE_UI_SET', language: values[storageKey].language, titleProvider: values[storageKey].titleProvider });
         if (!result?.ok) throw new Error('fanqie_storage_unavailable');
-      }
+      },
+      translateTitle(source) { return runtime.sendMessage({ type: 'STVAI_FANQIE_TITLE_TRANSLATE', source }); }
     };
   }
 
@@ -80,6 +81,8 @@
     const originals = new Map();
     let layoutStyle;
     let enabled = true;
+    let generation = 0;
+    const pending = new WeakMap();
     function remember(node, source, translated, attribute) {
       originals.set(node, { source, translated, attribute });
     }
@@ -124,6 +127,26 @@
         while ((node = walker.nextNode())) nodes.push(node);
         if (!nodes.length || nodes.every(n => originals.get(n)?.translated === n.data)) continue;
         const source = nodes.map(n => n.data).join('');
+        if (titleEngine.remote) {
+          const rect = region.getBoundingClientRect();
+          if (!rect.width || !rect.height || rect.bottom < 0 || rect.top > document.defaultView.innerHeight) continue;
+          const old = pending.get(region);
+          if (old?.source === source && old.generation === generation && old.path === document.location.pathname
+            && old.nodes.length === nodes.length && old.nodes.every((n, i) => n === nodes[i])) continue;
+          const request = { source, generation, path: document.location.pathname, values: nodes.map(n => n.data), nodes };
+          pending.set(region, request);
+          Promise.resolve(titleEngine.convert(source, titleFont(document, region))).then(result => {
+            if (!result || pending.get(region) !== request || !enabled || generation !== request.generation
+              || document.location.pathname !== request.path || !allowedPath(document.location.pathname)
+              || nodes.some((n, i) => !n.isConnected || !region.contains(n) || n.data !== request.values[i])
+              || region.textContent !== source) return;
+            nodes.forEach((n, i) => { const translated = i ? '' : result.text; remember(n, n.data, translated); n.data = translated; });
+            const tooltip = `${result.source}\nDịch MyMemory`;
+            remember(region, region.getAttribute('title'), tooltip, 'title');
+            region.setAttribute('title', tooltip);
+          }).catch(() => { /* Failure leaves the original title, never local cache. */ });
+          continue;
+        }
         const result = titleEngine.convert(source, titleFont(document, region));
         if (!result || result.text === source.trim()) continue;
         nodes.forEach((n, i) => {
@@ -142,6 +165,7 @@
       return count;
     }
     function restore() {
+      generation++;
       layoutStyle?.remove(); layoutStyle = null;
       for (const [node, entry] of originals) {
         // React/site updates own the latest value: never restore stale text.
@@ -154,48 +178,90 @@
       }
       originals.clear();
     }
-    return { apply, restore, setTitleEngine(engine) { titleEngine = engine; apply(); }, setEnabled(value) { enabled = value === true; if (!enabled) restore(); else apply(); } };
+    return { apply, restore, setTitleEngine(engine) { restore(); titleEngine = engine; apply(); }, setEnabled(value) { enabled = value === true; if (!enabled) restore(); else apply(); } };
   }
 
   async function start(document, storage, engineLoader) {
     if (!allowedPath(document.location.pathname) || document.getElementById('stvai-fanqie-ui')) return null;
     const translator = createTranslator(document);
-    let stopped = false, loading = false, loaded = false, retryAfter = 0;
+    let stopped = false, loading = false, loaded = false, retryAfter = 0, loadGeneration = 0;
     const loadTitles = () => {
       if (stopped || loading || loaded || language !== 'vi' || Date.now() < retryAfter || !document.querySelector(titleRegions)) return;
       const runtime = document.defaultView.chrome?.runtime;
       const loader = engineLoader || (runtime?.getURL && document.defaultView.fetch
-        ? () => titles.loadEngine(runtime, document.defaultView.fetch.bind(document.defaultView)) : null);
+        ? () => titles.loadEngine(runtime, document.defaultView.fetch.bind(document.defaultView), titleProvider === 'mymemory') : null);
       if (!loader) return;
       loading = true;
+      const currentGeneration = loadGeneration;
+      const currentProvider = titleProvider;
       host.dataset.titleState = 'loading';
       Promise.resolve().then(loader).then(engine => {
-        if (stopped) return;
+        if (stopped || currentGeneration !== loadGeneration) return;
+        if (currentProvider === 'mymemory' && storage?.translateTitle) {
+          const engineDecoder = engine;
+          const cache = new Map();
+          engine = { remote: true, convert(source, font) {
+            const decoded = engineDecoder.convert(source, font)?.source;
+            if (!decoded) return null;
+            if (!cache.has(decoded)) {
+              const request = storage.translateTitle(decoded).then(response => {
+                if (!response?.ok || response.provider !== 'mymemory' || response.source !== decoded) {
+                  if (!stopped && currentGeneration === loadGeneration) {
+                    status.textContent = failureLabel(response?.reason);
+                    host.dataset.titleState = 'unavailable';
+                  }
+                  return null;
+                }
+                if (!stopped && currentGeneration === loadGeneration) status.textContent = 'Tên truyện: MyMemory · cache riêng';
+                return { source: decoded, text: response.text };
+              }).catch(() => { if (!stopped && currentGeneration === loadGeneration) status.textContent = 'MyMemory mất kết nối; giữ tên gốc'; return null; });
+              cache.set(decoded, request);
+              while (cache.size > 512) cache.delete(cache.keys().next().value);
+            }
+            return cache.get(decoded);
+          } };
+        }
         loaded = true; host.dataset.titleState = 'ready'; translator.setTitleEngine(engine);
-      }).catch(() => { retryAfter = Date.now() + 30000; if (!stopped) host.dataset.titleState = 'unavailable'; })
-        .finally(() => { loading = false; });
+      }).catch(() => {
+        if (stopped || currentGeneration !== loadGeneration) return;
+        retryAfter = Date.now() + 30000; host.dataset.titleState = 'unavailable';
+        status.textContent = 'Chưa tải được bộ giải mã tên truyện';
+      })
+        .finally(() => { if (currentGeneration === loadGeneration) loading = false; });
     };
     let language = 'vi';
+    let titleProvider = 'local';
     try {
       const values = await storage?.get(storageKey);
       if (values?.[storageKey]?.language === 'zh') language = 'zh';
+      if (values?.[storageKey]?.titleProvider === 'mymemory') titleProvider = 'mymemory';
     } catch (_) { /* Bundled dictionary remains usable without storage. */ }
     const host = document.createElement('div');
     host.id = 'stvai-fanqie-ui';
     host.style.cssText = 'position:fixed;bottom:12px;left:12px;z-index:1000';
     const shadow = host.attachShadow({ mode: 'open' });
+    const providerButton = document.createElement('button');
+    providerButton.type = 'button';
+    providerButton.style.cssText = 'display:block;margin-top:4px;padding:7px 10px;border:1px solid #999;border-radius:8px;background:#fff;color:#222;cursor:pointer';
+    const status = document.createElement('div');
+    status.style.cssText = 'max-width:240px;padding:5px;background:#fff;color:#222;font:12px sans-serif';
+    const failureLabel = reason => ['daily_limit', 'quota_exceeded', 'api_backoff'].includes(reason)
+      ? 'MyMemory tạm dừng/quota hết; dùng cache hoặc giữ tên gốc'
+      : 'MyMemory chưa dịch được; giữ tên gốc';
     const button = document.createElement('button');
     button.type = 'button';
     button.style.cssText = 'font:14px sans-serif;max-width:180px;padding:9px 12px;border:1px solid #999;border-radius:8px;background:#fff;color:#222;cursor:pointer';
     const updateButton = () => {
       button.textContent = language === 'vi' ? 'Tiếng Việt · 中文' : '中文 · Tiếng Việt';
-      button.title = 'Phwgna: dịch giao diện và tên truyện bằng từ điển; rê chuột tên để xem gốc. Không dịch chương hoặc bình luận.';
+      button.title = 'Phwgna: dịch nhãn giao diện; tên truyện dùng nguồn đã chọn. Rê chuột tên để xem gốc. Không dịch chương hoặc bình luận.';
+      providerButton.textContent = titleProvider === 'mymemory' ? 'Tên: MyMemory · đổi sang từ điển' : 'Tên: từ điển · bật MyMemory';
+      providerButton.title = 'MyMemory gửi tên truyện đang hiện tới dịch vụ dịch, không cần tài khoản. Không gửi chương, giới thiệu hoặc bình luận.';
     };
     const persist = async () => {
       host.dataset.storageState = 'saving';
       try {
         await storage?.set({ [storageKey]: {
-          version: dictionary.version, language, entries: dictionary.entries
+          version: dictionary.version, language, titleProvider, entries: dictionary.entries
         } });
         host.dataset.storageState = 'saved';
       } catch (_) {
@@ -203,12 +269,23 @@
         button.title = 'Chưa lưu được ngôn ngữ và bộ nhãn; lựa chọn có thể mất khi tải lại trang.';
       }
     };
-    button.addEventListener('click', () => {
+    button.addEventListener('click', async () => {
       language = language === 'vi' ? 'zh' : 'vi';
-      translator.setEnabled(language === 'vi'); updateButton(); loadTitles(); void persist();
+      if (titleProvider === 'mymemory') {
+        loadGeneration++; loaded = false; loading = false; retryAfter = 0; translator.setTitleEngine(null);
+      }
+      translator.setEnabled(language === 'vi'); updateButton(); await persist(); loadTitles();
     });
-    shadow.append(button); document.body.append(host);
+    providerButton.addEventListener('click', async () => {
+      titleProvider = titleProvider === 'mymemory' ? 'local' : 'mymemory';
+      loadGeneration++; loaded = false; loading = false; retryAfter = 0;
+      translator.setTitleEngine(null); updateButton();
+      status.textContent = titleProvider === 'mymemory' ? 'Đang bật MyMemory…' : 'Tên truyện: từ điển cục bộ';
+      await persist(); loadTitles();
+    });
+    shadow.append(button, providerButton, status); document.body.append(host);
     translator.setEnabled(language === 'vi'); updateButton(); void persist();
+    status.textContent = titleProvider === 'mymemory' ? 'Tên truyện: MyMemory · chỉ gửi tên đang hiện' : 'Tên truyện: từ điển cục bộ';
     loadTitles();
     let timer;
     const observer = new document.defaultView.MutationObserver(() => {
@@ -220,7 +297,10 @@
       }, 80);
     });
     observer.observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['placeholder'] });
-    return { translator, destroy() { stopped = true; observer.disconnect(); document.defaultView.clearTimeout(timer); translator.restore(); host.remove(); } };
+    const onScroll = () => { loadTitles(); translator.apply(); };
+    document.defaultView.addEventListener('scroll', onScroll, { passive: true, capture: true });
+    document.defaultView.addEventListener('resize', onScroll);
+    return { translator, destroy() { stopped = true; loadGeneration++; observer.disconnect(); document.defaultView.removeEventListener('scroll', onScroll, true); document.defaultView.removeEventListener('resize', onScroll); document.defaultView.clearTimeout(timer); translator.restore(); host.remove(); } };
   }
   return Object.freeze({ createTranslator, createRuntimeStorage, start, storageKey, allowedPath });
 });
