@@ -357,12 +357,19 @@
         ...message,
         performanceMode: provider === "chatgpt" ? "stable" : "max"
       };
-      return withProviderPerformanceLease(
-        provider,
-        tabId,
-        performanceMessage,
-        () => tabs.sendMessage(tabId, performanceMessage)
-      );
+      const windowState = provider === "gemini"
+        ? await captureGeminiWindowState(tabId)
+        : null;
+      try {
+        return await withProviderPerformanceLease(
+          provider,
+          tabId,
+          performanceMessage,
+          () => tabs.sendMessage(tabId, performanceMessage)
+        );
+      } finally {
+        if (provider === "gemini") await restoreUnexpectedGeminiRaise(windowState);
+      }
     }
 
     async function protectOwnedProviderTab(tabId) {
@@ -374,6 +381,29 @@
         // Older Chromium builds may not expose this property; translation can still continue.
         return false;
       }
+    }
+
+    async function captureGeminiWindowState(tabId) {
+      if (typeof tabs?.get !== "function" || typeof windows?.get !== "function") return null;
+      try {
+        const tab = await tabs.get(tabId);
+        if (!Number.isInteger(tab?.windowId)) return null;
+        const window = await windows.get(tab.windowId);
+        return { windowId: tab.windowId, state: String(window?.state || "") };
+      } catch (_) { return null; }
+    }
+
+    async function restoreUnexpectedGeminiRaise(before) {
+      // Undo only a minimized -> normal transition caused during this provider
+      // operation. A window already opened by the user is left alone.
+      if (!before || before.state !== "minimized" || typeof windows?.get !== "function"
+        || typeof windows?.update !== "function") return;
+      try {
+        const current = await windows.get(before.windowId);
+        if (String(current?.state || "") !== "minimized") {
+          await windows.update(before.windowId, { state: "minimized", focused: false });
+        }
+      } catch (_) { /* user may have closed the window */ }
     }
 
     async function resolveProviderWindowId() {
