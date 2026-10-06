@@ -40,6 +40,15 @@
   function translateNode(node) {
     const source = node.data.trim();
     const parent = node.parentElement;
+    // Short navigation labels fit the original desktop and mobile menu slots.
+    if (parent?.closest('.muye-header .nav-item,.muye-mobile-nav .nav-item-text')) {
+      const short = { '原创榜': 'Xếp hạng', '作家专区': 'Tác giả', '版权专区': 'Bản quyền' };
+      if (short[source]) return short[source];
+    }
+    if (parent?.closest('.float-wrapper-item')) {
+      const short = { '番茄小说网': 'Fanqie', '番茄小说': 'Fanqie', '帮助中心': 'Trợ giúp' };
+      if (short[source]) return short[source];
+    }
     if (parent?.closest('.info-last-title') && source.startsWith('最近更新：')) return source.replace('最近更新：', 'Mới cập nhật: ');
     if (source === '和' && parent?.closest('.writer-login .slogin-form-protocol__text')) return 'và';
     if (parent?.closest('.muye-search-hint')) {
@@ -107,8 +116,10 @@
         layoutStyle.textContent = `
           .muye-search-filter .filter-entry{left:auto!important;right:0!important}
           .muye-header .muye-header-content{width:100%;max-width:1280px;padding:0 24px;box-sizing:border-box;gap:20px}
-          .muye-header .muye-header-right{min-width:0;flex:1;gap:14px;height:auto;justify-content:flex-end}
-          .muye-header .nav-item{margin:0!important;padding:0!important;flex:0 0 auto;font-size:13px;line-height:20px;white-space:nowrap}
+          .muye-header .muye-header-right{min-width:0;flex:1;gap:24px;height:auto;justify-content:flex-end;align-items:center}
+          .muye-header .nav-item{position:relative;margin:0!important;padding:0!important;height:32px!important;flex:0 0 auto;font-family:Arial,sans-serif;font-size:14px;line-height:20px;white-space:nowrap;text-align:center}
+          .muye-header .nav-item>a{display:flex;align-items:center;justify-content:center;min-height:32px;font:inherit;line-height:20px}
+          .muye-header .nav-item-bar{position:absolute;left:0;bottom:0;margin:0!important}
           .muye-header .muye-header-search{flex:1 1 180px;min-width:130px;max-width:220px;margin:0!important}
           .muye-header .serial-divider{margin:0!important}
           .muye-header .slogin-user-avatar__info__name{max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -117,8 +128,13 @@
           .page-header .page-header-info{height:auto!important;min-height:234px;overflow:visible!important;display:flow-root}
           .page-header-info .info{min-width:0;height:auto!important;min-height:234px;overflow:visible!important}
           .page-header-info .info-last{margin-top:18px!important;flex-wrap:wrap;height:auto!important;gap:6px 12px}
-          .page-header-info .info-btn,.page-header-info .add-bookshelf-btn{position:static!important;display:inline-flex!important;vertical-align:top;align-items:center;justify-content:center;width:auto!important;min-width:132px!important;padding:0 16px!important;font-size:14px!important;white-space:nowrap;margin:16px 12px 0 0!important}
+          .page-header-info .info-btn,.page-header-info .add-bookshelf-btn{position:static!important;display:inline-flex!important;vertical-align:top;align-items:center;justify-content:center;box-sizing:border-box;height:36px!important;width:auto!important;min-width:132px!important;padding:0 16px!important;font-family:Arial,sans-serif!important;font-size:14px!important;line-height:20px!important;white-space:nowrap;margin:16px 12px 0 0!important}
+          .page-header-info .info-btn>a,.page-header-info .add-bookshelf-btn>span{display:flex!important;align-items:center;justify-content:center;height:auto!important;min-height:0!important;width:auto!important;line-height:20px!important;font:inherit!important;margin:0!important;padding:0!important}
           .page-header-info .download-icon{position:static!important;display:inline-block!important;vertical-align:middle;margin-top:16px}
+          .float-wrapper{width:88px!important;box-sizing:border-box;padding:8px 0!important}
+          .float-wrapper .float-wrapper-item{display:flex!important;flex-direction:column;align-items:center;justify-content:center;gap:6px;width:88px!important;height:72px!important;box-sizing:border-box;text-align:center!important}
+          .float-wrapper .float-wrapper-item-icon{display:block!important;flex:0 0 20px;margin:0!important;width:20px;height:20px;line-height:20px!important}
+          .float-wrapper .float-wrapper-item>div{box-sizing:border-box;width:100%;padding:0 6px;font-family:Arial,sans-serif;font-size:12px;line-height:18px!important;text-align:center!important;white-space:normal;overflow-wrap:normal}
           .page-abstract-content{height:auto!important;max-height:none!important;-webkit-line-clamp:unset!important;-webkit-box-orient:initial!important;display:block!important;overflow:visible!important;margin-top:24px!important;margin-bottom:32px!important}
           .page-abstract-content p{font-family:Arial,sans-serif;font-size:16px;line-height:1.8;white-space:pre-line;overflow-wrap:anywhere}
           @media(max-width:1100px){.muye-header .muye-header-content{padding:0 14px;gap:12px}.muye-header .muye-header-right{gap:10px;flex-wrap:wrap}.muye-header .muye-header-search{flex-basis:140px}.muye-header{height:auto;min-height:64px}.muye-header .muye-header-content{height:auto;min-height:64px;padding-top:10px;padding-bottom:10px}}
