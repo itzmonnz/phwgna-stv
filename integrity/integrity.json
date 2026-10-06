@@ -63,7 +63,7 @@
     },
     {
       "path": "manifest.json",
-      "sha256": "969267f19d543c208b0551d6754f4b9807e124d0dd3df673ab2be72b55ff2282"
+      "sha256": "94d2bfbd6cea2feec651908479b084025266d01c7f3371a03d7ea56283fab2e0"
     },
     {
       "path": "onboarding/onboarding.css",
@@ -83,7 +83,7 @@
     },
     {
       "path": "options/options.html",
-      "sha256": "fdd59271e85bc29195c6b26b8d914842e394109d24b8952015d3b76a798d691d"
+      "sha256": "d0ab4b9544ac5f05398196e829591193c881b887027060a589e18ce4e0a0a637"
     },
     {
       "path": "options/options.js",
@@ -115,11 +115,11 @@
     },
     {
       "path": "src/background.js",
-      "sha256": "96ac010f6bca85fe4809466a80e0d7f15883427d310ff4e4190437e912a3bb3c"
+      "sha256": "254d5646d0d6244d446c6b642faf825526c338b0337e17d722ac835285ceaf94"
     },
     {
       "path": "src/background/client-service.js",
-      "sha256": "64b23e386cd02ab240760afd89b8531406fa140b83b8f38d2dee9ab7428ffe51"
+      "sha256": "b59ee58867b1c08998977d64a325a966e0c626daa6bb2f2b0b105f70e690fd68"
     },
     {
       "path": "src/background/contracts.js",
@@ -127,11 +127,15 @@
     },
     {
       "path": "src/background/controller.js",
-      "sha256": "23b91f9345e22101da728a3e0650ea182aabf6c252c5dcd323158edccf373273"
+      "sha256": "b3b4b53254a89931c2baca3a5b8fa4a5daeff418538dfd36cf595293711eee0a"
     },
     {
       "path": "src/background/gemini-account-service.js",
       "sha256": "5eb703aa64381eeb390916a2e1f69d4f817e0cadca36944f8c19ac6de9fdfd6c"
+    },
+    {
+      "path": "src/background/hachimi-service.js",
+      "sha256": "fba91b0e3a349ae235424f546cf1cf26d5fa2290550d857d35f1771ad3648cf5"
     },
     {
       "path": "src/background/message-router.js",
@@ -163,7 +167,7 @@
     },
     {
       "path": "src/content/fanqie-ui.js",
-      "sha256": "10aabc16a91808af09debbaaf301a87316610d138e7169635be3933cb9b7379f"
+      "sha256": "e0344112e5ab01d9a4c74b7b2577cc9cf9ec806981fe8b89cc5980d6add21ae3"
     },
     {
       "path": "src/content/gemini-account-probe.js",
@@ -176,6 +180,10 @@
     {
       "path": "src/content/gemini.js",
       "sha256": "e9746a57ebcf2debe2b8ba5edb4365a0423b3426a28d193150dc2b0db32f9f1f"
+    },
+    {
+      "path": "src/content/hachimi-provider.js",
+      "sha256": "a39de03b5d0e4efb17734960d42e064011a3d48ad831ea8c17613664aa653f94"
     },
     {
       "path": "src/content/provider-common.js",
@@ -283,7 +291,7 @@
     },
     {
       "path": "src/shared/fanqie-preferences.js",
-      "sha256": "c0b6b88cbebfed0216c78ac8287d03526ef44729d231917c87325522f1e4cbd4"
+      "sha256": "41b9e211428c8041754984e0e00ede2008d74e083bfb43e223e00eb6a99b1d44"
     },
     {
       "path": "src/shared/fanqie-title-api.js",
@@ -351,11 +359,15 @@
     },
     {
       "path": "src/shared/fanqie-title-translator.js",
-      "sha256": "dc0cae485e5d0565b7164b4caa972e3c5fb8d790d5dfef5d97af1464e6e40cb5"
+      "sha256": "92a83b2f6c32067e5ddf87666a8a2c4584905d0f089dd0102f329382b2d6769a"
     },
     {
       "path": "src/shared/fanqie-ui-dictionary.js",
-      "sha256": "52abfb92cfb41e0bfe37267121ff114a00c0b3054c47201c74f5920d917dd174"
+      "sha256": "9e4336024b137a4ad44cdb743b08b5ecef6f7202002416b30dacfed90c41fa7a"
+    },
+    {
+      "path": "src/shared/hachimi-text.js",
+      "sha256": "d9f5c13e5d87daedae76bded543ea80cf496aade3e82c5c8492ab3e691a31c2b"
     },
     {
       "path": "src/shared/history-sync.js",
@@ -439,7 +451,7 @@
     }
   ],
   "product": "Phwgna Stv",
-  "sourceCommit": "c4c62fc133cd58604900e47fc51068947032fe5d",
+  "sourceCommit": "c8ad683d856ebf91fc48d57ec0ddc7835678a193",
   "officialRepository": "https://github.com/itzmonnz/phwgna-stv",
   "officialReleaseUrl": "https://github.com/itzmonnz/phwgna-stv/releases/tag/v0.2.8",
   "publicKeyFingerprint": "85ac74c199d0a6028bce843d6f68d7632317912b460aad1a7431193767ec9871"

@@ -50,13 +50,18 @@
       return tokens.join(' ').replace(/\s+/g, ' ').replace(/\s*([，,：:！!？?。；;、…])\s*/g, '$1 ')
         .replace(/，/g, ',').replace(/：/g, ':').replace(/！/g, '!').replace(/？/g, '?').trim();
     }
-    function convert(source, fontId) {
-      if (typeof source !== 'string' || source.length > 240) return null;
+    function decode(source, fontId) {
+      if (typeof source !== 'string' || source.length > 12000) return null;
       const font = fontMaps[fontId];
       if (font) source = Array.from(source, char => font[String(char.codePointAt(0))] || char).join('');
       // Never guess a private-use font code or translate half an unreadable title.
       if (/[\ue000-\uf8ff]/.test(source) || !han.test(source)) return null;
-      const key = source.normalize('NFC').trim();
+      return source.normalize('NFC').trim();
+    }
+    function convert(source, fontId) {
+      if (typeof source !== 'string' || source.length > 240) return null;
+      const key = decode(source, fontId);
+      if (!key) return null;
       if (cache.has(key)) {
         const hit = cache.get(key); cache.delete(key); cache.set(key, hit); return hit;
       }
@@ -77,7 +82,7 @@
       while (cache.size > limit) cache.delete(cache.keys().next().value);
       return result;
     }
-    return Object.freeze({ convert, get cacheSize() { return cache.size; } });
+    return Object.freeze({ convert, decode, get cacheSize() { return cache.size; } });
   }
   async function loadEngine(runtime, fetcher, fontsOnly = false) {
     const base = 'src/shared/fanqie-title-data/';

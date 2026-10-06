@@ -87,9 +87,15 @@
     ['穿越', 'Xuyên không'], ['重生', 'Trọng sinh'], ['系统', 'Hệ thống'],
     ['无敌', 'Vô địch'], ['爽文', 'Truyện sảng'], ['单女主', 'Một nữ chính'],
     ['多女主', 'Nhiều nữ chính'], ['历史', 'Lịch sử'], ['科幻', 'Khoa học viễn tưởng'],
-    ['悬疑', 'Bí ẩn'], ['言情', 'Ngôn tình'], ['修仙', 'Tu tiên']
+    ['悬疑', 'Bí ẩn'], ['言情', 'Ngôn tình'], ['修仙', 'Tu tiên'],
+    ['番茄巅峰榜', 'Bảng xếp hạng nổi bật Fanqie'],
+    ['根据作品好评、人气、互动等综合得分排行', 'Xếp hạng tổng hợp theo đánh giá, độ phổ biến và tương tác'],
+    ['番茄作家福利区', 'Chính sách hỗ trợ tác giả Fanqie'],
+    ['创建作品、查看作品数据及收益', 'Tạo tác phẩm, xem số liệu và thu nhập'],
+    ['优秀版权作品展示', 'Giới thiệu tác phẩm bản quyền nổi bật'],
+    ['殿堂作家', 'Tác giả danh tiếng'], ['金番作家', 'Tác giả Kim Phiên']
   ].map(([source, vietnamese]) => Object.freeze({ source, vietnamese }));
   // Shared by the content script and its narrow language-storage broker.
   const allowedPath = path => /^\/$|^\/(library|rank|welfare)\/?$|^\/search\/[^/]+\/?$|^\/(page|reader)\/\d+\/?$|^\/main\/writer\/login\/?$|^\/writer\/zone(?:\/[a-zA-Z0-9_-]+)*\/?$/.test(path);
-  return Object.freeze({ version: 5, entries: Object.freeze(entries), allowedPath });
+  return Object.freeze({ version: 6, entries: Object.freeze(entries), allowedPath });
 });

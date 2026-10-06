@@ -23,6 +23,7 @@
     "https://chatgpt.com/*",
     "https://gemini.google.com/*",
     "https://translate.googleapis.com/*",
+    "https://moxhi.vietphrase.app/*",
     "https://api.mymemory.translated.net/*",
     "https://openrouter.ai/*",
     "https://generativelanguage.googleapis.com/*",
@@ -86,6 +87,11 @@
     }
   ],
   "content_scripts": [
+    {
+      "matches": ["https://moxhi.vietphrase.app/*"],
+      "js": ["src/content/hachimi-provider.js"],
+      "run_at": "document_idle"
+    },
     {
       "matches": [
         "https://fanqienovel.com/*"

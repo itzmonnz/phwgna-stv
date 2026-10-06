@@ -9,7 +9,7 @@
   function normalize(value = {}) {
     return {
       language: value.language === 'zh' ? 'zh' : 'vi',
-      titleProvider: value.titleProvider === 'local' ? 'local' : 'mymemory',
+      titleProvider: 'hachimi40',
       uiScale: scales.includes(Number(value.uiScale)) ? Number(value.uiScale) : 1,
       collapsed: value.collapsed !== false,
       position: typeof value.position?.x === 'number' && typeof value.position?.y === 'number'

@@ -2180,6 +2180,7 @@
         STVAI_FANQIE_UI_SET: (message, sender) => clientService.fanqieUISet(message, sender),
         STVAI_FANQIE_TITLE_TRANSLATE: (message, sender) => clientService.fanqieTitleTranslate(message, sender),
         STVAI_FANQIE_INTRODUCTION_TRANSLATE: (message, sender) => clientService.fanqieIntroductionTranslate(message, sender),
+        STVAI_FANQIE_TEXT_TRANSLATE: (message, sender) => clientService.fanqieTextTranslate(message, sender),
         STVAI_TTS_SESSION_START: (message, sender) => ttsSession.handle(message, sender),
         STVAI_TTS_SESSION_CLAIM_NEXT: (message, sender) => ttsSession.handle(message, sender),
         STVAI_TTS_SESSION_UPDATE: (message, sender) => ttsSession.handle(message, sender),

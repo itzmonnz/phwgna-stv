@@ -323,9 +323,10 @@
                 <p class="field-help">Nhãn giao diện dùng bản dịch đã kiểm tra sẵn. Tên người dùng và bình luận giữ nguyên.</p>
               </div>
               <div class="field">
-                <label for="fanqieTitleProvider">Cách dịch tên truyện</label>
-                <select id="fanqieTitleProvider"><option value="mymemory">MyMemory · dịch trực tuyến</option><option value="local">Từ điển · dịch trên máy</option></select>
-                <p class="field-help">MyMemory dịch tên truyện khi được chọn. Khi bật tiếng Việt, phần giới thiệu cũng dùng MyMemory và cache riêng, kể cả khi tên dùng từ điển. Cả hai dùng chung hạn mức 4.500 ký tự/ngày; hết hạn mức giữ nguyên phần chưa dịch. Từ điển dịch tên nhanh trên máy nhưng có thể chưa tự nhiên.</p>
+                <label for="fanqieTitleProvider">Dịch tên và thông tin truyện</label>
+                <select id="fanqieTitleProvider"><option value="hachimi40">Hachimi 40 · dịch trên máy bằng WebGPU</option></select>
+                <p class="field-help">Thay bản dịch free cũ cho tên truyện, tác giả, tên chương và giới thiệu. Tool dùng một tab Mặc Hi chạy nền; lần đầu tải khoảng 82 MB, cần GPU hỗ trợ WebGPU. Không có quota API/ngày hoặc API key. Cache Hachimi lưu riêng; lỗi mô hình giữ chữ gốc, không chuyển về MyMemory. Rê chuột để xem nguyên văn.</p>
+                <p class="field-help">Mô hình <a href="https://huggingface.co/ngocdang83/HachimiMT-40-QT" target="_blank" rel="noreferrer">HachimiMT-40-QT · ngocdang83</a>, giấy phép <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer">CC BY 4.0</a>. Tool bổ sung gửi/ghép văn bản và cache, không sửa trọng số mô hình. Bộ chạy: <a href="https://moxhi.vietphrase.app/" target="_blank" rel="noreferrer">Mặc Hi</a>. Chất lượng còn tùy tên riêng/ngữ cảnh; dịch cục bộ dùng tài nguyên máy.</p>
               </div>
             </div>
           </section>

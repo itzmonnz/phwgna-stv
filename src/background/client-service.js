@@ -32,14 +32,14 @@
     const { core, pronunciation, sites, storage, tabs, storageCall, isStvUrl, runtime } = options;
     const zoomQueues = new Map();
     const zoomNavigations = new Map();
-    const titleApi = globalThis.STVAIFanqieTitleApi || (typeof require === 'function' ? require('../shared/fanqie-title-api.js') : null);
-    const titleService = titleApi.createService({
+    const hachimi = globalThis.STVAIHachimiService || (typeof require === 'function' ? require('./hachimi-service.js') : null);
+    const titleService = hachimi.createService({
+      tabs,
       read: async key => (await storageCall(storage.local, 'get', [key]))?.[key],
       write: (key, value) => storageCall(storage.local, 'set', { [key]: value }),
-      request: options.titleRequest,
-      enabled: async kind => {
+      enabled: async () => {
         const pref = (await storageCall(storage.local, 'get', ['stvai-fanqie-ui-v1']))?.['stvai-fanqie-ui-v1'];
-        return pref?.language !== 'zh' && (kind !== 'title' || pref?.titleProvider !== 'local');
+        return pref?.language !== 'zh';
       }
     });
 
@@ -101,13 +101,19 @@
     async function fanqieTitleTranslate(message, sender) {
       if (!isFanqieSender(sender)) return { ok: false, reason: 'unauthorized-sender' };
       const pref = (await storageCall(storage.local, 'get', ['stvai-fanqie-ui-v1']))?.['stvai-fanqie-ui-v1'];
-      if (pref?.titleProvider === 'local' || pref?.language === 'zh') return { ok: false, reason: 'disabled' };
+      if (pref?.language === 'zh') return { ok: false, reason: 'disabled' };
       return titleService.translate(message.source);
     }
     async function fanqieIntroductionTranslate(message, sender) {
       if (!isFanqieSender(sender) || ![sender.url, sender.tab.url].filter(Boolean)
         .every(value => /^\/page\/\d+\/?$/.test(new URL(value).pathname))) return { ok: false, reason: 'unauthorized-sender' };
-      return titleService.translateIntroduction(message.source);
+      return titleService.translate(message.source, 'introduction');
+    }
+
+    async function fanqieTextTranslate(message, sender) {
+      if (!isFanqieSender(sender)) return { ok: false, reason: 'unauthorized-sender' };
+      if (!['title', 'author', 'chapter', 'description', 'introduction'].includes(message.kind)) return { ok: false, reason: 'invalid_kind' };
+      return titleService.translate(message.source, message.kind);
     }
 
     function safeSettings(value) {
@@ -343,6 +349,7 @@
       fanqieUISet,
       fanqieTitleTranslate,
       fanqieIntroductionTranslate,
+      fanqieTextTranslate,
       changeZoom,
       restoreZoom,
       restoreZoomForTab,
