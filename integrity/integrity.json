@@ -63,7 +63,7 @@
     },
     {
       "path": "manifest.json",
-      "sha256": "43462225dc60d6c58ff4fc61ae85b92477a95d11106572d77ed276dc04d2cd08"
+      "sha256": "d9ddc7ab96acec2ee86ebb96302e53da75951d5079141b749b5151bcf775c766"
     },
     {
       "path": "onboarding/onboarding.css",
@@ -159,7 +159,7 @@
     },
     {
       "path": "src/content/fanqie-ui.js",
-      "sha256": "496db6e5bd380d9e39bdfd5ac14f26050c2dc961ddd6ea7362f17eb6ecc42b65"
+      "sha256": "44012b809a2f2a5943d09a9d96dcc2194015daf37e5ff67a37ca6d43efcacc45"
     },
     {
       "path": "src/content/gemini-account-probe.js",
@@ -278,6 +278,70 @@
       "sha256": "017cbbad724040f3b13276175318c22f0433f72bf003345109a12160a090fa0c"
     },
     {
+      "path": "src/shared/fanqie-title-data/0.json",
+      "sha256": "ae44edc1ff7565424d67ab97412dd3712d25f68a2a51aa104e27c6c52c1807dd"
+    },
+    {
+      "path": "src/shared/fanqie-title-data/1.json",
+      "sha256": "836bb757e09ffcb5a0b7cd5713a62ded2a0f1612d284c8b3fe2b387e48489c12"
+    },
+    {
+      "path": "src/shared/fanqie-title-data/10.json",
+      "sha256": "4755bff7f69a3b514492d35a420b71dc2c88b21314c3d71cced9f8665cfb5aae"
+    },
+    {
+      "path": "src/shared/fanqie-title-data/2.json",
+      "sha256": "8d082d882872a7a66fb8acb4e0edf04428ebf05c212ee16e00b19b1ab251cf17"
+    },
+    {
+      "path": "src/shared/fanqie-title-data/3.json",
+      "sha256": "97e7148804bef282b49d02e423c119dd3712fd49b3abecfca3eb590004715cd5"
+    },
+    {
+      "path": "src/shared/fanqie-title-data/4.json",
+      "sha256": "07d8997204013a197eb9f641cd002161847347f9c3ccba7515a607a28d4a3c47"
+    },
+    {
+      "path": "src/shared/fanqie-title-data/5.json",
+      "sha256": "c583de70e5f1f6266f632b32f3a0795732e137e79d1f8d6ad4936e989f2afe96"
+    },
+    {
+      "path": "src/shared/fanqie-title-data/6.json",
+      "sha256": "784dcc8dc823ade3520229890434fadfc96e63c714485d5e4ada50f772bada76"
+    },
+    {
+      "path": "src/shared/fanqie-title-data/7.json",
+      "sha256": "588ab6e0e02c9c61e52b49fc30acea86aa9e82a955f36100451d666db32f26ad"
+    },
+    {
+      "path": "src/shared/fanqie-title-data/8.json",
+      "sha256": "4f1e759ed2dafff394c642e5bd1092164e027de8c60c6db4cd5372d3f1832bcb"
+    },
+    {
+      "path": "src/shared/fanqie-title-data/9.json",
+      "sha256": "ecc40132a2b152c93929113b5203a494d9cc7122feac36a81196e39b84f18d1b"
+    },
+    {
+      "path": "src/shared/fanqie-title-data/LICENSE.md",
+      "sha256": "ae5f251e17f5af8bbcf12751c1d386ad7632bb8ef8a148708c3fdd28266322e3"
+    },
+    {
+      "path": "src/shared/fanqie-title-data/font-library.json",
+      "sha256": "a3f89e63d6ee4b48cac619d30cfd49797e1e07aaa48d966b5bbd3c88d3b0db4e"
+    },
+    {
+      "path": "src/shared/fanqie-title-data/font-search.json",
+      "sha256": "8e4fd493dd15066a2ea215f65d57ecda8435ca37929fcacb876c1ad4790ada75"
+    },
+    {
+      "path": "src/shared/fanqie-title-data/index.json",
+      "sha256": "fd464fa9b375edc308127fc265637b2dd62dcc9b212dbb17b97e4e6c17e2dc85"
+    },
+    {
+      "path": "src/shared/fanqie-title-translator.js",
+      "sha256": "bff51e43ba96cbcd9ad0ed360fb5e9594d27fc3faf28371f028eb9c29e954ef0"
+    },
+    {
       "path": "src/shared/fanqie-ui-dictionary.js",
       "sha256": "d39af02466f73f9a1f21fa2354abfff69f0eb59710140df71d40aa9671cd772c"
     },
@@ -363,7 +427,7 @@
     }
   ],
   "product": "Phwgna Stv",
-  "sourceCommit": "a10ee50c807f9c56fa9f70c1b868c61e77a3f421",
+  "sourceCommit": "31cea8c90e59dbad64ab92e4cce0f763a7fceb50",
   "officialRepository": "https://github.com/itzmonnz/phwgna-stv",
   "officialReleaseUrl": "https://github.com/itzmonnz/phwgna-stv/releases/tag/v0.2.8",
   "publicKeyFingerprint": "85ac74c199d0a6028bce843d6f68d7632317912b460aad1a7431193767ec9871"

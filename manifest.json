@@ -51,6 +51,27 @@
   "web_accessible_resources": [
     {
       "resources": [
+        "src/shared/fanqie-title-data/index.json",
+        "src/shared/fanqie-title-data/0.json",
+        "src/shared/fanqie-title-data/1.json",
+        "src/shared/fanqie-title-data/2.json",
+        "src/shared/fanqie-title-data/3.json",
+        "src/shared/fanqie-title-data/4.json",
+        "src/shared/fanqie-title-data/5.json",
+        "src/shared/fanqie-title-data/6.json",
+        "src/shared/fanqie-title-data/7.json",
+        "src/shared/fanqie-title-data/8.json",
+        "src/shared/fanqie-title-data/9.json",
+        "src/shared/fanqie-title-data/10.json",
+        "src/shared/fanqie-title-data/font-library.json",
+        "src/shared/fanqie-title-data/font-search.json"
+      ],
+      "matches": [
+        "https://fanqienovel.com/*"
+      ]
+    },
+    {
+      "resources": [
         "assets/icons/phwgna-cat-128.png"
       ],
       "matches": [
@@ -64,8 +85,14 @@
   ],
   "content_scripts": [
     {
-      "matches": ["https://fanqienovel.com/*"],
-      "js": ["src/shared/fanqie-ui-dictionary.js", "src/content/fanqie-ui.js"],
+      "matches": [
+        "https://fanqienovel.com/*"
+      ],
+      "js": [
+        "src/shared/fanqie-ui-dictionary.js",
+        "src/shared/fanqie-title-translator.js",
+        "src/content/fanqie-ui.js"
+      ],
       "run_at": "document_idle"
     },
     {
