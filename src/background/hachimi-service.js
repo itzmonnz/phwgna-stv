@@ -8,7 +8,8 @@
   const cacheKey = 'stvai-hachimi40-cache-v1';
   const journalKey = 'stvai-hachimi40-dispatch-v1';
   function createService({ tabs, read, write, enabled = async () => true, pollMs = 500, timeout = 270000 }) {
-    let queue = Promise.resolve(), queued = 0, cache = null;
+    let queued = 0, cache = null, cacheLoading = null, draining = false;
+    const waiting = [];
     const pending = new Map();
     const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
     async function providerTab() {
@@ -59,7 +60,7 @@
         if (state?.result) {
           const result = state.result;
           if (!result.ok) { await write(journalKey, null); throw Error(result.reason || 'model_error'); }
-          if (result.requestId !== requestId || result.source !== source || result.model !== text.model || typeof result.text !== 'string' || !result.text.trim() || result.text.length > 4000) throw Error('response_mismatch');
+          if (result.requestId !== requestId || result.source !== source || result.model !== text.model || typeof result.text !== 'string' || !result.text.trim() || result.text.length > 10000) throw Error('response_mismatch');
           if (!text.validOutput(result.text)) { await write(journalKey, null); throw Error('invalid_translation'); }
           await write(journalKey, null); return result.text;
         }
@@ -68,11 +69,26 @@
       }
       throw Error('model_timeout');
     }
+    async function loadCache() {
+      if (!cacheLoading) cacheLoading = (async () => { const saved = await read(cacheKey); cache = saved?.version === 1 && saved.entries && typeof saved.entries === 'object' ? saved.entries : {}; })();
+      await cacheLoading;
+    }
+    function cached(source, kind, key) {
+      const hit = cache[key];
+      return hit?.source === source && hit.kind === kind && hit.model === text.model && text.validOutput(hit.text)
+        ? { ok: true, ...hit, text: kind === 'title' ? text.finish(hit.text, { prefix: '', wrapped: true }) : hit.text, provider: text.model, cacheHit: true } : null;
+    }
+    async function save(source, kind, key, output) {
+      const entry = { source, kind, model: text.model, text: output };
+      cache[key] = entry;
+      while (Object.keys(cache).length > 10000 || JSON.stringify(cache).length > 2000000) delete cache[Object.keys(cache)[0]];
+      await write(cacheKey, { version: 1, entries: cache });
+      return { ok: true, ...entry, provider: text.model, cacheHit: false };
+    }
     async function run(source, kind, key) {
       if (!(await enabled())) return { ok: false, reason: 'disabled' };
-      if (!cache) { const saved = await read(cacheKey); cache = saved?.version === 1 && saved.entries && typeof saved.entries === 'object' ? saved.entries : {}; }
-      const hit = cache[key];
-      if (hit?.source === source && hit.kind === kind && hit.model === text.model && text.validOutput(hit.text)) return { ok: true, ...hit, provider: text.model, cacheHit: true };
+      const hit = cached(source, kind, key);
+      if (hit) return hit;
       const prepared = text.prepare(source, kind);
       const parts = text.segments(kind === 'title' ? source : prepared.input, ['title', 'author', 'chapter'].includes(kind) ? 240 : 160);
       const results = [];
@@ -83,12 +99,54 @@
       }
       const output = text.finish(results.map((result, i) => result + (i + 1 < results.length && !parts[i].separator && !parts[i + 1].separator ? ' ' : '')).join(''), { prefix: prepared.prefix });
       if (!output.trim()) return { ok: false, reason: 'empty_translation' };
-      const entry = { source, kind, model: text.model, text: output };
-      cache[key] = entry;
-      // Bound both entry count and total bytes; old MyMemory cache is never read.
-      while (Object.keys(cache).length > 3000 || JSON.stringify(cache).length > 2000000) delete cache[Object.keys(cache)[0]];
-      await write(cacheKey, { version: 1, entries: cache });
-      return { ok: true, ...entry, provider: text.model, cacheHit: false };
+      return save(source, kind, key, output);
+    }
+    function groupInput(item) {
+      if (!['title', 'author', 'chapter', 'description'].includes(item.kind)) return null;
+      const prepared = text.prepare(item.source, item.kind);
+      const parts = text.segments(prepared.input, 240);
+      return parts.length === 1 && parts[0].source && !/[\r\n]/.test(prepared.input) ? prepared : null;
+    }
+    function failure(e) {
+      return { ok: false, reason: ['disabled', 'provider_busy', 'model_timeout', 'model_error', 'provider_edited', 'model_unavailable', 'auto_translate_enabled', 'provider_ui_changed', 'response_receipt_missing', 'response_mismatch', 'invalid_translation'].includes(e.message) ? e.message : 'provider_unreachable' };
+    }
+    async function drain() {
+      try {
+        while (waiting.length) {
+          const first = waiting.shift(), group = [first];
+          let size = groupInput(first)?.input.length || 1200;
+          // Coalesce only identical kinds, with short local ordinals. Long IDs
+          // were altered by the real model; never use model output as identity.
+          if (groupInput(first)) for (let i = 0; i < waiting.length && group.length < 8;) {
+            const item = waiting[i], prepared = groupInput(item);
+            if (item.kind === first.kind && prepared && size + prepared.input.length + 5 <= 1200) {
+              waiting.splice(i, 1); group.push(item); size += prepared.input.length + 5;
+            } else i++;
+          }
+          try {
+            if (!(await enabled())) throw Error('disabled');
+            if (group.length > 1) {
+              const input = group.map((item, i) => `${i + 1}. ${groupInput(item).input}`).join('\n');
+              const output = await dispatch(input, JSON.stringify(group.map(item => item.key)));
+              const lines = output.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+              const matches = lines.map(line => /^(\d+)\.\s*(.+)$/.exec(line));
+              if (lines.length === group.length && matches.every((match, i) => match && Number(match[1]) === i + 1 && text.validOutput(match[2]))) {
+                for (let i = 0; i < group.length; i++) {
+                  const item = group[i];
+                  item.resolve(await save(item.source, item.kind, item.key, text.finish(matches[i][2], groupInput(item))));
+                }
+                continue;
+              }
+              // Only a completed receipt permits falling back to individual
+              // items. Uncertain dispatches must never be blindly resent.
+            }
+            for (const item of group) {
+              try { item.resolve(await run(item.source, item.kind, item.key)); }
+              catch (e) { item.resolve(failure(e)); }
+            }
+          } catch (e) { for (const item of group) item.resolve(failure(e)); }
+        }
+      } finally { draining = false; }
     }
     function translate(input, kind = 'title') {
       const source = text.normalize(input, kind);
@@ -97,9 +155,18 @@
       if (pending.has(key)) return pending.get(key);
       if (queued >= 100) return Promise.resolve({ ok: false, reason: 'queue_full' });
       queued++;
-      const task = queue.then(() => run(source, kind, key)).catch(e => ({ ok: false, reason: ['disabled', 'provider_busy', 'model_timeout', 'model_error', 'provider_edited', 'model_unavailable', 'auto_translate_enabled', 'provider_ui_changed', 'response_receipt_missing', 'response_mismatch', 'invalid_translation'].includes(e.message) ? e.message : 'provider_unreachable' }))
+      const task = (async () => {
+        await loadCache();
+        if (!(await enabled())) return { ok: false, reason: 'disabled' };
+        const hit = cached(source, kind, key);
+        if (hit) return hit;
+        return new Promise(resolve => {
+          waiting.push({ source, kind, key, resolve });
+          if (!draining) { draining = true; setTimeout(() => { void drain(); }, 25); }
+        });
+      })().catch(failure)
         .finally(() => { queued--; pending.delete(key); });
-      pending.set(key, task); queue = task.then(() => undefined); return task;
+      pending.set(key, task); return task;
     }
     return { translate };
   }

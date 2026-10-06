@@ -43,7 +43,7 @@
   }
   function finish(text, prepared) {
     text = String(text || '').trim();
-    if (prepared.wrapped) text = text.replace(/^《([\s\S]*)》$|^“([\s\S]*)”$|^"([\s\S]*)"$|^「([\s\S]*)」$/, (_, a, b, c, d) => a ?? b ?? c ?? d).trim();
+    if (prepared.wrapped) text = text.replace(/^[《“"「]([\s\S]*)[》”"」]$/, '$1').trim();
     return prepared.prefix + text;
   }
   function validOutput(value) {

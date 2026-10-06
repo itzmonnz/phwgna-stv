@@ -97,11 +97,11 @@
     const index = await get('index.json');
     if (index.version !== 1 || !Number.isInteger(index.chunks) || index.chunks < 1 || index.chunks > 20)
       throw new Error('title_dictionary_invalid');
-    const [chunks, libraryFont, searchFont] = await Promise.all([
+    const [chunks, libraryFont, searchFont, homeFont] = await Promise.all([
       fontsOnly ? [] : Promise.all(Array.from({ length: index.chunks }, (_, i) => get(`${i}.json`))),
-      get('font-library.json'), get('font-search.json')
+      get('font-library.json'), get('font-search.json'), get('font-home.json')
     ]);
-    return createEngine(chunks.flat(), 512, { e26e946d8b2ccb7: libraryFont, c207f68a84deae3: searchFont });
+    return createEngine(chunks.flat(), 512, { e26e946d8b2ccb7: libraryFont, c207f68a84deae3: searchFont, dc027189e0ba4cd: homeFont });
   }
   return Object.freeze({ createEngine, loadEngine });
 });

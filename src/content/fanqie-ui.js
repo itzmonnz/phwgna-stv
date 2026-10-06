@@ -30,7 +30,9 @@
     '.book-item-text .tags', '.book-item .book-item-label',
     '.home-link-item-left-text-content', '.muye-home-top-rank-desc',
     '.muye-home-top-rank-list-item-info-cate', '.writer-list-current-first .level',
-    '.writer-list-current-first .desc', '.muye-home-news-content-more'
+    '.writer-list-current-first .desc', '.muye-home-news-content-more', '.muye-bottom-rank-content-header',
+    '.home-copyright-text-content', '.home-copyright-text-button', '.home-publish-list-button',
+    '.home-publish-list-item-text-second-time', '.update-list-item > .update-item:first-child'
   ].join(',');
   const excluded = 'script,style,textarea,[contenteditable],.muye-home-news-content-item,.muye-stack-book-list,.page-directory-content,.reader-content,[class*="comment"]';
   const translations = new Map(dictionary.entries.flatMap(entry => entry.source.endsWith('：')
@@ -44,6 +46,14 @@
     const source = node.data.trim();
     const parent = node.parentElement;
     if (parent?.closest('.writer-list-current-first .desc') && source.startsWith('代表作')) return source.replace('代表作', 'Tác phẩm tiêu biểu: ');
+    if (parent?.closest('.muye-bottom-rank-content-header')) {
+      if (source === '阅读榜') return 'Đọc nhiều';
+      if (source === '新书榜') return 'Truyện mới';
+      const rank = /^(.*)·(阅读榜|新书榜)$/.exec(source);
+      if (rank && translations.has(rank[1])) return `${translations.get(rank[1])} · ${rank[2] === '阅读榜' ? 'Đọc nhiều' : 'Truyện mới'}`;
+      if (source.startsWith('仅展示原创作品，统计时间截止至')) return source.replace('仅展示原创作品，统计时间截止至', 'Chỉ gồm truyện gốc · Số liệu đến ');
+    }
+    if (parent?.closest('.home-publish-list-item-text-second-time') && source.startsWith('签约日期')) return source.replace('签约日期', 'Ngày ký hợp đồng');
     // Short navigation labels fit the original desktop and mobile menu slots.
     if (parent?.closest('.muye-header .nav-item,.muye-mobile-nav .nav-item-text')) {
       const short = { '原创榜': 'Xếp hạng', '作家专区': 'Tác giả', '版权专区': 'Bản quyền' };
@@ -91,13 +101,13 @@
     };
   }
 
-  const titleRegions = '.muye-bottom-choiceness-item .book-text .title, .muye-bottom-rank-content h3.title, .muye-home-top-rank-list-item-info-name, .update-item.book-name a[href^="/page/"], .book-item-text .title, a.book-item-title[href^="/page/"], .muye-stack-book-list .book-name, .page-header-info .info-name h1';
-  const metadataRegions = '.author-name-text, .author-desc, .book-item-author, .book-text .author, .book-item-text .author, .muye-home-top-rank-list-item-info-author, a.chapter-item-title[href^="/reader/"], a.update-item-chapter[href^="/reader/"], .page-abstract-content p, .muye-reader-title, .muye-reader-nav-title';
+  const titleRegions = '.muye-bottom-choiceness-item .book-text .title, .muye-bottom-rank-content h3.title, .muye-home-top-rank-list-item-info-name, .update-item.book-name a[href^="/page/"], .book-item-text .title, a.book-item-title[href^="/page/"], .muye-stack-book-list .book-name, .page-header-info .info-name h1, .home-publish-list-item-text-first-book';
+  const metadataRegions = '.author-name-text, .author-desc, .book-item-author, .book-text .author, .book-item-text .author, .muye-home-top-rank-list-item-info-author, a.chapter-item-title[href^="/reader/"], a.update-item-chapter[href^="/reader/"], .page-abstract-content p, .muye-reader-title, .muye-reader-nav-title, .muye-home-news-content-item, .writer-list-current-first .bottom .title, .writer-list-current-first .desc, .muye-bottom-rank-content .book-text .desc, .update-item-author, .home-publish-list-item-text-first-author, .home-publish-list-item-text-second-from';
   function metadataKind(region) {
     if (region.matches('.page-abstract-content p')) return 'introduction';
-    if (region.matches('.author-desc')) return 'description';
+    if (region.matches('.author-desc, .muye-home-news-content-item, .writer-list-current-first .desc, .muye-bottom-rank-content .book-text .desc')) return 'description';
     if (region.matches('a.chapter-item-title, a.update-item-chapter, .muye-reader-title')) return 'chapter';
-    if (region.matches('.author-name-text, .book-item-author, .book-text .author, .book-item-text .author, .muye-home-top-rank-list-item-info-author')) return 'author';
+    if (region.matches('.author-name-text, .book-item-author, .book-text .author, .book-item-text .author, .muye-home-top-rank-list-item-info-author, .writer-list-current-first .bottom .title, .update-item-author, .home-publish-list-item-text-first-author')) return 'author';
     return 'title';
   }
   function visibleTitle(document, region) {
@@ -134,12 +144,18 @@
   }
   function createTranslator(document, titleEngine, introductionEngine) {
     const originals = new Map();
-    let layoutStyle;
+    let layoutStyle, copyrightLabel, nextApply;
+    let inflight = 0;
     let enabled = true;
     let generation = 0;
     const pending = new WeakMap();
+    let remoteTranslated = new WeakSet();
     function remember(node, source, translated, attribute) {
-      originals.set(node, { source, translated, attribute });
+      const previous = originals.get(node);
+      const current = attribute ? node.getAttribute(attribute) : node.data;
+      const original = previous && previous.attribute === attribute && current === previous.translated
+        && (attribute || /[\u3400-\u9fff]/u.test(previous.translated)) ? previous.source : source;
+      originals.set(node, { source: original, translated, attribute });
     }
     function apply() {
       if (!enabled || !allowedPath(document.location.pathname)) return 0;
@@ -177,14 +193,47 @@
           .page-abstract-content{height:auto!important;max-height:none!important;-webkit-line-clamp:unset!important;-webkit-box-orient:initial!important;display:block!important;overflow:visible!important;margin-top:24px!important;margin-bottom:32px!important}
           .page-abstract-content p{font-family:Arial,sans-serif;font-size:16px;line-height:1.8;white-space:pre-line;overflow-wrap:anywhere}
           .author-name-text,.author-desc,.muye-reader-title{font-family:Arial,sans-serif;line-height:1.5;overflow-wrap:anywhere}
+          .muye-bottom-choiceness-item .book-text .author{max-width:100%;height:auto!important;min-height:20px;white-space:normal!important;overflow:hidden!important;overflow-wrap:anywhere;line-height:20px!important;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+          .muye-bottom-choiceness-item .book-text .title{overflow:hidden!important;overflow-wrap:anywhere;line-height:24px!important}
+          .muye-bottom-rank-category .muye-horizon-scroll-outer{overflow-x:auto!important;overflow-y:hidden!important;scrollbar-width:thin}
+          .muye-bottom-rank-category .muye-horizon-scroll-wrapper{display:flex!important;width:max-content!important;gap:10px;transform:none!important;padding:0 4px}
+          .muye-bottom-rank-category .muye-category-item{flex:0 0 auto!important;width:auto!important;max-width:none!important;margin:0!important;padding:0 14px!important;box-sizing:border-box;white-space:nowrap;line-height:36px!important;height:36px!important;font-family:Arial,sans-serif;font-size:13px}
+          .muye-bottom-rank-content-header{height:auto!important;min-height:62px;line-height:1.5}
+          .muye-bottom-rank-content-header a span{font-family:Arial,sans-serif;white-space:normal;overflow-wrap:anywhere}
+          .muye-bottom-rank-content .rank-text-left{min-width:0;overflow:hidden}
+          .muye-bottom-rank-content .rank-text{min-width:0}
+          .muye-bottom-rank-content .rank-text h3.title{min-width:0;max-width:100%;overflow:hidden!important;text-overflow:ellipsis;white-space:nowrap}
+          .muye-bottom-rank-content .rank-text-change{flex-shrink:0;margin-left:8px}
+          .muye-bottom-rank-content .author{overflow:hidden!important;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+          .writer-list-current-first .bottom{height:auto!important;min-height:120px;box-sizing:border-box;padding-bottom:12px}
+          .writer-list-current-first .wrapper-item{height:auto!important;min-height:277px;vertical-align:top}
+          .writer-list-current-first .wrapper{height:auto!important;min-height:277px}
+          .writer-list-current-first .bottom .title{height:auto!important;min-height:24px;max-width:100%;overflow:hidden;white-space:normal;overflow-wrap:anywhere;line-height:22px;font-family:Arial,sans-serif}
+          .writer-list-current-first .desc{height:auto!important;max-width:100%;white-space:normal!important;overflow-wrap:anywhere;font-family:Arial,sans-serif;font-size:12px;line-height:18px}
+          .zone-footer-ctn{flex-wrap:wrap;gap:24px;align-items:center}
+          .zone-footer-ctn-left{flex:1 1 460px;min-width:0;width:auto!important;overflow-wrap:anywhere}
+          .zone-footer-ctn-right{display:flex!important;gap:24px;flex-wrap:wrap;width:auto!important;max-width:560px;flex:1 1 424px;margin:0!important}
+          .zone-footer-ctn-right-wechat,.zone-footer-ctn-right-tiktok{flex:1 1 200px!important;width:200px!important;max-width:260px;margin:0!important;text-align:center}
+          .zone-footer-ctn-right-wechat-desc,.zone-footer-ctn-right-tiktok-desc{position:static!important;left:auto!important;right:auto!important;width:100%!important;height:auto!important;white-space:normal!important;overflow-wrap:anywhere;line-height:18px!important;margin-top:10px}
+          .home-copyright-text-title:has([data-stvai-copyright])>svg{display:none}
+          .home-copyright-text-title [data-stvai-copyright]{font-family:Arial,sans-serif;font-size:28px;line-height:1.4;color:#fff}
+          .home-copyright-text-content{height:auto!important;white-space:normal;line-height:1.6;max-width:900px;margin-left:auto;margin-right:auto}
           @media(max-width:1100px){.muye-header .muye-header-content{padding:0 14px;gap:12px}.muye-header .muye-header-right{gap:10px;flex-wrap:wrap}.muye-header .muye-header-search{flex-basis:140px}.muye-header{height:auto;min-height:64px}.muye-header .muye-header-content{height:auto;min-height:64px;padding-top:10px;padding-bottom:10px}}
         `;
         (document.head || document.documentElement).append(layoutStyle);
+      }
+      const copyrightTitle = document.querySelector('.home-copyright-text-title');
+      if (copyrightTitle && !copyrightLabel?.isConnected) {
+        copyrightLabel = document.createElement('span'); copyrightLabel.dataset.stvaiCopyright = '';
+        copyrightLabel.textContent = 'Chuyển thể tác phẩm'; copyrightTitle.append(copyrightLabel);
       }
       for (const node of originals.keys()) if (!node.isConnected) originals.delete(node);
       let count = 0;
       for (const region of document.querySelectorAll(regions)) {
         if (region.closest(excluded)) continue;
+        // Send this mixed label/work-list in its original Chinese, rather than
+        // feeding Vietnamese diacritics through Chinese-only segmentation.
+        if (titleEngine?.remote && region.matches('.writer-list-current-first .desc')) continue;
         const walker = document.createTreeWalker(region, 4);
         let node;
         while ((node = walker.nextNode())) {
@@ -206,30 +255,44 @@
         input.setAttribute('placeholder', translated);
         count += 1;
       }
-      if (titleEngine) for (const region of document.querySelectorAll(titleEngine.remote ? `${titleRegions},${metadataRegions}` : titleRegions)) {
+      const candidates = Array.from(document.querySelectorAll(titleEngine?.remote ? `${titleRegions},${metadataRegions}` : titleRegions));
+      const visibility = new Map();
+      // Visible metadata first; then pretranslate the loaded chapter directory
+      // in bounded waves, without opening every chapter or flooding the worker.
+      if (titleEngine?.remote) {
+        for (const region of candidates) visibility.set(region, visibleTitle(document, region));
+        candidates.sort((a, b) => Number(visibility.get(b)) - Number(visibility.get(a)));
+      }
+      if (titleEngine) for (const region of candidates) {
         if (region.closest('script,style,textarea,[contenteditable],[class*="comment"],.reader-content')) continue;
         const walker = document.createTreeWalker(region, 4), nodes = [];
         let node;
         while ((node = walker.nextNode())) nodes.push(node);
-        if (!nodes.length || nodes.every(n => originals.get(n)?.translated === n.data)) continue;
+        if (!nodes.length || nodes.every(n => originals.get(n)?.translated === n.data) && (!titleEngine.remote || remoteTranslated.has(region))) continue;
         const source = nodes.map(n => n.data).join('');
         if (titleEngine.remote) {
-          if (!visibleTitle(document, region)) continue;
+          if (!visibility.get(region) && !region.matches('a.chapter-item-title[href^="/reader/"]')) continue;
           const old = pending.get(region);
           if (old?.source === source && old.generation === generation && old.path === document.location.pathname
             && old.nodes.length === nodes.length && old.nodes.every((n, i) => n === nodes[i])) continue;
+          if (inflight >= 24) continue;
           const request = { source, generation, path: document.location.pathname, values: nodes.map(n => n.data), nodes };
           pending.set(region, request);
+          inflight++;
           Promise.resolve(titleEngine.convert(source, titleFont(document, region), metadataKind(region))).then(result => {
             if (!result || pending.get(region) !== request || !enabled || generation !== request.generation
               || document.location.pathname !== request.path || !allowedPath(document.location.pathname)
               || nodes.some((n, i) => !n.isConnected || !region.contains(n) || n.data !== request.values[i])
               || region.textContent !== source) return;
             nodes.forEach((n, i) => { const translated = i ? '' : result.text; remember(n, n.data, translated); n.data = translated; });
-            const tooltip = `${result.source}\nHachimi 40 · ngocdang83 · CC BY 4.0`;
+            remoteTranslated.add(region);
+            const tooltip = `${result.text}\n${result.source}\nHachimi 40 · ngocdang83 · CC BY 4.0`;
             remember(region, region.getAttribute('title'), tooltip, 'title');
             region.setAttribute('title', tooltip);
-          }).catch(() => { /* Failure leaves the original title, never local cache. */ });
+          }).catch(() => { /* Failure leaves the original title, never local cache. */ }).finally(() => {
+            if (generation === request.generation) inflight--;
+            if (enabled && generation === request.generation && !nextApply) nextApply = document.defaultView.setTimeout(() => { nextApply = null; apply(); }, 32);
+          });
           continue;
         }
         const result = titleEngine.convert(source, titleFont(document, region));
@@ -271,6 +334,10 @@
     }
     function restore() {
       generation++;
+      inflight = 0;
+      remoteTranslated = new WeakSet();
+      document.defaultView.clearTimeout(nextApply); nextApply = null;
+      copyrightLabel?.remove(); copyrightLabel = null;
       layoutStyle?.remove(); layoutStyle = null;
       for (const [node, entry] of originals) {
         // React/site updates own the latest value: never restore stale text.
@@ -477,12 +544,12 @@
       if (toolbar.root.dataset.collapsed !== String(next.collapsed)) toolbar.menuToggle.click();
       if (titleChanged) {
         loadGeneration++; loaded = false; loading = false; retryAfter = 0; translator.setTitleEngine(null);
-        status.textContent = 'Hachimi 40 · chỉ dịch mục đang hiện';
+        status.textContent = 'Hachimi 40 · dịch nhóm và danh mục chương';
         translator.setEnabled(language === 'vi'); updateButton(); loadTitles();
       }
     });
     translator.setEnabled(language === 'vi'); updateButton(); void persist();
-    status.textContent = 'Hachimi 40 · chỉ dịch mục đang hiện';
+    status.textContent = 'Hachimi 40 · dịch nhóm và danh mục chương';
     loadTitles();
     let timer;
     const observer = new document.defaultView.MutationObserver(() => {

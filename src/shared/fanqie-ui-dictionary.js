@@ -93,7 +93,11 @@
     ['番茄作家福利区', 'Chính sách hỗ trợ tác giả Fanqie'],
     ['创建作品、查看作品数据及收益', 'Tạo tác phẩm, xem số liệu và thu nhập'],
     ['优秀版权作品展示', 'Giới thiệu tác phẩm bản quyền nổi bật'],
-    ['殿堂作家', 'Tác giả danh tiếng'], ['金番作家', 'Tác giả Kim Phiên']
+    ['殿堂作家', 'Tác giả danh tiếng'], ['金番作家', 'Tác giả Kim Phiên'],
+    ['热门版权改编动漫、影视尽在番茄小说', 'Anime và phim chuyển thể nổi bật đều có tại Fanqie'],
+    ['来番茄小说，追精品IP原著小说', 'Đọc nguyên tác của các tác phẩm nổi bật tại Fanqie'],
+    ['查看全部', 'Xem tất cả'], ['双男主', 'Hai nam chính'], ['双女主', 'Hai nữ chính'],
+    ['无CP', 'Không ghép đôi']
   ].map(([source, vietnamese]) => Object.freeze({ source, vietnamese }));
   // Shared by the content script and its narrow language-storage broker.
   const allowedPath = path => /^\/$|^\/(library|rank|welfare)\/?$|^\/search\/[^/]+\/?$|^\/(page|reader)\/\d+\/?$|^\/main\/writer\/login\/?$|^\/writer\/zone(?:\/[a-zA-Z0-9_-]+)*\/?$/.test(path);

@@ -63,7 +63,7 @@
       const old = receipts.get(id);
       if (message.type === 'STVAI_HACHIMI_STATUS') return old ? { ok: true, state: old.state, result: old.result } : { ok: true, state: 'missing' };
       if (message.type !== 'STVAI_HACHIMI_TRANSLATE') return error('invalid_request');
-      if (typeof message.source !== 'string' || !message.source.trim() || message.source.length > 244 || message.model !== 'hachimi40') return error('invalid_source');
+      if (typeof message.source !== 'string' || !message.source.trim() || message.source.length > 1240 || message.model !== 'hachimi40') return error('invalid_source');
       if (old) return old.source === message.source ? { ok: true, state: old.state, result: old.result } : error('request_mismatch');
       if (active || busy()) return error('provider_busy');
       const entry = { requestId: id, source: message.source, state: 'preparing' };

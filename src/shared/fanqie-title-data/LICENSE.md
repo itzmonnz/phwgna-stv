@@ -14,9 +14,9 @@ Changes: retain Chinese keys and the first short Vietnamese definition; remove p
 
 ## Display-font character maps
 
-font-library.json and font-search.json are character correspondences derived by
-matching the rendered Fanqie fonts e26e946d8b2ccb7 / c207f68a84deae3 against Adobe
-Source Han Sans SC Normal 2.002R. Both maps match 362 glyphs. No font binaries are
+font-library.json, font-search.json and font-home.json are character correspondences derived by
+matching the rendered Fanqie fonts e26e946d8b2ccb7 / c207f68a84deae3 / dc027189e0ba4cd against Adobe
+Source Han Sans SC Normal 2.002R. Each map matches 362 glyphs. No font binaries are
 redistributed. Only use a map with its exact font identifier; unknown fonts are
 left unchanged. Reproduction tool: tools/build-fanqie-font-map.py.
 

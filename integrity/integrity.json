@@ -63,7 +63,7 @@
     },
     {
       "path": "manifest.json",
-      "sha256": "94d2bfbd6cea2feec651908479b084025266d01c7f3371a03d7ea56283fab2e0"
+      "sha256": "6b4363119582f7419e3a6a948305bf8c1abdcc4c48167415d304a48525f6a6f6"
     },
     {
       "path": "onboarding/onboarding.css",
@@ -135,7 +135,7 @@
     },
     {
       "path": "src/background/hachimi-service.js",
-      "sha256": "fba91b0e3a349ae235424f546cf1cf26d5fa2290550d857d35f1771ad3648cf5"
+      "sha256": "d6c774abcb2baedf5a891c5c6d5ef353ea968ce78091b6e12b5b19e0bfcb2728"
     },
     {
       "path": "src/background/message-router.js",
@@ -167,7 +167,7 @@
     },
     {
       "path": "src/content/fanqie-ui.js",
-      "sha256": "e0344112e5ab01d9a4c74b7b2577cc9cf9ec806981fe8b89cc5980d6add21ae3"
+      "sha256": "01dfbbedc295ce181f23addc447895615998744d93ace7f9772647aea6ec1adf"
     },
     {
       "path": "src/content/gemini-account-probe.js",
@@ -183,7 +183,7 @@
     },
     {
       "path": "src/content/hachimi-provider.js",
-      "sha256": "a39de03b5d0e4efb17734960d42e064011a3d48ad831ea8c17613664aa653f94"
+      "sha256": "583cd3343c2a6558f6c180b369d1e21209267eb7281202b05c346cef763aa619"
     },
     {
       "path": "src/content/provider-common.js",
@@ -343,7 +343,11 @@
     },
     {
       "path": "src/shared/fanqie-title-data/LICENSE.md",
-      "sha256": "ae5f251e17f5af8bbcf12751c1d386ad7632bb8ef8a148708c3fdd28266322e3"
+      "sha256": "ea4ab8d253b85fd13f83b6e55789692064cb90fe858aad90ce6ea7a40d4ab44a"
+    },
+    {
+      "path": "src/shared/fanqie-title-data/font-home.json",
+      "sha256": "8c2f226f06d1c389865262f0738b0bb7e47cc5ee61ad70a3714f8ee88a822694"
     },
     {
       "path": "src/shared/fanqie-title-data/font-library.json",
@@ -359,15 +363,15 @@
     },
     {
       "path": "src/shared/fanqie-title-translator.js",
-      "sha256": "92a83b2f6c32067e5ddf87666a8a2c4584905d0f089dd0102f329382b2d6769a"
+      "sha256": "08ea51cb32d82361edf6021d9eb0c9c928c0e66a23c90f5e0e2aba255088c886"
     },
     {
       "path": "src/shared/fanqie-ui-dictionary.js",
-      "sha256": "9e4336024b137a4ad44cdb743b08b5ecef6f7202002416b30dacfed90c41fa7a"
+      "sha256": "de436173efdbe32a8db95d5d436452821635a79e18251bab5f17379057ad791d"
     },
     {
       "path": "src/shared/hachimi-text.js",
-      "sha256": "d9f5c13e5d87daedae76bded543ea80cf496aade3e82c5c8492ab3e691a31c2b"
+      "sha256": "06f37fd8035a3281f049e3357c90c15281aec723c1dd998b9c00a4c211415b2f"
     },
     {
       "path": "src/shared/history-sync.js",
@@ -451,7 +455,7 @@
     }
   ],
   "product": "Phwgna Stv",
-  "sourceCommit": "c8ad683d856ebf91fc48d57ec0ddc7835678a193",
+  "sourceCommit": "5b7437a568787a8334eb45f17f6e780af4e38e8c",
   "officialRepository": "https://github.com/itzmonnz/phwgna-stv",
   "officialReleaseUrl": "https://github.com/itzmonnz/phwgna-stv/releases/tag/v0.2.8",
   "publicKeyFingerprint": "85ac74c199d0a6028bce843d6f68d7632317912b460aad1a7431193767ec9871"
