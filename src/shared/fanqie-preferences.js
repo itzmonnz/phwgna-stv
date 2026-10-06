@@ -11,7 +11,10 @@
       language: value.language === 'zh' ? 'zh' : 'vi',
       titleProvider: value.titleProvider === 'local' ? 'local' : 'mymemory',
       uiScale: scales.includes(Number(value.uiScale)) ? Number(value.uiScale) : 1,
-      collapsed: value.collapsed !== false
+      collapsed: value.collapsed !== false,
+      position: typeof value.position?.x === 'number' && typeof value.position?.y === 'number'
+        && Number.isFinite(value.position.x) && Number.isFinite(value.position.y)
+        ? { x: Math.max(0, Math.min(1, value.position.x)), y: Math.max(0, Math.min(1, value.position.y)) } : null
     };
   }
   function patch(previous, update) {

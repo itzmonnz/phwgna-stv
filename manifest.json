@@ -95,7 +95,10 @@
         "src/shared/fanqie-title-translator.js",
         "src/shared/fanqie-preferences.js",
         "src/shared/branding.js",
+        "src/vendor/gsap.min.js",
+        "src/content/stv-motion.js",
         "src/content/stv-ui.js",
+        "src/content/stv-name-manager.js",
         "src/content/fanqie-ui.js"
       ],
       "run_at": "document_idle"

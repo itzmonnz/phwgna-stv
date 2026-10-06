@@ -247,6 +247,12 @@
     return {
       clamp: refresh,
       refresh,
+      setPosition(value) {
+        if (disposed) return null;
+        position = normalized(value);
+        root.dataset.savedPosition = String(Boolean(position));
+        return refresh();
+      },
       anchorTo(anchor, icon) {
         if (disposed) return null;
         const measured = measure();

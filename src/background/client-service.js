@@ -87,7 +87,7 @@
         if (tabs?.query && tabs?.sendMessage) {
           try {
             const open = await tabs.query({ url: 'https://fanqienovel.com/*' });
-            await Promise.allSettled(open.map(tab => tabs.sendMessage(tab.id, {
+            await Promise.allSettled(open.filter(tab => tab.id !== sender?.tab?.id).map(tab => tabs.sendMessage(tab.id, {
               type: 'STVAI_FANQIE_UI_CHANGED', preferences
             })));
           } catch (_) { /* A closed tab must not fail a saved preference. */ }

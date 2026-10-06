@@ -1,11 +1,11 @@
 (function attachFanqieUI(root, factory) {
   const api = factory(root.STVAIFanqieDictionary || (typeof require === 'function'
     ? require('../shared/fanqie-ui-dictionary.js') : null), root.STVAIFanqieTitles || (typeof require === 'function'
-    ? require('../shared/fanqie-title-translator.js') : null), root.STVAIUI || (typeof require === 'function' ? require('./stv-ui.js') : null), root.STVAIFanqiePreferences || (typeof require === 'function' ? require('../shared/fanqie-preferences.js') : null));
+    ? require('../shared/fanqie-title-translator.js') : null), root.STVAIUI || (typeof require === 'function' ? require('./stv-ui.js') : null), root.STVAIFanqiePreferences || (typeof require === 'function' ? require('../shared/fanqie-preferences.js') : null), root.STVAINameManager || (typeof require === 'function' ? require('./stv-name-manager.js') : null));
   if (typeof module === 'object' && module.exports) module.exports = api;
   else if (root.document && root.location.hostname === 'fanqienovel.com'
     && root.location.protocol === 'https:') api.start(root.document, api.createRuntimeStorage(root.chrome?.runtime));
-})(typeof globalThis !== 'undefined' ? globalThis : this, function (dictionary, titles, ui, preferences) {
+})(typeof globalThis !== 'undefined' ? globalThis : this, function (dictionary, titles, ui, preferences, panels) {
   'use strict';
   const storageKey = 'stvai-fanqie-ui-v1';
   const regions = [
@@ -261,8 +261,10 @@
       .stvai-fanqie-controls label { display: grid; gap: 5px; font-size: 12px; }
       .stvai-fanqie-scale { width: 100%; padding: 8px; border-radius: 8px; color: var(--stvai-text); background: var(--stvai-surface); border: 1px solid var(--stvai-border); }
     `;
+    let positionController;
     const toolbar = ui.createToolbar(document, {}, {
       initialCollapsed: preference.collapsed,
+      onLayoutChange(anchor, icon) { positionController?.anchorTo(anchor, icon); },
       onCollapsedChange(collapsed) { if (preference.collapsed === collapsed) return; preference.collapsed = collapsed; void persist({ collapsed }); }
     });
     toolbar.root.dataset.site = 'fanqie';
@@ -321,7 +323,7 @@
       await persist({ titleProvider }); loadTitles();
     });
     const scaleLabel = document.createElement('label'); scaleLabel.textContent = 'Kích thước menu';
-    const scale = document.createElement('select'); scale.className = 'stvai-fanqie-scale';
+    const scale = document.createElement('select'); scale.className = 'stvai-fanqie-scale stvai-provider-trigger';
     scale.dataset.fanqieAction = 'scale';
     for (const value of preferences.scales) {
       const option = document.createElement('option'); option.value = String(value); option.textContent = `${value * 100}%`;
@@ -331,6 +333,7 @@
     scale.addEventListener('change', () => {
       preference.uiScale = ui.normalizeUiScale(scale.value);
       toolbar.root.style.setProperty('--stvai-ui-scale', String(preference.uiScale));
+      positionController?.setUiScale(preference.uiScale);
       void persist({ uiScale: preference.uiScale });
     });
     controls.append(context, button, providerButton, scaleLabel);
@@ -342,11 +345,26 @@
       } catch (_) { status.textContent = 'Chưa mở được cài đặt Fanqie; hãy thử lại.'; }
     });
     shadow.append(stylesheet, layout, toolbar.root); document.body.append(host);
+    positionController = panels.attachDraggable(toolbar.root, toolbar.dragHandles, {
+      // Avoid the website's localStorage: Fanqie position belongs to extension preferences.
+      storage: {}, margin: 0, initialPosition: preference.position,
+      getScale: () => preference.uiScale,
+      isAnimating: () => toolbar.root.dataset.stvaiToolbarAnimating === 'true',
+      onInteraction: () => toolbar.finishAnimation(),
+      interactiveHandles: [toolbar.miniToggle],
+      onPositionChange(position) { preference.position = position; void persist({ position }); }
+    });
+    const onStylesLoaded = () => positionController.refresh();
+    stylesheet.addEventListener('load', onStylesLoaded);
     const unsubscribe = storage?.subscribe?.(next => {
       if (stopped) return;
       const titleChanged = titleProvider !== next.titleProvider || language !== next.language;
+      const positionChanged = JSON.stringify(preference.position) !== JSON.stringify(next.position);
+      const scaleChanged = preference.uiScale !== next.uiScale;
       preference = next; language = next.language; titleProvider = next.titleProvider;
       toolbar.root.style.setProperty('--stvai-ui-scale', String(next.uiScale)); scale.value = String(next.uiScale);
+      if (scaleChanged) positionController.setUiScale(next.uiScale);
+      if (positionChanged) positionController.setPosition(next.position);
       // Use the shell's own state transition for ARIA and collapse bookkeeping.
       if (toolbar.root.dataset.collapsed !== String(next.collapsed)) toolbar.menuToggle.click();
       if (titleChanged) {
@@ -371,7 +389,7 @@
     const onScroll = () => { loadTitles(); translator.apply(); };
     document.defaultView.addEventListener('scroll', onScroll, { passive: true, capture: true });
     document.defaultView.addEventListener('resize', onScroll);
-    return { translator, destroy() { stopped = true; unsubscribe?.(); loadGeneration++; observer.disconnect(); document.defaultView.removeEventListener('scroll', onScroll, true); document.defaultView.removeEventListener('resize', onScroll); document.defaultView.clearTimeout(timer); translator.restore(); host.remove(); } };
+    return { translator, destroy() { stopped = true; unsubscribe?.(); positionController.destroy(); toolbar.finishAnimation(); stylesheet.removeEventListener('load', onStylesLoaded); loadGeneration++; observer.disconnect(); document.defaultView.removeEventListener('scroll', onScroll, true); document.defaultView.removeEventListener('resize', onScroll); document.defaultView.clearTimeout(timer); translator.restore(); host.remove(); } };
   }
   return Object.freeze({ createTranslator, createRuntimeStorage, start, storageKey, allowedPath });
 });
