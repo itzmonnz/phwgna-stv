@@ -544,7 +544,8 @@
       storage,
       tabs,
       storageCall,
-      isStvUrl
+      isStvUrl,
+      runtime
     });
     const isStvSender = clientService.isStvSender;
     const migratePersistedSettings = clientService.migrateSettings;
@@ -2140,6 +2141,10 @@
         case "STVAI_PROVIDER_SETUP_PROGRESS":
           return providerSetupProgress(message, sender);
         case "STVAI_OPEN_OPTIONS": {
+          if (message.site === 'fanqie' && runtime?.getURL && tabs?.create) {
+            await tabs.create({ url: runtime.getURL('options/options.html') + '#fanqie', active: true });
+            return { ok: true };
+          }
           if (typeof runtime?.openOptionsPage === "function") {
             await runtime.openOptionsPage();
             return { ok: true };

@@ -1,11 +1,11 @@
 (function attachFanqieUI(root, factory) {
   const api = factory(root.STVAIFanqieDictionary || (typeof require === 'function'
     ? require('../shared/fanqie-ui-dictionary.js') : null), root.STVAIFanqieTitles || (typeof require === 'function'
-    ? require('../shared/fanqie-title-translator.js') : null));
+    ? require('../shared/fanqie-title-translator.js') : null), root.STVAIUI || (typeof require === 'function' ? require('./stv-ui.js') : null), root.STVAIFanqiePreferences || (typeof require === 'function' ? require('../shared/fanqie-preferences.js') : null));
   if (typeof module === 'object' && module.exports) module.exports = api;
   else if (root.document && root.location.hostname === 'fanqienovel.com'
     && root.location.protocol === 'https:') api.start(root.document, api.createRuntimeStorage(root.chrome?.runtime));
-})(typeof globalThis !== 'undefined' ? globalThis : this, function (dictionary, titles) {
+})(typeof globalThis !== 'undefined' ? globalThis : this, function (dictionary, titles, ui, preferences) {
   'use strict';
   const storageKey = 'stvai-fanqie-ui-v1';
   const regions = [
@@ -52,13 +52,21 @@
 
   function createRuntimeStorage(runtime) {
     return {
+      subscribe(callback) {
+        const listener = message => {
+          if (message?.type === 'STVAI_FANQIE_UI_CHANGED') callback(preferences.normalize(message.preferences));
+        };
+        runtime?.onMessage?.addListener(listener);
+        return () => runtime?.onMessage?.removeListener(listener);
+      },
+      openSettings: () => runtime.sendMessage({ type: 'STVAI_OPEN_OPTIONS', site: 'fanqie' }),
       async get() {
         const result = await runtime.sendMessage({ type: 'STVAI_FANQIE_UI_GET' });
         if (!result?.ok) throw new Error('fanqie_storage_unavailable');
-        return { [storageKey]: { language: result.language, titleProvider: result.titleProvider } };
+        return { [storageKey]: preferences.normalize(result) };
       },
       async set(values) {
-        const result = await runtime.sendMessage({ type: 'STVAI_FANQIE_UI_SET', language: values[storageKey].language, titleProvider: values[storageKey].titleProvider });
+        const result = await runtime.sendMessage({ type: 'STVAI_FANQIE_UI_SET', ...values[storageKey] });
         if (!result?.ok) throw new Error('fanqie_storage_unavailable');
       },
       translateTitle(source) { return runtime.sendMessage({ type: 'STVAI_FANQIE_TITLE_TRANSLATE', source }); }
@@ -229,44 +237,73 @@
       })
         .finally(() => { if (currentGeneration === loadGeneration) loading = false; });
     };
-    let language = 'vi';
-    let titleProvider = 'local';
+    let preference = preferences.normalize({ titleProvider: 'local' });
+    let language = preference.language;
+    let titleProvider = preference.titleProvider;
     try {
       const values = await storage?.get(storageKey);
-      if (values?.[storageKey]?.language === 'zh') language = 'zh';
-      if (values?.[storageKey]?.titleProvider === 'mymemory') titleProvider = 'mymemory';
+      preference = preferences.normalize(values?.[storageKey] || { titleProvider: 'local' });
+      language = preference.language; titleProvider = preference.titleProvider;
     } catch (_) { /* Bundled dictionary remains usable without storage. */ }
     const host = document.createElement('div');
     host.id = 'stvai-fanqie-ui';
-    host.style.cssText = 'position:fixed;bottom:12px;left:12px;z-index:1000';
+    host.style.cssText = 'position:relative;z-index:2147483200';
     const shadow = host.attachShadow({ mode: 'open' });
+    const stylesheet = document.createElement('link');
+    stylesheet.rel = 'stylesheet';
+    stylesheet.href = document.defaultView.chrome?.runtime?.getURL?.('src/content/stv.css') || 'src/content/stv.css';
+    const layout = document.createElement('style');
+    layout.textContent = `
+      :host { all: initial; }
+      .stvai-toolbar { left: 12px; top: 50%; max-width: calc(100vw / var(--stvai-ui-scale, 1) - 24px); max-height: calc(100dvh / var(--stvai-ui-scale, 1) - 24px); }
+      .stvai-fanqie-context { margin: 0; color: var(--stvai-text-muted); font-size: 12px; }
+      .stvai-fanqie-controls { display: grid; gap: 8px; }
+      .stvai-fanqie-controls label { display: grid; gap: 5px; font-size: 12px; }
+      .stvai-fanqie-scale { width: 100%; padding: 8px; border-radius: 8px; color: var(--stvai-text); background: var(--stvai-surface); border: 1px solid var(--stvai-border); }
+    `;
+    const toolbar = ui.createToolbar(document, {}, {
+      initialCollapsed: preference.collapsed,
+      onCollapsedChange(collapsed) { if (preference.collapsed === collapsed) return; preference.collapsed = collapsed; void persist({ collapsed }); }
+    });
+    toolbar.root.dataset.site = 'fanqie';
+    toolbar.root.setAttribute('aria-label', 'Phwgna Stv · Fanqie');
+    toolbar.settings.setAttribute('aria-label', 'Mở cài đặt Fanqie');
+    toolbar.root.style.setProperty('--stvai-ui-scale', String(preference.uiScale));
+    // Reuse the STV shell, but do not expose unimplemented chapter/TTS actions.
+    toolbar.root.querySelector('.stvai-actions').remove();
+    for (const node of [toolbar.names, toolbar.clearCache, toolbar.cacheConfirmation, toolbar.progress,
+      toolbar.recoveryStatus, toolbar.miniProgress, toolbar.miniCompleteRing, toolbar.miniTomoe]) node.remove();
+    const controls = document.createElement('div'); controls.className = 'stvai-fanqie-controls';
+    const context = document.createElement('p'); context.className = 'stvai-fanqie-context';
+    context.textContent = 'Fanqie · giao diện và tên truyện';
     const providerButton = document.createElement('button');
-    providerButton.type = 'button';
-    providerButton.style.cssText = 'display:block;margin-top:4px;padding:7px 10px;border:1px solid #999;border-radius:8px;background:#fff;color:#222;cursor:pointer';
-    const status = document.createElement('div');
-    status.style.cssText = 'max-width:240px;padding:5px;background:#fff;color:#222;font:12px sans-serif';
+    providerButton.type = 'button'; providerButton.className = 'stvai-button stvai-button--quiet';
+    providerButton.dataset.fanqieAction = 'provider';
+    const status = toolbar.status;
     const failureLabel = reason => ['daily_limit', 'quota_exceeded', 'api_backoff'].includes(reason)
       ? 'MyMemory tạm dừng/quota hết; dùng cache hoặc giữ tên gốc'
       : 'MyMemory chưa dịch được; giữ tên gốc';
     const button = document.createElement('button');
     button.type = 'button';
-    button.style.cssText = 'font:14px sans-serif;max-width:180px;padding:9px 12px;border:1px solid #999;border-radius:8px;background:#fff;color:#222;cursor:pointer';
+    button.className = 'stvai-button stvai-button--primary';
+    button.dataset.fanqieAction = 'language';
     const updateButton = () => {
       button.textContent = language === 'vi' ? 'Tiếng Việt · 中文' : '中文 · Tiếng Việt';
       button.title = 'Phwgna: dịch nhãn giao diện; tên truyện dùng nguồn đã chọn. Rê chuột tên để xem gốc. Không dịch chương hoặc bình luận.';
       providerButton.textContent = titleProvider === 'mymemory' ? 'Tên: MyMemory · đổi sang từ điển' : 'Tên: từ điển · bật MyMemory';
       providerButton.title = 'MyMemory gửi tên truyện đang hiện tới dịch vụ dịch, không cần tài khoản. Không gửi chương, giới thiệu hoặc bình luận.';
     };
-    const persist = async () => {
+    const persist = async (patch = {}) => {
       host.dataset.storageState = 'saving';
       try {
         await storage?.set({ [storageKey]: {
-          version: dictionary.version, language, titleProvider, entries: dictionary.entries
+          ...patch, version: dictionary.version, entries: dictionary.entries
         } });
         host.dataset.storageState = 'saved';
       } catch (_) {
         host.dataset.storageState = 'failed';
         button.title = 'Chưa lưu được ngôn ngữ và bộ nhãn; lựa chọn có thể mất khi tải lại trang.';
+        status.textContent = 'Chưa lưu được cài đặt; hãy thử lại.';
       }
     };
     button.addEventListener('click', async () => {
@@ -274,16 +311,50 @@
       if (titleProvider === 'mymemory') {
         loadGeneration++; loaded = false; loading = false; retryAfter = 0; translator.setTitleEngine(null);
       }
-      translator.setEnabled(language === 'vi'); updateButton(); await persist(); loadTitles();
+      translator.setEnabled(language === 'vi'); updateButton(); await persist({ language }); loadTitles();
     });
     providerButton.addEventListener('click', async () => {
       titleProvider = titleProvider === 'mymemory' ? 'local' : 'mymemory';
       loadGeneration++; loaded = false; loading = false; retryAfter = 0;
       translator.setTitleEngine(null); updateButton();
       status.textContent = titleProvider === 'mymemory' ? 'Đang bật MyMemory…' : 'Tên truyện: từ điển cục bộ';
-      await persist(); loadTitles();
+      await persist({ titleProvider }); loadTitles();
     });
-    shadow.append(button, providerButton, status); document.body.append(host);
+    const scaleLabel = document.createElement('label'); scaleLabel.textContent = 'Kích thước menu';
+    const scale = document.createElement('select'); scale.className = 'stvai-fanqie-scale';
+    scale.dataset.fanqieAction = 'scale';
+    for (const value of preferences.scales) {
+      const option = document.createElement('option'); option.value = String(value); option.textContent = `${value * 100}%`;
+      scale.append(option);
+    }
+    scale.value = String(preference.uiScale); scaleLabel.append(scale);
+    scale.addEventListener('change', () => {
+      preference.uiScale = ui.normalizeUiScale(scale.value);
+      toolbar.root.style.setProperty('--stvai-ui-scale', String(preference.uiScale));
+      void persist({ uiScale: preference.uiScale });
+    });
+    controls.append(context, button, providerButton, scaleLabel);
+    toolbar.root.querySelector('.stvai-menu-body').prepend(controls);
+    toolbar.settings.addEventListener('click', async () => {
+      try {
+        const result = await storage?.openSettings?.();
+        if (!result?.ok) status.textContent = 'Chưa mở được cài đặt Fanqie; hãy mở từ biểu tượng tiện ích.';
+      } catch (_) { status.textContent = 'Chưa mở được cài đặt Fanqie; hãy thử lại.'; }
+    });
+    shadow.append(stylesheet, layout, toolbar.root); document.body.append(host);
+    const unsubscribe = storage?.subscribe?.(next => {
+      if (stopped) return;
+      const titleChanged = titleProvider !== next.titleProvider || language !== next.language;
+      preference = next; language = next.language; titleProvider = next.titleProvider;
+      toolbar.root.style.setProperty('--stvai-ui-scale', String(next.uiScale)); scale.value = String(next.uiScale);
+      // Use the shell's own state transition for ARIA and collapse bookkeeping.
+      if (toolbar.root.dataset.collapsed !== String(next.collapsed)) toolbar.menuToggle.click();
+      if (titleChanged) {
+        loadGeneration++; loaded = false; loading = false; retryAfter = 0; translator.setTitleEngine(null);
+        status.textContent = titleProvider === 'mymemory' ? 'Tên truyện: MyMemory · chỉ gửi tên đang hiện' : 'Tên truyện: từ điển cục bộ';
+        translator.setEnabled(language === 'vi'); updateButton(); loadTitles();
+      }
+    });
     translator.setEnabled(language === 'vi'); updateButton(); void persist();
     status.textContent = titleProvider === 'mymemory' ? 'Tên truyện: MyMemory · chỉ gửi tên đang hiện' : 'Tên truyện: từ điển cục bộ';
     loadTitles();
@@ -300,7 +371,7 @@
     const onScroll = () => { loadTitles(); translator.apply(); };
     document.defaultView.addEventListener('scroll', onScroll, { passive: true, capture: true });
     document.defaultView.addEventListener('resize', onScroll);
-    return { translator, destroy() { stopped = true; loadGeneration++; observer.disconnect(); document.defaultView.removeEventListener('scroll', onScroll, true); document.defaultView.removeEventListener('resize', onScroll); document.defaultView.clearTimeout(timer); translator.restore(); host.remove(); } };
+    return { translator, destroy() { stopped = true; unsubscribe?.(); loadGeneration++; observer.disconnect(); document.defaultView.removeEventListener('scroll', onScroll, true); document.defaultView.removeEventListener('resize', onScroll); document.defaultView.clearTimeout(timer); translator.restore(); host.remove(); } };
   }
   return Object.freeze({ createTranslator, createRuntimeStorage, start, storageKey, allowedPath });
 });

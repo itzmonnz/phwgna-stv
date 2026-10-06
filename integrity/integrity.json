@@ -63,7 +63,7 @@
     },
     {
       "path": "manifest.json",
-      "sha256": "d9ddc7ab96acec2ee86ebb96302e53da75951d5079141b749b5151bcf775c766"
+      "sha256": "5132edff2397224bd21686ed8206534b74cf313e55115ece888dbea103a15ef3"
     },
     {
       "path": "onboarding/onboarding.css",
@@ -79,15 +79,19 @@
     },
     {
       "path": "options/options.css",
-      "sha256": "1854c73febb1df764c4ea19e3e464ddd25bc24db15682007a9ea87d30a485164"
+      "sha256": "227b05977e8842dfb6719e69c7c8ada4eb7348ffbd43a4b97ef67fc93455d67f"
     },
     {
       "path": "options/options.html",
-      "sha256": "28421def78de478d1786a51a3b528eb3c40903bd4e309aa9a29d365408289d7b"
+      "sha256": "dfc9e171a2d7871f079d6e99c7921994bae3962bf55fd29d5a43c40bad001dc9"
     },
     {
       "path": "options/options.js",
       "sha256": "5710137c85827580b5f1a096fe62a86c0ed617a0b2eac206fe8bd15846e7eef6"
+    },
+    {
+      "path": "options/site-settings.js",
+      "sha256": "fce9e9282a00b1a21de3a4b8d3d8f89119bf8c92588fd24e4f31b041ec26d0cf"
     },
     {
       "path": "popup/popup.css",
@@ -111,11 +115,11 @@
     },
     {
       "path": "src/background.js",
-      "sha256": "8f00d5f51193ef01598e1df5b7e3325a52d36ec3ce7f1683b3fc6710c2017014"
+      "sha256": "96ac010f6bca85fe4809466a80e0d7f15883427d310ff4e4190437e912a3bb3c"
     },
     {
       "path": "src/background/client-service.js",
-      "sha256": "84dff80c2eb4e0302a55035a749ea28d420b3303fca3b452704656f479d4062f"
+      "sha256": "256c291d40b75fd7141f578cb45b0bacd1cb015ca8328194864b8d9fbacb921e"
     },
     {
       "path": "src/background/contracts.js",
@@ -123,7 +127,7 @@
     },
     {
       "path": "src/background/controller.js",
-      "sha256": "8d9064e676f71d3b7fdaf5117d5733e6e5f1f2de47ea5e33958a6d57d29be443"
+      "sha256": "494f9c2c4a3ac4d080077a14e061e68d62a547c2f76f7db862099e7226952f88"
     },
     {
       "path": "src/background/gemini-account-service.js",
@@ -159,7 +163,7 @@
     },
     {
       "path": "src/content/fanqie-ui.js",
-      "sha256": "87dc80eaa78553a97b00f6d8e293ed604fa4d94948fcd0fc8fb9c36795b6527b"
+      "sha256": "67931ff2baac829ee0d067c0b2406df687493bbb061b9ae0c9cffe5d54eabf61"
     },
     {
       "path": "src/content/gemini-account-probe.js",
@@ -276,6 +280,10 @@
     {
       "path": "src/shared/error-journal.js",
       "sha256": "017cbbad724040f3b13276175318c22f0433f72bf003345109a12160a090fa0c"
+    },
+    {
+      "path": "src/shared/fanqie-preferences.js",
+      "sha256": "96efb9a53f324c62c333bb8dc92198f995aa578d161e4d3254ae2d8eaa25065e"
     },
     {
       "path": "src/shared/fanqie-title-api.js",
@@ -431,7 +439,7 @@
     }
   ],
   "product": "Phwgna Stv",
-  "sourceCommit": "1dfdc0ce31d793963ae1358213273b69af926a08",
+  "sourceCommit": "282a003bcb51bf4fd39a9b57bbc01ec72c462f98",
   "officialRepository": "https://github.com/itzmonnz/phwgna-stv",
   "officialReleaseUrl": "https://github.com/itzmonnz/phwgna-stv/releases/tag/v0.2.8",
   "publicKeyFingerprint": "85ac74c199d0a6028bce843d6f68d7632317912b460aad1a7431193767ec9871"

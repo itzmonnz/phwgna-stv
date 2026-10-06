@@ -64,7 +64,9 @@
         "src/shared/fanqie-title-data/9.json",
         "src/shared/fanqie-title-data/10.json",
         "src/shared/fanqie-title-data/font-library.json",
-        "src/shared/fanqie-title-data/font-search.json"
+        "src/shared/fanqie-title-data/font-search.json",
+        "src/content/stv.css",
+        "assets/icons/phwgna-cat-128.png"
       ],
       "matches": [
         "https://fanqienovel.com/*"
@@ -91,6 +93,9 @@
       "js": [
         "src/shared/fanqie-ui-dictionary.js",
         "src/shared/fanqie-title-translator.js",
+        "src/shared/fanqie-preferences.js",
+        "src/shared/branding.js",
+        "src/content/stv-ui.js",
         "src/content/fanqie-ui.js"
       ],
       "run_at": "document_idle"

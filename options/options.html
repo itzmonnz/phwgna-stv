@@ -21,6 +21,11 @@
     </header>
 
     <main class="page-shell" id="mainContent">
+      <nav class="site-tabs" role="tablist" aria-label="Cài đặt từng web">
+        <button id="settingsTabStv" type="button" role="tab" data-settings-site="stv" aria-controls="settingsPanelStv" aria-selected="true">Sáng Tác Việt</button>
+        <button id="settingsTabFanqie" type="button" role="tab" data-settings-site="fanqie" aria-controls="settingsPanelFanqie" aria-selected="false" tabindex="-1">Fanqie</button>
+      </nav>
+      <div id="settingsPanelStv" role="tabpanel" aria-labelledby="settingsTabStv">
       <section class="intro" aria-labelledby="intro-title">
         <div>
           <p class="eyebrow">Thiết lập độc lập</p>
@@ -299,6 +304,49 @@
         </div>
       </form>
 
+      </div>
+      <div id="settingsPanelFanqie" role="tabpanel" aria-labelledby="settingsTabFanqie" hidden>
+        <section class="intro" aria-labelledby="fanqieIntroTitle">
+          <div>
+            <p class="eyebrow">Thiết lập độc lập · Fanqie</p>
+            <h2 id="fanqieIntroTitle">Đọc giao diện và tên truyện bằng tiếng Việt</h2>
+            <p>Cài đặt ở đây chỉ áp dụng cho Fanqie. Dịch chương bằng AI và nghe sách chưa được hỗ trợ trên web này.</p>
+          </div>
+        </section>
+        <form id="fanqieSettingsForm">
+          <section class="settings-card" aria-labelledby="fanqieTranslationTitle">
+            <div class="section-heading"><h2 id="fanqieTranslationTitle">Dịch web</h2></div>
+            <div class="field-grid">
+              <div class="field">
+                <label for="fanqieLanguage">Ngôn ngữ hiển thị</label>
+                <select id="fanqieLanguage"><option value="vi">Tiếng Việt</option><option value="zh">Tiếng Trung gốc</option></select>
+                <p class="field-help">Nhãn giao diện dùng bản dịch đã kiểm tra sẵn. Tên người dùng và bình luận giữ nguyên.</p>
+              </div>
+              <div class="field">
+                <label for="fanqieTitleProvider">Cách dịch tên truyện</label>
+                <select id="fanqieTitleProvider"><option value="mymemory">MyMemory · dịch trực tuyến</option><option value="local">Từ điển · dịch trên máy</option></select>
+                <p class="field-help">MyMemory chỉ nhận tên truyện đang hiển thị, có cache riêng và giới hạn miễn phí. Từ điển nhanh, không cần mạng, nhưng câu dịch có thể chưa tự nhiên.</p>
+              </div>
+            </div>
+          </section>
+          <section class="settings-card" aria-labelledby="fanqieMenuTitle">
+            <div class="section-heading"><h2 id="fanqieMenuTitle">Menu nổi</h2></div>
+            <div class="field-grid">
+              <div class="field"><label for="fanqieUiScale">Kích thước menu</label>
+                <select id="fanqieUiScale"><option value="0.5">50%</option><option value="0.75">75%</option><option value="1">100%</option><option value="1.25">125%</option><option value="1.5">150%</option></select>
+                <p class="field-help">Không thay đổi kích thước menu bên STV.</p>
+              </div>
+              <div class="field"><label for="fanqieCollapsed"><input type="checkbox" id="fanqieCollapsed"> Thu gọn menu thành icon mèo</label>
+                <p class="field-help">Bấm icon để mở menu. Trạng thái mở/thu gọn được nhớ riêng cho Fanqie.</p>
+              </div>
+            </div>
+          </section>
+          <div class="action-bar">
+            <p id="fanqieSaveStatus" class="save-status" role="status" aria-live="polite">Đang tải…</p>
+            <div class="action-bar__buttons"><button class="button button--primary" id="fanqieSaveButton" type="submit" disabled>Lưu cài đặt Fanqie</button></div>
+          </div>
+        </form>
+      </div>
       <aside class="official-identity" data-phwgna-official-identity aria-label="Thông tin bản chính thức">
         <a href="https://github.com/itzmonnz/phwgna-stv" target="_blank" rel="noreferrer">Repository chính thức của phwgna</a>
         <a href="https://github.com/itzmonnz/phwgna-stv/releases" target="_blank" rel="noreferrer">Tải bản Demo và công cụ</a>
@@ -314,6 +362,8 @@
     <script src="../src/shared/data-backup.js"></script>
     <script src="../src/shared/config-file-store.js"></script>
     <script src="../src/shared/official-build.js"></script>
+    <script src="../src/shared/fanqie-preferences.js"></script>
+    <script src="site-settings.js"></script>
     <script src="options.js"></script>
   </body>
 </html>

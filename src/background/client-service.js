@@ -6,6 +6,7 @@
 })(typeof globalThis !== "undefined" ? globalThis : this, function createClientServiceApi(fanqieDictionary) {
   "use strict";
 
+  const fanqiePrefs = globalThis.STVAIFanqiePreferences || (typeof require === 'function' ? require('../shared/fanqie-preferences.js') : null);
   const CLIENT_STORAGE_KEYS = Object.freeze([
     "settings", "toolEnabled", "transmissionConsent", "automationConsentVersion",
     "automationConsentProvider", "ttsConsent", "ttsConsentVersion",
@@ -28,7 +29,7 @@
   });
 
   function createClientService(options = {}) {
-    const { core, pronunciation, sites, storage, tabs, storageCall, isStvUrl } = options;
+    const { core, pronunciation, sites, storage, tabs, storageCall, isStvUrl, runtime } = options;
     const zoomQueues = new Map();
     const zoomNavigations = new Map();
     const titleApi = globalThis.STVAIFanqieTitleApi || (typeof require === 'function' ? require('../shared/fanqie-title-api.js') : null);
@@ -59,23 +60,42 @@
       });
     }
 
-    async function fanqieUIGet(message, sender) {
-      if (!isFanqieSender(sender)) return { ok: false, reason: 'unauthorized-sender' };
-      const values = await storageCall(storage.local, 'get', ['stvai-fanqie-ui-v1']);
-      return { ok: true, language: values?.['stvai-fanqie-ui-v1']?.language === 'zh' ? 'zh' : 'vi',
-        titleProvider: values?.['stvai-fanqie-ui-v1']?.titleProvider === 'local' ? 'local' : 'mymemory' };
+    function isFanqieSettingsSender(sender) {
+      try {
+        const expected = runtime?.getURL?.('options/options.html');
+        return Boolean(expected && sender?.url
+          && new URL(sender.url).href.split('#')[0] === expected);
+      } catch (_) { return false; }
     }
-
+    let fanqieWriteQueue = Promise.resolve();
+    async function fanqieUIGet(message, sender) {
+      if (!isFanqieSender(sender) && !isFanqieSettingsSender(sender)) return { ok: false, reason: 'unauthorized-sender' };
+      const values = await storageCall(storage.local, 'get', [fanqiePrefs.storageKey]);
+      return { ok: true, ...fanqiePrefs.normalize(values?.[fanqiePrefs.storageKey]) };
+    }
     async function fanqieUISet(message, sender) {
-      if (!isFanqieSender(sender)) return { ok: false, reason: 'unauthorized-sender' };
-      if (!['vi', 'zh'].includes(message.language) || !fanqieDictionary) return { ok: false, reason: 'invalid-language' };
-      // No caller-selected keys, dictionary, prompts or private settings.
-      const old = (await storageCall(storage.local, 'get', ['stvai-fanqie-ui-v1']))?.['stvai-fanqie-ui-v1'];
-      await storageCall(storage.local, 'set', { 'stvai-fanqie-ui-v1': {
-        version: fanqieDictionary.version, language: message.language, entries: fanqieDictionary.entries,
-        titleProvider: ['local', 'mymemory'].includes(message.titleProvider) ? message.titleProvider : old?.titleProvider || 'mymemory'
-      } });
-      return { ok: true };
+      if (!isFanqieSender(sender) && !isFanqieSettingsSender(sender)) return { ok: false, reason: 'unauthorized-sender' };
+      if (message.language !== undefined && !['vi', 'zh'].includes(message.language)) return { ok: false, reason: 'invalid-language' };
+      if (!fanqieDictionary) return { ok: false, reason: 'unavailable' };
+      const task = fanqieWriteQueue.then(async () => {
+        const old = (await storageCall(storage.local, 'get', [fanqiePrefs.storageKey]))?.[fanqiePrefs.storageKey];
+        const preferences = fanqiePrefs.patch(old, message);
+        await storageCall(storage.local, 'set', { [fanqiePrefs.storageKey]: {
+          ...preferences, version: fanqieDictionary.version, entries: fanqieDictionary.entries
+        } });
+        // Broadcast only public UI preferences, never settings or title/cache content.
+        if (tabs?.query && tabs?.sendMessage) {
+          try {
+            const open = await tabs.query({ url: 'https://fanqienovel.com/*' });
+            await Promise.allSettled(open.map(tab => tabs.sendMessage(tab.id, {
+              type: 'STVAI_FANQIE_UI_CHANGED', preferences
+            })));
+          } catch (_) { /* A closed tab must not fail a saved preference. */ }
+        }
+        return { ok: true, ...preferences };
+      });
+      fanqieWriteQueue = task.catch(() => {});
+      return task;
     }
 
     async function fanqieTitleTranslate(message, sender) {
