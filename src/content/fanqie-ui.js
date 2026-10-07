@@ -283,6 +283,16 @@
           .home-copyright-text-title:has([data-stvai-copyright])>svg{display:none}
           .home-copyright-text-title [data-stvai-copyright]{font-family:Arial,sans-serif;font-size:28px;line-height:1.4;color:#fff}
           .home-copyright-text-content{height:auto!important;white-space:normal;line-height:1.6;max-width:900px;margin-left:auto;margin-right:auto}
+          /* Use native scrolling with a quiet, narrow handle rather than
+             adding another draggable control or a scrolling script. */
+          :is(html,.muye-home-top-rank-list,.muye-home-write-block,.muye-bottom-choiceness-content,.muye-bottom-rank-view,.muye-horizon-scroll-outer){scrollbar-width:auto!important;scrollbar-color:auto!important}
+          :is(html,.muye-home-top-rank-list,.muye-home-write-block,.muye-bottom-choiceness-content,.muye-bottom-rank-view,.muye-horizon-scroll-outer)::-webkit-scrollbar{width:5px;height:5px}
+          :is(html,.muye-home-top-rank-list,.muye-home-write-block,.muye-bottom-choiceness-content,.muye-bottom-rank-view,.muye-horizon-scroll-outer)::-webkit-scrollbar-track{background:transparent}
+          :is(html,.muye-home-top-rank-list,.muye-home-write-block,.muye-bottom-choiceness-content,.muye-bottom-rank-view,.muye-horizon-scroll-outer)::-webkit-scrollbar-thumb{background:rgba(100,110,120,.28);border-radius:999px}
+          :is(html,.muye-home-top-rank-list,.muye-home-write-block,.muye-bottom-choiceness-content,.muye-bottom-rank-view,.muye-horizon-scroll-outer)::-webkit-scrollbar-thumb:hover{background:rgba(100,110,120,.52)}
+          :is(html,.muye-home-top-rank-list,.muye-home-write-block,.muye-bottom-choiceness-content,.muye-bottom-rank-view,.muye-horizon-scroll-outer)::-webkit-scrollbar-button{display:none;width:0;height:0}
+          :is(html,.muye-home-top-rank-list,.muye-home-write-block,.muye-bottom-choiceness-content,.muye-bottom-rank-view,.muye-horizon-scroll-outer)::-webkit-scrollbar-corner{background:transparent}
+          @supports not selector(::-webkit-scrollbar){:is(html,.muye-home-top-rank-list,.muye-home-write-block,.muye-bottom-choiceness-content,.muye-bottom-rank-view,.muye-horizon-scroll-outer){scrollbar-width:thin!important;scrollbar-color:rgba(100,110,120,.28) transparent!important}}
           /* Reflow page columns; only carousel tracks retain their native
              widths and scroll inside their own bounded viewport. */
           @media(max-width:1100px){
