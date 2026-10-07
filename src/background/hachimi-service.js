@@ -68,6 +68,12 @@
           }
           if (!tab || tab.url === providerUrl || tab.pendingUrl === providerUrl || !tab.url || (tab.url === 'about:blank' && tab.status === 'loading')) {
             result[slotId] = tab || { id: entry.tabId, url: providerUrl, status: 'loading' };
+          } else if (typeof tabs.update === 'function') {
+            // The pool owns this physical tab. If it was navigated away from
+            // Moxhi, restore the same tab instead of stranding the slot or
+            // opening an unnecessary replacement. Keep it background-only.
+            await tabs.update(tab.id, { url: providerUrl, active: false });
+            result[slotId] = { ...tab, url: providerUrl, pendingUrl: providerUrl, status: 'loading' };
           }
         }
       }
