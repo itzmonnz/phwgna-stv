@@ -359,7 +359,7 @@
           const kind = kindOf(region);
           if (kind === 'chapter' && !/^\/(?:page|reader)\/\d+\/?$/.test(document.location.pathname)) continue;
           const old = pending.get(region);
-          if (old?.source === source && old.generation === generation && old.path === document.location.pathname
+          if (old?.source === source && (!old.retryAt || Date.now() < old.retryAt) && old.generation === generation && old.path === document.location.pathname
             && old.nodes.length === nodes.length && old.nodes.every((n, i) => n === nodes[i])) continue;
           if (inflight >= 24) continue;
           const request = { source, generation, path: document.location.pathname, values: nodes.map(n => n.data), nodes };
@@ -367,6 +367,7 @@
           inflight++;
           const priority = contentPriority(kind);
           Promise.resolve(titleEngine.convert(source, titleFont(document, region), kind, priority)).then(result => {
+            if (!result) request.retryAt = Date.now() + 5000;
             if (!result || pending.get(region) !== request || !enabled || generation !== request.generation
               || document.location.pathname !== request.path || !allowedPath(document.location.pathname)
               || nodes.some((n, i) => !n.isConnected || !region.contains(n) || n.data !== request.values[i])
@@ -405,7 +406,7 @@
           const source = nodes.map(n => n.data).join('');
           if (!/[\u3400-\u9fff]/.test(source)) continue;
           const old = pending.get(region);
-          if (old?.source === source && old.generation === generation && old.path === document.location.pathname) continue;
+          if (old?.source === source && (!old.retryAt || Date.now() < old.retryAt) && old.generation === generation && old.path === document.location.pathname) continue;
           const request = { source, generation, path: document.location.pathname, values: nodes.map(n => n.data) };
           pending.set(region, request);
           Promise.resolve().then(() => introductionEngine(source, 0)).then(result => {
@@ -465,10 +466,13 @@
         if (currentProvider === 'hachimi40' && (storage?.translateText || storage?.translateTitle)) {
           const engineDecoder = engine;
           const cache = new Map();
+          const failures = new Map();
           engine = { remote: true, convert(source, font, kind = 'title', priority = 0) {
             const decoded = engineDecoder.decode ? engineDecoder.decode(source, font) : engineDecoder.convert(source, font)?.source;
             if (!decoded) return null;
             const key = `${kind}:${decoded}`;
+            const failed = failures.get(key);
+            if (failed && Date.now() < failed.until) return null;
             if (!cache.has(key)) {
               status.textContent = 'Hachimi 40 đang dịch trên máy…';
               const call = storage.translateText ? storage.translateText(decoded, kind, priority) : kind === 'title' ? storage.translateTitle(decoded, priority) : storage.translateIntroduction?.(decoded, priority);
@@ -487,6 +491,18 @@
                 return { source: decoded, text: response.text };
               }).catch(() => { if (!stopped && currentGeneration === loadGeneration) status.textContent = 'Hachimi 40 chưa sẵn sàng; giữ chữ gốc'; return null; });
               cache.set(key, request);
+              void request.then(result => {
+                if (result) { failures.delete(key); return; }
+                // Do not memoize a transport/provider failure as a permanent
+                // translation. Back off, then retry only while this page lives.
+                cache.delete(key);
+                const attempts = (failures.get(key)?.attempts || 0) + 1;
+                const delay = Math.min(60000, 5000 * 2 ** Math.min(attempts - 1, 4));
+                failures.set(key, { attempts, until: Date.now() + delay });
+                document.defaultView.setTimeout(() => {
+                  if (!stopped && currentGeneration === loadGeneration) translator.apply();
+                }, delay);
+              });
               while (cache.size > 512) cache.delete(cache.keys().next().value);
             }
             return cache.get(key);

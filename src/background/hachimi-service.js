@@ -35,7 +35,19 @@
       const persist = () => write(poolKey, { version: 1, slots: pool });
       const open = await tabs.query({});
       const owned = open.filter(tab => (tab.url === providerUrl || tab.pendingUrl === providerUrl) && Number.isInteger(tab.id));
-      const journals = await readJournals();
+      let journals = await readJournals();
+      // A closed physical tab cannot retain a receipt. Release only identities
+      // whose absence Chrome explicitly confirms; query gaps alone prove nothing.
+      const closedIds = new Set();
+      for (const item of journals) {
+        if (open.some(tab => tab.id === item.tabId) || !tabs.get) continue;
+        try { await tabs.get(item.tabId); }
+        catch (e) { if (/No tab with id|Invalid tab ID/i.test(e.message || '')) closedIds.add(item.tabId); }
+      }
+      if (closedIds.size) {
+        await updateJournals(current => current.filter(item => !closedIds.has(item.tabId)));
+        journals = journals.filter(item => !closedIds.has(item.tabId));
+      }
       const result = Array(maxSlots);
       const claimed = new Set(pool.filter(Boolean).map(entry => entry.tabId).filter(Number.isInteger));
       for (let slotId = 0; slotId < maxSlots; slotId++) {
@@ -101,8 +113,8 @@
       return task;
     }
     async function dispatch(source, key) {
-      const journals = await readJournals();
       const tabsList = await providerTabs();
+      const journals = await readJournals();
       const journal = journals.find(item => item.key === key && item.source === source);
       const used = new Set([...journals.map(item => item.slotId), ...slotLocks]);
       const slotIndex = journal ? journal.slotId : tabsList.findIndex((tab, index) => tab && !used.has(index));
