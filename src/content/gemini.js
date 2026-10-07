@@ -323,11 +323,11 @@
     function hasError1095() {
       error1095Seen ||= common.pageHasText(document,
         ["[role='alert']", ".error-message", "mat-error", "[class*='snack']", "[class*='toast']", ".cdk-overlay-container"],
-        /(?:error|lỗi)[^\n]{0,80}\b1095\b/i);
+        /(?:error|lỗi)[^\n]{0,80}\b1095\b|(?:hãy\s+)?kiểm tra kết nối internet của bạn\s+(?:rồi|và)\s+thử lại|(?:please\s+)?check your internet connection and try again/i);
       return error1095Seen;
     }
     // Gemini's toast can disappear before the response poll. Retain only its
-    // numeric classification in this document, never its text or account label.
+    // recovery classification in this document, never its text or account label.
     if (document.defaultView?.MutationObserver && document.documentElement) {
       const errorObserver = new document.defaultView.MutationObserver(() => { hasError1095(); });
       errorObserver.observe(document.documentElement, { childList: true, subtree: true, characterData: true });
