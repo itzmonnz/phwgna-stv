@@ -100,12 +100,21 @@
     controls.append(label,toggle,retry,scale);toolbar.root.querySelector('.stvai-menu-body').prepend(controls);shadow.append(css,style,toolbar.root);document.body.append(host);
     const layout=document.createElement('style');layout.dataset.stvaiQidian='layout';layout.textContent=`
       .main-nav-wrap li{width:auto!important;min-width:0}.main-nav-wrap .nav-list{display:flex;flex-wrap:wrap}.main-nav-wrap .nav-list a{padding-left:12px!important;padding-right:12px!important}
+      .nav-left .cate-normal,.nav-left .cate-base{width:auto!important;flex:none}
+      .nav-left .cate-normal li,.nav-left .cate-base li{width:auto!important;min-width:0;padding-left:8px!important;padding-right:8px!important}
+      .nav-left .cate-normal-item{width:auto!important;white-space:nowrap}
       .work-filter li,.work-filter a,.rank-nav-list a{height:auto!important;white-space:normal!important;overflow-wrap:anywhere}
       .book-mid-info,.book-info,.book-info-detail,.rank-list .name-box{min-width:0}
       .book-mid-info h2,.book-info h1{height:auto!important;white-space:normal!important;overflow-wrap:anywhere;line-height:1.45!important}
       .book-mid-info .intro{height:auto!important;max-height:6em;overflow:hidden;line-height:1.5!important}
       .book-mid-info .author{height:auto!important;white-space:normal!important;overflow-wrap:anywhere}
       .book-info .tag{display:flex;flex-wrap:wrap;gap:6px;height:auto!important}.book-info .tag span,.book-info .tag a{margin:0!important;max-width:100%;white-space:normal;overflow-wrap:anywhere}
+      .book-author,.book-information-normal,.book-info,.book-info-top{height:auto!important}
+      .book-info .all-btn,.book-info .normal-btn{height:auto!important;display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+      .book-info .normal-btn{width:auto!important;max-width:100%}
+      .book-info .blue-btn-detail{width:auto!important;min-width:88px;padding-left:10px!important;padding-right:10px!important;white-space:nowrap}
+      .book-info .red-btn{width:auto!important;max-width:100%;padding-left:12px!important;padding-right:12px!important;white-space:normal;line-height:1.35}
+      .ticket-text{height:auto!important;white-space:nowrap}
       .volume-name{height:auto!important;white-space:normal!important;line-height:1.5!important}
       .rank-list .name-box a{max-width:100%;overflow:hidden;text-overflow:ellipsis}
     `;
