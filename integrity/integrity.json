@@ -46,6 +46,18 @@
       "sha256": "324bbcb74b480f38821f988478680f03160d3467b7aeff50ad2ad441f001bf59"
     },
     {
+      "path": "assets/fonts/NotoSans-Vietnamese-500.woff2",
+      "sha256": "7bcee2b1dc7f4de2ec34cfdc49fceac6b44aa56f53d139f454dd4687b93e902b"
+    },
+    {
+      "path": "assets/fonts/NotoSans-Vietnamese-600.woff2",
+      "sha256": "c3114c9628537796cf90dc17193417c2119fb0e2c25076b544af8a17e2ef285b"
+    },
+    {
+      "path": "assets/fonts/OFL.txt",
+      "sha256": "cee9892f9f0cc8fe882c9e9537ee6a89621d86ee7ceaf70b02e2b2b1c25c061a"
+    },
+    {
       "path": "assets/icons/phwgna-cat-128.png",
       "sha256": "c905787467c35c254e9609e89068ef87f4b5f09f6c57ef692a3d48c6f5113068"
     },
@@ -63,7 +75,7 @@
     },
     {
       "path": "manifest.json",
-      "sha256": "b1c0a2c5eb73eef071feda3dc50e9f3f5c8cea9e931a3221cc8dea3258fc7f1b"
+      "sha256": "116a15a14408bf363050054e15c3fce44b55321f3d773eb889e57c7d02902e22"
     },
     {
       "path": "onboarding/onboarding.css",
@@ -203,7 +215,7 @@
     },
     {
       "path": "src/content/qidian-ui.js",
-      "sha256": "a1616723435951f50d28003cb36cb31e1d943547339edc703e6b6cd1631c7cfa"
+      "sha256": "c25c38bd62190c041bb77cc5189cb87fd8b1414cd1ac0d138268621009f4c933"
     },
     {
       "path": "src/content/site-translation-guard.js",
@@ -479,7 +491,7 @@
     }
   ],
   "product": "Phwgna Stv",
-  "sourceCommit": "865c27026b3ecd6e6ffea461fe4092da0352640c",
+  "sourceCommit": "aeff77af7b8d75c83d1c8f9a3173262caca938a4",
   "officialRepository": "https://github.com/itzmonnz/phwgna-stv",
   "officialReleaseUrl": "https://github.com/itzmonnz/phwgna-stv/releases/tag/v0.2.8",
   "publicKeyFingerprint": "85ac74c199d0a6028bce843d6f68d7632317912b460aad1a7431193767ec9871"

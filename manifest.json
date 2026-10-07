@@ -93,6 +93,8 @@
     {
       "resources": [
         "src/content/stv.css",
+        "assets/fonts/NotoSans-Vietnamese-500.woff2",
+        "assets/fonts/NotoSans-Vietnamese-600.woff2",
         "assets/icons/phwgna-cat-128.png"
       ],
       "matches": [

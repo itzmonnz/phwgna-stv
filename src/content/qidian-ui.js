@@ -37,7 +37,7 @@
     return 'ui';
   }
   function createTranslator(document,send,onStatus=()=>{}){
-    const view=document.defaultView,records=new Map();let generation=0,url=document.location.href,enabled=true,stopped=false,timer=null,timerDue=0,inflight=0,userRoot=null;
+    const view=document.defaultView,records=new Map(),memo=new Map();let generation=0,url=document.location.href,enabled=true,stopped=false,timer=null,timerDue=0,inflight=0,userRoot=null;
     function visible(el){const r=el.getBoundingClientRect();return r.width>0&&r.height>0&&r.bottom>0&&r.top<view.innerHeight&&r.right>0&&r.left<view.innerWidth;}
     function priority(r){return (userRoot?.contains(r.node.parentElement)?0:visible(r.node.parentElement)?10:20)+kindOrder[r.kind];}
     function schedule(delay=80){
@@ -48,8 +48,8 @@
       timer=view.setTimeout(()=>{timer=null;timerDue=0;scan();},delay);
     }
     function restore(){for(const r of records.values())if(r.node.isConnected&&r.node.data===r.output)r.node.data=r.raw;}
-    function apply(r,text){if(!enabled||!r.node.isConnected||r.node.data!==r.raw||r.generation!==generation)return;r.output=r.raw.replace(r.source,()=>text);r.node.data=r.output;}
-    function report(){const remaining=[...records.values()].filter(r=>r.node.isConnected&&r.generation===generation&&!r.output);onStatus({pending:remaining.length,active:inflight,failed:remaining.filter(r=>r.failed).length});}
+    function apply(r,text){if(!enabled||!r.node.isConnected||r.node.data!==r.raw||r.generation!==generation)return;r.output=r.raw.replace(r.source,()=>text);r.node.data=r.output;memo.set(`${r.kind}\u0000${r.source}`,text);}
+    function report(){const remaining=[...records.values()].filter(r=>r.node.isConnected&&r.generation===generation&&!r.output),failed=remaining.filter(r=>r.failed).length;onStatus({pending:remaining.length,active:inflight,failed,chinese:remaining.filter(r=>r.node.data&&/[\u3400-\u9fff]/u.test(r.node.data)).length});}
     function dispatch(r,p){
       r.pending=true;r.priority=p;inflight++;const token=generation;
       Promise.resolve().then(()=>send(r.source,r.kind,p)).then(result=>{
@@ -67,20 +67,19 @@
       while((node=walker.nextNode())){
         const el=node.parentElement,raw=node.data,source=raw.trim().replace(/^[\ue000-\uf8ff\s]+|[\ue000-\uf8ff\s]+$/gu,'');
         if(!el||!/[\u3400-\u9fff]/u.test(source))continue;
-        const label=fixedText(source);
+        const label=fixedText(source),kindGuess=kindFor(el,route),cached=memo.get(`${kindGuess}\u0000${source}`);
         if(label&&!el.closest('input,textarea,select,[contenteditable],code,pre')){
-          let r=records.get(node);if(r&&(node.data===r.output||node.data===r.raw))continue;
+          let r=records.get(node);if(r&&node.data===r.output)continue;if(r&&node.data===r.raw&&r.output){apply(r,label);continue;}if(r&&node.data===r.raw)continue;
           r={node,raw,source,kind:'ui',generation,output:null,pending:false,failed:false};records.set(node,r);apply(r,label);continue;
         }
         if(el.closest(blocked))continue;
-        let r=records.get(node);if(r&&(node.data===r.output||node.data===r.raw))continue;
+        let r=records.get(node);if(r&&node.data===r.output)continue;if(r&&node.data===r.raw&&r.output){if(cached)apply(r,cached);continue;}if(r&&node.data===r.raw)continue;
         if(source.length>12000)continue;
         let kind=kindFor(el,route);
         if(source.length>240&&!['description','comment'].includes(kind))kind='description';
-        // Do not translate chapter lists linked from catalog cards before opening a book.
-        if(kind==='chapter'&&!['book','reader'].includes(route))continue;
         r={node,raw,source,kind,generation,output:null,pending:false,failed:false};records.set(node,r);
         const fixedLabel=fixedText(source);if(fixedLabel)apply(r,fixedLabel);
+        else if(cached)apply(r,cached);
       }
       const waiting=[...records.values()].filter(r=>r.node.isConnected&&r.generation===generation&&!r.output&&r.node.data===r.raw).sort((a,b)=>priority(a)-priority(b));
       for(const r of waiting){
@@ -98,7 +97,7 @@
     const onScroll=()=>schedule(),onRoute=()=>schedule(0);
     document.addEventListener('pointerdown',user,true);document.addEventListener('focusin',user,true);
     view.addEventListener('scroll',onScroll,{passive:true,capture:true});view.addEventListener('resize',onScroll);view.addEventListener('popstate',onRoute);view.addEventListener('hashchange',onRoute);
-    return {scan,setEnabled(value){if(enabled===value)return;enabled=value;generation++;if(!enabled)restore();records.clear();if(enabled)scan();else onStatus({disabled:true});},retry(){for(const r of records.values()){r.retryAt=0;r.failed=false;}scan();},destroy(){stopped=true;generation++;restore();observer.disconnect();view.clearTimeout(timer);document.removeEventListener('pointerdown',user,true);document.removeEventListener('focusin',user,true);view.removeEventListener('scroll',onScroll,true);view.removeEventListener('resize',onScroll);view.removeEventListener('popstate',onRoute);view.removeEventListener('hashchange',onRoute);},records};
+    return {scan,setEnabled(value){if(enabled===value)return;enabled=value;generation++;if(!enabled)restore();records.clear();if(enabled)scan();else onStatus({disabled:true});},retry(){for(const r of records.values()){r.retryAt=0;r.failed=false;}scan();},coverage(){const all=[...records.values()].filter(r=>r.node.isConnected&&r.generation===generation);return {seen:all.length,translated:all.filter(r=>r.output).length,pending:all.filter(r=>!r.output&&!r.failed).length,failed:all.filter(r=>r.failed).length,chinese:all.filter(r=>r.node.data&&/[\u3400-\u9fff]/u.test(r.node.data)).length};},destroy(){stopped=true;generation++;restore();observer.disconnect();view.clearTimeout(timer);document.removeEventListener('pointerdown',user,true);document.removeEventListener('focusin',user,true);view.removeEventListener('scroll',onScroll,true);view.removeEventListener('resize',onScroll);view.removeEventListener('popstate',onRoute);view.removeEventListener('hashchange',onRoute);},records};
   }
   async function start(document,runtime){
     if(!sites.allowed(document.location.href)||document.getElementById('stvai-qidian-ui'))return null;
@@ -106,7 +105,7 @@
     try{const result=await runtime.sendMessage({type:'STVAI_QIDIAN_UI_GET'});if(!result?.ok)throw new Error('settings');preference=prefs.normalize(result);}catch(_){return null;}
     const host=document.createElement('div');host.id='stvai-qidian-ui';host.style.cssText='position:fixed;inset:0;pointer-events:none;z-index:2147483200';
     const shadow=host.attachShadow({mode:'open'}),css=document.createElement('link');css.rel='stylesheet';css.href=runtime.getURL('src/content/stv.css');
-    const style=document.createElement('style');style.textContent=':host{all:initial;position:fixed;inset:0;display:block;pointer-events:none}.stvai-toolbar{position:fixed!important;pointer-events:auto;left:12px;top:50%;max-width:calc(100vw / var(--stvai-ui-scale,1) - 24px);max-height:calc(100dvh / var(--stvai-ui-scale,1) - 24px)}.qidian-controls{display:grid;gap:10px}.qidian-controls p{font-size:12px;margin:0;color:var(--stvai-text-muted)}.qidian-controls select{padding:8px;background:var(--stvai-surface);color:var(--stvai-text);border:1px solid var(--stvai-border);border-radius:8px}';
+    const style=document.createElement('style');style.textContent='@font-face{font-family:PhwgnaNoto;src:url("'+runtime.getURL('assets/fonts/NotoSans-Vietnamese-500.woff2')+'") format("woff2");font-weight:500;font-style:normal;font-display:swap}@font-face{font-family:PhwgnaNoto;src:url("'+runtime.getURL('assets/fonts/NotoSans-Vietnamese-600.woff2')+'") format("woff2");font-weight:600;font-style:normal;font-display:swap}:host{all:initial;position:fixed;inset:0;display:block;pointer-events:none}.stvai-toolbar{position:fixed!important;pointer-events:auto;left:12px;top:50%;max-width:calc(100vw / var(--stvai-ui-scale,1) - 24px);max-height:calc(100dvh / var(--stvai-ui-scale,1) - 24px)}.qidian-controls{display:grid;gap:10px}.qidian-controls p{font-size:12px;margin:0;color:var(--stvai-text-muted)}.qidian-controls select{padding:8px;background:var(--stvai-surface);color:var(--stvai-text);border:1px solid var(--stvai-border);border-radius:8px}';
     let drag;
     const save=async patch=>{const result=await runtime.sendMessage({type:'STVAI_QIDIAN_UI_SET',...patch});if(!result?.ok)toolbar.status.textContent='Chưa lưu được cài đặt Qidian.';};
     const toolbar=ui.createToolbar(document,{}, {initialCollapsed:preference.collapsed,onLayoutChange(){},onCollapsedChange(collapsed){preference.collapsed=collapsed;void save({collapsed});}});
@@ -117,19 +116,17 @@
     for(const value of prefs.scales){const option=document.createElement('option');option.value=String(value);option.textContent=`${value*100}%`;scale.append(option);}scale.value=String(preference.uiScale);scale.setAttribute('aria-label','Kích thước menu');
     controls.append(label,toggle,retry,scale);toolbar.root.querySelector('.stvai-menu-body').prepend(controls);shadow.append(css,style,toolbar.root);document.body.append(host);
     const layout=document.createElement('style');layout.dataset.stvaiQidian='layout';layout.textContent=`
-      body,.nav-wrap,.main-nav-wrap,.read-content{font-family:"Segoe UI",Arial,"Microsoft YaHei",sans-serif!important}
-      body :is(a,p,h1,h2,h3,h4,span,strong,li,dd,dt):not([class*="icon"]){font-family:"Segoe UI",Arial,"Microsoft YaHei",sans-serif!important}
-      body,.nav-wrap{font-weight:500}
-      .nav-wrap a,.main-nav-wrap a,.intro-detail p{font-weight:500!important}
-      .book-list a.name,.edit-rec-list p{font-weight:500!important}
-      .edit-rec-list h3 a{font-weight:600!important}
+      body,.nav-wrap,.main-nav-wrap,.read-content{font-family:PhwgnaNoto,Arial,sans-serif!important;font-weight:500!important}
+      body :where(a,p,h1,h2,h3,h4,h5,h6,span,strong,em,i,b,small,label,li,dd,dt,th,td,button):not([class*="icon"]):not([class*="font"]):not(svg):not(path){font-family:PhwgnaNoto,Arial,sans-serif!important;font-weight:500!important}
+      .nav-wrap a,.main-nav-wrap a,.intro-detail p,.book-list a.name,.edit-rec-list p{font-weight:500!important}
+      .edit-rec-list h3 a,.book-mid-info h2,.book-info h1{font-weight:600!important}
       .nav-wrap ul,.main-nav-wrap ul{display:flex!important;flex-wrap:wrap!important;align-items:center!important;gap:4px 10px!important;margin:0!important;padding:0!important}
       .nav-wrap li,.main-nav-wrap li{float:none!important;width:auto!important;min-width:0;margin:0!important;line-height:1.45!important;display:flex!important;align-items:center!important}
       .nav-wrap a,.main-nav-wrap a{display:inline-flex!important;align-items:center!important;white-space:nowrap!important;line-height:1.45!important}
       .main-nav-wrap li{width:auto!important;min-width:0}.main-nav-wrap .nav-list{display:flex;flex-wrap:wrap}.main-nav-wrap .nav-list a{padding-left:12px!important;padding-right:12px!important}
       .nav-left .cate-normal,.nav-left .cate-base{width:auto!important;flex:none}
       .nav-left .cate-normal li,.nav-left .cate-base li{width:auto!important;min-width:0;padding-left:8px!important;padding-right:8px!important}
-      .nav-left .cate-normal-item{width:auto!important;white-space:nowrap}
+      .nav-left .cate-normal-item{width:auto!important;white-space:nowrap}.nav-left cite,.nav-left .info{width:auto!important;min-width:0}.nav-left .info i{display:inline!important;width:auto!important;white-space:normal!important;word-break:normal!important;overflow-wrap:break-word!important}.nav-left .info b{margin-left:4px!important;white-space:nowrap!important}
       .work-filter li,.work-filter a,.rank-nav-list a{height:auto!important;white-space:normal!important;word-break:normal!important;overflow-wrap:break-word!important}
       .book-mid-info,.book-info,.book-info-detail,.rank-list .name-box{min-width:0}
       .book-mid-info h2,.book-info h1{height:auto!important;white-space:normal!important;word-break:normal!important;overflow-wrap:break-word!important;line-height:1.45!important}
@@ -143,9 +140,9 @@
       .book-info .red-btn{width:auto!important;max-width:100%;padding-left:12px!important;padding-right:12px!important;white-space:normal;line-height:1.35}
       .ticket-text{height:auto!important;white-space:nowrap}
       .volume-name{height:auto!important;white-space:normal!important;line-height:1.5!important}
-      .rank-list .name-box a{max-width:100%;overflow:hidden;text-overflow:ellipsis}
+      .rank-list .name-box a{max-width:100%;overflow:hidden;text-overflow:ellipsis;word-break:normal!important}.update-table td,.update-table th,[class*="update"] td,[class*="update"] th{height:auto!important;min-height:32px!important;line-height:1.45!important;white-space:normal!important;word-break:normal!important;overflow-wrap:break-word!important;vertical-align:middle!important}.update-table a,[class*="update"] a{font-family:PhwgnaNoto,Arial,sans-serif!important;font-weight:500!important;white-space:normal!important;word-break:normal!important;overflow-wrap:break-word!important}.total i,.info i{font-family:PhwgnaNoto,Arial,sans-serif!important;font-weight:500!important}.total b{font-family:PhwgnaNoto,Arial,sans-serif!important;font-weight:600!important}.book-list a.name,.rank-list a.name,.edit-rec-list a,.author,.author-name,.author-tags,.intro,.desc,.description{word-break:normal!important;overflow-wrap:break-word!important;white-space:normal!important}.book-list a.name,.rank-list a.name{line-height:1.45!important;height:auto!important;min-height:22px!important}
     `;
-    const translator=createTranslator(document,(source,kind,priority)=>runtime.sendMessage({type:'STVAI_QIDIAN_TEXT_TRANSLATE',source,kind,priority}),state=>{toolbar.status.textContent=state.disabled?'Đang xem tiếng Trung gốc':state.pending?`Hachimi 40 · còn ${state.pending} mục · đang xử lý ${state.active}${state.failed?' · có mục chưa dịch được':''}`:'Đã dịch nội dung đã tải';});
+    const translator=createTranslator(document,(source,kind,priority)=>runtime.sendMessage({type:'STVAI_QIDIAN_TEXT_TRANSLATE',source,kind,priority}),state=>{toolbar.status.textContent=state.disabled?'Đang xem tiếng Trung gốc':state.failed?`Hachimi 40 · ${state.failed} mục chưa dịch được · đang xử lý ${state.active}`:state.pending?`Hachimi 40 · còn ${state.pending} mục · đang xử lý ${state.active}`:'Đã dịch nội dung đã tải';});
     function applyPreference(next){const old=preference;preference=prefs.normalize(next);toggle.textContent=preference.language==='vi'?'Tiếng Việt · 中文':'中文 · Tiếng Việt';layout.disabled=preference.language!=='vi';toolbar.root.style.setProperty('--stvai-ui-scale',String(preference.uiScale));scale.value=String(preference.uiScale);if(old.uiScale!==preference.uiScale)drag?.setUiScale(preference.uiScale);if(JSON.stringify(old.position)!==JSON.stringify(preference.position))drag?.setPosition(preference.position);if(toolbar.root.dataset.collapsed!==String(preference.collapsed))toolbar.menuToggle.click();translator.setEnabled(preference.language==='vi');}
     document.head.append(layout);drag=panels.attachDraggable(toolbar.root,toolbar.dragHandles,{storage:{},margin:0,initialPosition:preference.position,getScale:()=>preference.uiScale,isAnimating:()=>toolbar.root.dataset.stvaiToolbarAnimating==='true',onInteraction:()=>toolbar.finishAnimation(),interactiveHandles:[toolbar.miniToggle],onPositionChange(position){preference.position=position;void save({position});}});
     const refresh=()=>drag.refresh();css.addEventListener('load',refresh);
