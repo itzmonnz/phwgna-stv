@@ -283,12 +283,30 @@
           .home-copyright-text-title:has([data-stvai-copyright])>svg{display:none}
           .home-copyright-text-title [data-stvai-copyright]{font-family:Arial,sans-serif;font-size:28px;line-height:1.4;color:#fff}
           .home-copyright-text-content{height:auto!important;white-space:normal;line-height:1.6;max-width:900px;margin-left:auto;margin-right:auto}
-          /* Fanqie's desktop canvas is fixed-width. Keep it reachable on
-             portrait displays instead of clipping it behind body overflow. */
+          /* Reflow page columns; only carousel tracks retain their native
+             widths and scroll inside their own bounded viewport. */
           @media(max-width:1100px){
-            html{overflow-x:auto!important}
-            body{overflow-x:visible!important;min-width:0!important}
-            #app{width:1240px;min-width:1240px;overflow-x:clip}
+            html,body{min-width:0!important;overflow-x:visible!important}
+            #app{width:100%!important;min-width:0!important;overflow-x:clip}
+            .muye,.muye-home-wrapper,.muye-home,.muye-home-banner,.muye-home-notice-container,.muye-home-recommend-block,.muye-home-write-block,.muye-bottom-choiceness,.muye-bottom-choiceness-bg,.muye-bottom-rank,.muye-bottom-rank-block,.muye-bottom-rank-wrapper,.muye-bottom-rank-content,.zone-footer-ctn{width:100%!important;min-width:0!important;max-width:100%!important;box-sizing:border-box}
+            .muye-home{padding:0 16px!important}
+            .muye-home-banner{overflow:hidden}
+            .muye-home-banner .arco-carousel{width:100%!important;max-width:100%}
+            .muye-home-notice{width:100%!important;left:0!important;flex-wrap:wrap;gap:12px;box-sizing:border-box;padding:16px}
+            .muye-home-notice .home-link-item{flex:1 1 240px;min-width:0;max-width:100%;margin:0!important}
+            .muye-home-recommend-block{flex-wrap:wrap;gap:24px;height:auto!important}
+            .muye-home-top-rank,.muye-home-news-block{height:auto!important;margin:0!important;min-width:0;width:100%!important}
+            .muye-home-top-rank{flex:1 1 840px}
+            .muye-home-news-block{flex:1 1 274px}
+            .muye-home-top-rank-list{max-width:100%;overflow-x:auto}
+            .muye-home-write-block,.muye-bottom-choiceness-content{max-width:100%!important;overflow-x:auto!important;overflow-y:hidden}
+            .muye-bottom-choiceness-content{width:100%!important;left:0!important;transform:none!important}
+            .muye-bottom-choiceness-content>.wrapper{width:1440px!important;max-width:none!important}
+            .muye-bottom-rank-view{width:100%!important;overflow-x:auto!important;overflow-y:hidden}
+            .muye-bottom-rank-content{padding:0 16px!important}
+            .muye-bottom-rank-category{max-width:100%;box-sizing:border-box}
+            .muye-bottom-rank-content>.absolute-btn{display:none}
+            .home-copyright,.home-copyright-text,.home-copyright-text-content{max-width:100%!important;box-sizing:border-box;white-space:normal;overflow-wrap:anywhere}
             .muye-header{width:100%!important;min-width:0!important}
             .muye-header .muye-header-content{width:100%!important;min-width:0!important;max-width:100%!important}
           }
