@@ -126,12 +126,42 @@
 
   const titleRegions = '.muye-bottom-choiceness-item .book-text .title, .muye-bottom-rank-content h3.title, .muye-home-top-rank-list-item-info-name, .update-item.book-name a[href^="/page/"], .book-item-text .title, a.book-item-title[href^="/page/"], .muye-stack-book-list .book-name, .page-header-info .info-name h1, .home-publish-list-item-text-first-book, .rank-book-item .title, .tutorial-item-text-title';
   const metadataRegions = '.author-name-text, .author-desc, .book-item-author, .book-text .author, .book-item-text .author, .muye-home-top-rank-list-item-info-author, a.chapter-item-title[href^="/reader/"], a.update-item-chapter[href^="/reader/"], .page-abstract-content p, .muye-reader-title, .muye-reader-nav-title, .muye-home-news-content-item, .writer-list-current-first .bottom .title, .writer-list-current-first .desc, .muye-bottom-rank-content .book-text .desc, .update-item-author, .home-publish-list-item-text-first-author, .home-publish-list-item-text-second-from, .rank-book-item .author, .rank-book-item .desc, .rank-book-item .book-item-footer-last .chapter, .home-authortalk-list-item-card1-content-introduction';
+  const fallbackScope = /(?:book|rank|home|writer|author|tutorial|publish|search|category|library|menu|header|update|news|zone)/i;
+  const fallbackBlocked = /(?:comment|reply|user|avatar|account|login|password|phone|email|form|input|textarea|button|reader-content|chapter-content|copyright|footer|nav-item)/i;
+  const knownRegions = `${regions},${titleRegions},${metadataRegions}`;
   function metadataKind(region) {
     if (region.matches('.page-abstract-content p')) return 'introduction';
     if (region.matches('.author-desc, .muye-home-news-content-item, .writer-list-current-first .desc, .muye-bottom-rank-content .book-text .desc, .rank-book-item .desc, .home-authortalk-list-item-card1-content-introduction')) return 'description';
     if (region.matches('a.chapter-item-title, a.update-item-chapter, .muye-reader-title')) return 'chapter';
     if (region.matches('.author-name-text, .book-item-author, .book-text .author, .book-item-text .author, .muye-home-top-rank-list-item-info-author, .writer-list-current-first .bottom .title, .update-item-author, .home-publish-list-item-text-first-author, .rank-book-item .author')) return 'author';
     return 'title';
+  }
+  function fallbackKind(region) {
+    const classes = typeof region.className === 'string' ? region.className : '';
+    if (/(?:author|writer|creator)/i.test(classes)) return 'author';
+    if (/(?:desc|abstract|intro|summary|content|bio)/i.test(classes)) return 'description';
+    if (/(?:chapter|latest|update)/i.test(classes)) return 'chapter';
+    return 'title';
+  }
+  function fallbackRegions(document) {
+    const found = [];
+    const walker = document.createTreeWalker(document.body, 4);
+    let node;
+    while ((node = walker.nextNode()) && found.length < 128) {
+      const source = node.data.trim();
+      if (!source || source.length > 240 || !/[\u3400-\u9fff\ue000-\uf8ff]/u.test(source)) continue;
+      const parent = node.parentElement;
+      if (!parent || parent.closest(excluded) || parent.closest(knownRegions)) continue;
+      const chain = [];
+      for (let current = parent; current && current !== document.body; current = current.parentElement) chain.push(current);
+      if (!chain.some(element => fallbackScope.test(String(element.className || '')))) continue;
+      if (chain.some(element => fallbackBlocked.test(String(element.className || '')) || /^(INPUT|TEXTAREA|BUTTON|SELECT)$/i.test(element.tagName))) continue;
+      const region = parent;
+      if (region.children.length > 4 || region.textContent.trim() !== source) continue;
+      if (found.includes(region)) continue;
+      found.push(region);
+    }
+    return found;
   }
   function visibleTitle(document, region) {
     const rect = region.getBoundingClientRect();
@@ -279,6 +309,9 @@
         count += 1;
       }
       const candidates = Array.from(document.querySelectorAll(titleEngine?.remote ? `${titleRegions},${metadataRegions}` : titleRegions));
+      if (titleEngine?.remote) {
+        for (const region of fallbackRegions(document)) candidates.push(region);
+      }
       const visibility = new Map();
       // Visible metadata first; then pretranslate the loaded chapter directory
       // in bounded waves, without opening every chapter or flooding the worker.
@@ -302,7 +335,8 @@
           const request = { source, generation, path: document.location.pathname, values: nodes.map(n => n.data), nodes };
           pending.set(region, request);
           inflight++;
-          Promise.resolve(titleEngine.convert(source, titleFont(document, region), metadataKind(region))).then(result => {
+          const kind = region.matches(`${titleRegions},${metadataRegions}`) ? metadataKind(region) : fallbackKind(region);
+          Promise.resolve(titleEngine.convert(source, titleFont(document, region), kind)).then(result => {
             if (!result || pending.get(region) !== request || !enabled || generation !== request.generation
               || document.location.pathname !== request.path || !allowedPath(document.location.pathname)
               || nodes.some((n, i) => !n.isConnected || !region.contains(n) || n.data !== request.values[i])
