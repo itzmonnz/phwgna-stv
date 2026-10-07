@@ -32,7 +32,15 @@
     '.muye-home-top-rank-list-item-info-cate', '.writer-list-current-first .level',
     '.writer-list-current-first .desc', '.muye-home-news-content-more', '.muye-bottom-rank-content-header',
     '.home-copyright-text-content', '.home-copyright-text-button', '.home-publish-list-button',
-    '.home-publish-list-item-text-second-time', '.update-list-item > .update-item:first-child'
+    '.home-publish-list-item-text-second-time', '.update-list-item > .update-item:first-child',
+    '.muye-rank-menu .arco-menu-item', '.muye-rank-wrap-header', '.rank-label-info',
+    '.muye-rank-menu .arco-menu-inline-header', '.rank-info', '.rank-label-info .title',
+    '.rank-label-info .item p', '.muye-rank-wrap-header p',
+    '.rank-book-item .book-item-footer-status', '.rank-book-item .book-item-count',
+    '.rank-book-item .book-item-footer-last', '.rank-book-item .book-item-footer-time',
+    '.author-zone-tab-item', '.tutorial-item-text-title', '.tutorial-item-text-content',
+    '.home-authortalk-title-text', '.home-authortalk-list-item-card1-content-introduction',
+    '.home-publish-list-item-text-second-from'
   ].join(',');
   const excluded = 'script,style,textarea,[contenteditable],.muye-home-news-content-item,.muye-stack-book-list,.page-directory-content,.reader-content,[class*="comment"]';
   const translations = new Map(dictionary.entries.flatMap(entry => entry.source.endsWith('：')
@@ -45,6 +53,21 @@
   function translateNode(node) {
     const source = node.data.trim();
     const parent = node.parentElement;
+    if (parent?.closest('.muye-rank-menu,.muye-rank-wrap-header')) {
+      const fixed = new Map([
+        ['榜单说明', 'Thông tin bảng xếp hạng'],
+        ['阅读榜', 'Bảng đọc nhiều'],
+        ['新书榜', 'Bảng truyện mới'],
+        ['男频阅读榜', 'Xếp hạng truyện nam · Đọc nhiều'],
+        ['男频新书榜', 'Xếp hạng truyện nam · Truyện mới'],
+        ['女频阅读榜', 'Xếp hạng truyện nữ · Đọc nhiều'],
+        ['女频新书榜', 'Xếp hạng truyện nữ · Truyện mới']
+      ]);
+      if (fixed.has(source)) return fixed.get(source);
+      if (source.startsWith('统计时间截止至')) return source.replace('统计时间截止至', 'Thời gian thống kê đến ');
+      if (source.startsWith('适用对象：')) return source.replace('适用对象：', 'Áp dụng cho: ');
+    }
+    if (source.startsWith('适用对象：')) return source.replace('适用对象：', 'Áp dụng cho: ');
     if (parent?.closest('.writer-list-current-first .desc') && source.startsWith('代表作')) return source.replace('代表作', 'Tác phẩm tiêu biểu: ');
     if (parent?.closest('.muye-bottom-rank-content-header')) {
       if (source === '阅读榜') return 'Đọc nhiều';
@@ -101,13 +124,13 @@
     };
   }
 
-  const titleRegions = '.muye-bottom-choiceness-item .book-text .title, .muye-bottom-rank-content h3.title, .muye-home-top-rank-list-item-info-name, .update-item.book-name a[href^="/page/"], .book-item-text .title, a.book-item-title[href^="/page/"], .muye-stack-book-list .book-name, .page-header-info .info-name h1, .home-publish-list-item-text-first-book';
-  const metadataRegions = '.author-name-text, .author-desc, .book-item-author, .book-text .author, .book-item-text .author, .muye-home-top-rank-list-item-info-author, a.chapter-item-title[href^="/reader/"], a.update-item-chapter[href^="/reader/"], .page-abstract-content p, .muye-reader-title, .muye-reader-nav-title, .muye-home-news-content-item, .writer-list-current-first .bottom .title, .writer-list-current-first .desc, .muye-bottom-rank-content .book-text .desc, .update-item-author, .home-publish-list-item-text-first-author, .home-publish-list-item-text-second-from';
+  const titleRegions = '.muye-bottom-choiceness-item .book-text .title, .muye-bottom-rank-content h3.title, .muye-home-top-rank-list-item-info-name, .update-item.book-name a[href^="/page/"], .book-item-text .title, a.book-item-title[href^="/page/"], .muye-stack-book-list .book-name, .page-header-info .info-name h1, .home-publish-list-item-text-first-book, .rank-book-item .title, .tutorial-item-text-title';
+  const metadataRegions = '.author-name-text, .author-desc, .book-item-author, .book-text .author, .book-item-text .author, .muye-home-top-rank-list-item-info-author, a.chapter-item-title[href^="/reader/"], a.update-item-chapter[href^="/reader/"], .page-abstract-content p, .muye-reader-title, .muye-reader-nav-title, .muye-home-news-content-item, .writer-list-current-first .bottom .title, .writer-list-current-first .desc, .muye-bottom-rank-content .book-text .desc, .update-item-author, .home-publish-list-item-text-first-author, .home-publish-list-item-text-second-from, .rank-book-item .author, .rank-book-item .desc, .rank-book-item .book-item-footer-last .chapter, .home-authortalk-list-item-card1-content-introduction';
   function metadataKind(region) {
     if (region.matches('.page-abstract-content p')) return 'introduction';
-    if (region.matches('.author-desc, .muye-home-news-content-item, .writer-list-current-first .desc, .muye-bottom-rank-content .book-text .desc')) return 'description';
+    if (region.matches('.author-desc, .muye-home-news-content-item, .writer-list-current-first .desc, .muye-bottom-rank-content .book-text .desc, .rank-book-item .desc, .home-authortalk-list-item-card1-content-introduction')) return 'description';
     if (region.matches('a.chapter-item-title, a.update-item-chapter, .muye-reader-title')) return 'chapter';
-    if (region.matches('.author-name-text, .book-item-author, .book-text .author, .book-item-text .author, .muye-home-top-rank-list-item-info-author, .writer-list-current-first .bottom .title, .update-item-author, .home-publish-list-item-text-first-author')) return 'author';
+    if (region.matches('.author-name-text, .book-item-author, .book-text .author, .book-item-text .author, .muye-home-top-rank-list-item-info-author, .writer-list-current-first .bottom .title, .update-item-author, .home-publish-list-item-text-first-author, .rank-book-item .author')) return 'author';
     return 'title';
   }
   function visibleTitle(document, region) {
@@ -132,7 +155,7 @@
       && bounds.bottom > Math.max(0, bounds.top) && bounds.top < view.innerHeight;
   }
   function titleFont(document, region) {
-    const owner = region.closest('[class*="font-"]');
+    const owner = region.closest('[class*="font-"]') || region.querySelector('[class*="font-"]');
     const family = Array.from(owner?.classList || []).find(name => /^font-[a-zA-Z0-9]+$/.test(name))?.slice(5);
     if (!family) return null;
     for (const style of document.querySelectorAll('style')) {
@@ -148,7 +171,7 @@
     let inflight = 0;
     let enabled = true;
     let generation = 0;
-    const pending = new WeakMap();
+    let pending = new WeakMap();
     let remoteTranslated = new WeakSet();
     function remember(node, source, translated, attribute) {
       const previous = originals.get(node);
@@ -350,7 +373,13 @@
       }
       originals.clear();
     }
-    return { apply, restore, setTitleEngine(engine) { restore(); titleEngine = engine; apply(); }, setEnabled(value) { enabled = value === true; if (!enabled) restore(); else apply(); } };
+    return { apply, restore, notifyNavigation() {
+      generation++;
+      inflight = 0;
+      pending = new WeakMap();
+      remoteTranslated = new WeakSet();
+      apply();
+    }, setTitleEngine(engine) { restore(); titleEngine = engine; apply(); }, setEnabled(value) { enabled = value === true; if (!enabled) restore(); else apply(); } };
   }
 
   async function start(document, storage, engineLoader) {
@@ -552,10 +581,24 @@
     status.textContent = 'Hachimi 40 · dịch nhóm và danh mục chương';
     loadTitles();
     let timer;
+    let lastPath = document.location.pathname;
+    const checkRoute = () => {
+      const path = document.location.pathname;
+      if (path === lastPath) return;
+      lastPath = path;
+      if (!allowedPath(path)) { translator.restore(); return; }
+      translator.notifyNavigation?.();
+      loadTitles();
+      if (!timer) timer = document.defaultView.setTimeout(() => { timer = null; translator.apply(); }, 120);
+    };
+    const onRouteEvent = () => checkRoute();
+    document.defaultView.addEventListener('popstate', onRouteEvent);
+    document.defaultView.addEventListener('hashchange', onRouteEvent);
     const observer = new document.defaultView.MutationObserver(() => {
       if (timer) return;
       timer = document.defaultView.setTimeout(() => {
         timer = null;
+        checkRoute();
         if (!allowedPath(document.location.pathname)) translator.restore();
         else { loadTitles(); translator.apply(); }
       }, 80);
@@ -568,7 +611,7 @@
     document.addEventListener('transitionend', onCarouselTransition, true);
     document.defaultView.addEventListener('scroll', onScroll, { passive: true, capture: true });
     document.defaultView.addEventListener('resize', onScroll);
-    return { translator, destroy() { stopped = true; unsubscribe?.(); positionController.destroy(); toolbar.finishAnimation(); stylesheet.removeEventListener('load', onStylesLoaded); loadGeneration++; observer.disconnect(); document.removeEventListener('transitionend', onCarouselTransition, true); document.defaultView.removeEventListener('scroll', onScroll, true); document.defaultView.removeEventListener('resize', onScroll); document.defaultView.clearTimeout(timer); translator.restore(); host.remove(); } };
+    return { translator, destroy() { stopped = true; unsubscribe?.(); positionController.destroy(); toolbar.finishAnimation(); stylesheet.removeEventListener('load', onStylesLoaded); loadGeneration++; observer.disconnect(); document.removeEventListener('transitionend', onCarouselTransition, true); document.defaultView.removeEventListener('scroll', onScroll, true); document.defaultView.removeEventListener('resize', onScroll); document.defaultView.removeEventListener('popstate', onRouteEvent); document.defaultView.removeEventListener('hashchange', onRouteEvent); document.defaultView.clearTimeout(timer); translator.restore(); host.remove(); } };
   }
   return Object.freeze({ createTranslator, createRuntimeStorage, start, storageKey, allowedPath });
 });
