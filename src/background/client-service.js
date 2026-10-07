@@ -32,6 +32,8 @@
     const { core, pronunciation, sites, storage, tabs, storageCall, isStvUrl, runtime } = options;
     const zoomQueues = new Map();
     const zoomNavigations = new Map();
+    const booksApi = globalThis.STVAIFanqiePublicBooks || (typeof require === 'function' ? require('../shared/fanqie-public-books.js') : null);
+    const booksService = booksApi.createService({ fetcher: options.publicBookReader });
     const hachimi = globalThis.STVAIHachimiService || (typeof require === 'function' ? require('./hachimi-service.js') : null);
     const titleService = hachimi.createService({
       tabs,
@@ -99,6 +101,16 @@
       return task;
     }
 
+    async function fanqieBookPreview(message, sender) {
+      if (!isFanqieSender(sender)) return { ok: false, reason: 'unauthorized-sender' };
+      if (message.rank !== undefined) {
+        const result = await booksService.rank(message.rank);
+        return result ? { ok: true, books: result } : { ok: false, reason: 'metadata-unavailable' };
+      }
+      if (message.bookId !== undefined && (typeof message.bookId !== 'string' || !/^\d{10,25}$/.test(message.bookId))) return { ok: false, reason: 'invalid-book' };
+      const result = await booksService.request(message.bookId);
+      return result ? { ok: true, ...(message.bookId === undefined ? { books: result } : { book: result }) } : { ok: false, reason: 'metadata-unavailable' };
+    }
     async function fanqieTitleTranslate(message, sender) {
       if (!isFanqieSender(sender)) return { ok: false, reason: 'unauthorized-sender' };
       const pref = (await storageCall(storage.local, 'get', ['stvai-fanqie-ui-v1']))?.['stvai-fanqie-ui-v1'];
@@ -348,6 +360,7 @@
       storageSet,
       fanqieUIGet,
       fanqieUISet,
+      fanqieBookPreview,
       fanqieTitleTranslate,
       fanqieIntroductionTranslate,
       fanqieTextTranslate,

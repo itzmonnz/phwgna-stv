@@ -1,11 +1,11 @@
 (function attachFanqieUI(root, factory) {
   const api = factory(root.STVAIFanqieDictionary || (typeof require === 'function'
     ? require('../shared/fanqie-ui-dictionary.js') : null), root.STVAIFanqieTitles || (typeof require === 'function'
-    ? require('../shared/fanqie-title-translator.js') : null), root.STVAIUI || (typeof require === 'function' ? require('./stv-ui.js') : null), root.STVAIFanqiePreferences || (typeof require === 'function' ? require('../shared/fanqie-preferences.js') : null), root.STVAINameManager || (typeof require === 'function' ? require('./stv-name-manager.js') : null));
+    ? require('../shared/fanqie-title-translator.js') : null), root.STVAIUI || (typeof require === 'function' ? require('./stv-ui.js') : null), root.STVAIFanqiePreferences || (typeof require === 'function' ? require('../shared/fanqie-preferences.js') : null), root.STVAINameManager || (typeof require === 'function' ? require('./stv-name-manager.js') : null), root.STVAIFanqieBookPreview || (typeof require === 'function' ? require('./fanqie-book-preview.js') : null));
   if (typeof module === 'object' && module.exports) module.exports = api;
   else if (root.document && root.location.hostname === 'fanqienovel.com'
     && root.location.protocol === 'https:') api.start(root.document, api.createRuntimeStorage(root.chrome?.runtime));
-})(typeof globalThis !== 'undefined' ? globalThis : this, function (dictionary, titles, ui, preferences, panels) {
+})(typeof globalThis !== 'undefined' ? globalThis : this, function (dictionary, titles, ui, preferences, panels, previews) {
   'use strict';
   const storageKey = 'stvai-fanqie-ui-v1';
   const regions = [
@@ -119,6 +119,9 @@
         if (!result?.ok) throw new Error('fanqie_storage_unavailable');
       },
       translateTitle(source) { return runtime.sendMessage({ type: 'STVAI_FANQIE_TITLE_TRANSLATE', source }); },
+      async loadBook(bookId) { const result = await runtime.sendMessage({ type: 'STVAI_FANQIE_BOOK_PREVIEW', bookId }); return result?.ok ? result.book : null; },
+      async loadBookIndex() { const result = await runtime.sendMessage({ type: 'STVAI_FANQIE_BOOK_PREVIEW' }); return result?.ok ? result.books : []; },
+      async loadRankBooks(rank) { const result = await runtime.sendMessage({ type: 'STVAI_FANQIE_BOOK_PREVIEW', rank }); return result?.ok ? result.books : []; },
       translateText(source, kind, priority = 0) { return runtime.sendMessage({ type: 'STVAI_FANQIE_TEXT_TRANSLATE', source, kind, priority }); },
       translateIntroduction(source, priority = 0) { return runtime.sendMessage({ type: 'STVAI_FANQIE_INTRODUCTION_TRANSLATE', source, priority }); }
     };
@@ -488,6 +491,7 @@
     if (!allowedPath(document.location.pathname) || document.getElementById('stvai-fanqie-ui')) return null;
     const translator = createTranslator(document, null);
     let stopped = false, loading = false, loaded = false, retryAfter = 0, loadGeneration = 0;
+    let previewDecoder;
     const loadTitles = () => {
       if (stopped || loading || loaded || language !== 'vi' || Date.now() < retryAfter || !document.querySelector(`${titleRegions},${metadataRegions}`)) return;
       const runtime = document.defaultView.chrome?.runtime;
@@ -500,6 +504,7 @@
       host.dataset.titleState = 'loading';
       Promise.resolve().then(loader).then(engine => {
         if (stopped || currentGeneration !== loadGeneration) return;
+        previewDecoder = engine;
         if (currentProvider === 'hachimi40' && (storage?.translateText || storage?.translateTitle)) {
           const engineDecoder = engine;
           const cache = new Map();
@@ -694,6 +699,12 @@
         translator.setEnabled(language === 'vi'); updateButton(); loadTitles();
       }
     });
+    const preview = previews?.install(document, { loadBook: id => storage?.loadBook?.(id), loadBookIndex: () => storage?.loadBookIndex?.(), loadRankBooks: rank => storage?.loadRankBooks?.(rank), decodeName: (source,node) => previewDecoder?.decode?.(source,titleFont(document,node)) || source, translate: async (source, kind) => {
+      if (language !== 'vi') return { text: source };
+      if (kind === 'category' && translations.has(source)) return { text: translations.get(source) };
+      const response = await storage?.translateText?.(source, kind, 0);
+      return response?.ok && response.provider === 'hachimi40' && response.source === source ? { text: response.text } : null;
+    } });
     translator.setEnabled(language === 'vi'); updateButton(); void persist();
     status.textContent = 'Hachimi 40 · dịch nhóm và danh mục chương';
     loadTitles();
@@ -703,6 +714,7 @@
       const path = document.location.pathname;
       if (path === lastPath) return;
       lastPath = path;
+      preview?.dismiss();
       if (!allowedPath(path)) { translator.restore(); return; }
       translator.notifyNavigation?.();
       loadTitles();
@@ -728,7 +740,7 @@
     document.addEventListener('transitionend', onCarouselTransition, true);
     document.defaultView.addEventListener('scroll', onScroll, { passive: true, capture: true });
     document.defaultView.addEventListener('resize', onScroll);
-    return { translator, destroy() { stopped = true; unsubscribe?.(); positionController.destroy(); toolbar.finishAnimation(); stylesheet.removeEventListener('load', onStylesLoaded); loadGeneration++; observer.disconnect(); document.removeEventListener('transitionend', onCarouselTransition, true); document.defaultView.removeEventListener('scroll', onScroll, true); document.defaultView.removeEventListener('resize', onScroll); document.defaultView.removeEventListener('popstate', onRouteEvent); document.defaultView.removeEventListener('hashchange', onRouteEvent); document.defaultView.clearTimeout(timer); translator.restore(); host.remove(); } };
+    return { translator, destroy() { stopped = true; preview?.destroy(); unsubscribe?.(); positionController.destroy(); toolbar.finishAnimation(); stylesheet.removeEventListener('load', onStylesLoaded); loadGeneration++; observer.disconnect(); document.removeEventListener('transitionend', onCarouselTransition, true); document.defaultView.removeEventListener('scroll', onScroll, true); document.defaultView.removeEventListener('resize', onScroll); document.defaultView.removeEventListener('popstate', onRouteEvent); document.defaultView.removeEventListener('hashchange', onRouteEvent); document.defaultView.clearTimeout(timer); translator.restore(); host.remove(); } };
   }
   return Object.freeze({ createTranslator, createRuntimeStorage, start, storageKey, allowedPath });
 });

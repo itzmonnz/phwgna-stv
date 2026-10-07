@@ -15,6 +15,7 @@
     "alarms"
   ],
   "host_permissions": [
+    "https://fanqienovel.com/*",
     "https://sangtacviet.app/*",
     "https://sangtacviet.com/*",
     "https://sangtacviet.vip/*",
@@ -89,6 +90,11 @@
   ],
   "content_scripts": [
     {
+      "matches": ["https://fanqienovel.com/*", "https://sangtacviet.app/*", "https://sangtacviet.com/*", "https://sangtacviet.vip/*", "http://sangtacviet.com/*", "http://14.225.254.182/*"],
+      "js": ["src/content/site-translation-guard.js"],
+      "run_at": "document_start"
+    },
+    {
       "matches": ["https://moxhi.vietphrase.app/*"],
       "js": ["src/content/hachimi-provider.js"],
       "run_at": "document_idle"
@@ -106,6 +112,7 @@
         "src/content/stv-motion.js",
         "src/content/stv-ui.js",
         "src/content/stv-name-manager.js",
+        "src/content/fanqie-book-preview.js",
         "src/content/fanqie-ui.js"
       ],
       "run_at": "document_idle"
