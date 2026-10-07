@@ -283,6 +283,15 @@
           .home-copyright-text-title:has([data-stvai-copyright])>svg{display:none}
           .home-copyright-text-title [data-stvai-copyright]{font-family:Arial,sans-serif;font-size:28px;line-height:1.4;color:#fff}
           .home-copyright-text-content{height:auto!important;white-space:normal;line-height:1.6;max-width:900px;margin-left:auto;margin-right:auto}
+          /* Fanqie's desktop canvas is fixed-width. Keep it reachable on
+             portrait displays instead of clipping it behind body overflow. */
+          @media(max-width:1100px){
+            html{overflow-x:auto!important}
+            body{overflow-x:visible!important;min-width:0!important}
+            #app{width:1240px;min-width:1240px;overflow-x:clip}
+            .muye-header{width:100%!important;min-width:0!important}
+            .muye-header .muye-header-content{width:100%!important;min-width:0!important;max-width:100%!important}
+          }
           @media(max-width:1100px){.muye-header .muye-header-content{padding:0 14px;gap:12px}.muye-header .muye-header-right{gap:10px;flex-wrap:wrap}.muye-header .muye-header-search{flex-basis:140px}.muye-header{height:auto;min-height:64px}.muye-header .muye-header-content{height:auto;min-height:64px;padding-top:10px;padding-bottom:10px}}
         `;
         (document.head || document.documentElement).append(layoutStyle);
