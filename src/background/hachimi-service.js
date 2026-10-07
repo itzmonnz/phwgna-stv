@@ -21,7 +21,7 @@
     const slotLocks = new Set();
     let journalUpdates = Promise.resolve();
     const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
-    async function providerTabs() {
+    async function providerTabs(requestedSlots = maxSlots) {
       if (tabsLoading) return tabsLoading;
       tabsLoading = (async () => {
       // URL queries can omit a freshly created/loading tab. Ownership must
@@ -49,9 +49,10 @@
         await updateJournals(current => current.filter(item => !closedIds.has(item.tabId)));
         journals = journals.filter(item => !closedIds.has(item.tabId));
       }
+      const targetSlots = Math.max(1, Math.min(maxSlots, Math.trunc(Number(requestedSlots) || maxSlots)));
       const result = Array(maxSlots);
       const claimed = new Set(pool.filter(Boolean).map(entry => entry.tabId).filter(Number.isInteger));
-      for (let slotId = 0; slotId < maxSlots; slotId++) {
+      for (let slotId = 0; slotId < targetSlots; slotId++) {
         const entry = pool[slotId];
         if (Number.isInteger(entry?.tabId)) {
           let tab = open.find(candidate => candidate.id === entry.tabId);
@@ -70,7 +71,7 @@
           }
         }
       }
-      for (let slotId = 0; slotId < maxSlots; slotId++) {
+      for (let slotId = 0; slotId < targetSlots; slotId++) {
         if (result[slotId] || Number.isInteger(pool[slotId]?.tabId)) continue;
         const journal = journals.find(item => item.slotId === slotId);
         const candidate = owned.find(tab => !claimed.has(tab.id) && (!journal || journal.tabId === tab.id));
@@ -97,6 +98,17 @@
       })().finally(() => { tabsLoading = null; });
       return tabsLoading;
     }
+    async function warm() {
+      if (!(await enabled())) return { ok: false, reason: 'disabled' };
+      const tabsList = await providerTabs(1);
+      const tab = tabsList[0];
+      if (!tab?.id) throw Error('provider_unreachable');
+      // The page performs the WebGPU model initialization itself. Opening the
+      // owned tab here moves that work ahead of the first translation without
+      // creating a fake request or keeping the service worker alive while the
+      // page loads. Normal dispatch still waits for the real ready signal.
+      return { ok: true, tabId: tab.id };
+    }
     function normalizeJournals(value) {
       if (value?.version === 2 && Array.isArray(value.slots)) return value.slots.filter(Boolean);
       if (value?.requestId && Number.isInteger(value.tabId)) return [{ slotId: 0, ...value }];
@@ -114,6 +126,9 @@
       return task;
     }
     async function dispatch(source, key) {
+      // Dispatch keeps the established pool behavior: once real work starts,
+      // restore all configured slots so concurrent requests can run in parallel.
+      // The separate warm() path intentionally starts only slot 0 in advance.
       const tabsList = await providerTabs();
       const journals = await readJournals();
       const journal = journals.find(item => item.key === key && item.source === source);
@@ -299,7 +314,7 @@
         .finally(() => { if (counted) queued--; pending.delete(key); priorities.delete(key); });
       pending.set(key, task); return task;
     }
-    return { translate, poolSize: maxSlots };
+    return { translate, warm, poolSize: maxSlots };
   }
   return { createService, providerUrl, cacheKey, journalKey, poolKey };
 });

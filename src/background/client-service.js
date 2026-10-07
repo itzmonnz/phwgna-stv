@@ -74,7 +74,12 @@
     async function fanqieUIGet(message, sender) {
       if (!isFanqieSender(sender) && !isFanqieSettingsSender(sender)) return { ok: false, reason: 'unauthorized-sender' };
       const values = await storageCall(storage.local, 'get', [fanqiePrefs.storageKey]);
-      return { ok: true, ...fanqiePrefs.normalize(values?.[fanqiePrefs.storageKey]) };
+      const preferences = fanqiePrefs.normalize(values?.[fanqiePrefs.storageKey]);
+      // Start one owned Hachimi tab while Fanqie is loading. The first user
+      // translation then reuses a warm WebGPU session; a second tab is still
+      // created lazily only when two requests truly run in parallel.
+      if (preferences.language !== 'zh' && isFanqieSender(sender)) void titleService.warm().catch(() => {});
+      return { ok: true, ...preferences };
     }
     async function fanqieUISet(message, sender) {
       if (!isFanqieSender(sender) && !isFanqieSettingsSender(sender)) return { ok: false, reason: 'unauthorized-sender' };

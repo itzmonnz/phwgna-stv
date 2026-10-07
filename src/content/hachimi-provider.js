@@ -61,7 +61,13 @@
       const id = message?.requestId;
       if (typeof id !== 'string' || !/^[a-zA-Z0-9_-]{1,100}$/.test(id)) return error('invalid_request');
       const old = receipts.get(id);
-      if (message.type === 'STVAI_HACHIMI_STATUS') return old ? { ok: true, state: old.state, result: old.result } : { ok: true, state: 'missing' };
+      if (message.type === 'STVAI_HACHIMI_STATUS') {
+        const ready = Boolean(q('modelSelect') && q('goBtn') && q('src') && q('out')
+          && q('loading')?.hidden && q('gate')?.hidden && !busy()
+          && /Hachimi 40/.test(q('chipBadge')?.textContent || '')
+          && q('modelSelect')?.value === 'hachimi40');
+        return old ? { ok: true, state: old.state, result: old.result, ready } : { ok: true, state: 'missing', ready };
+      }
       if (message.type !== 'STVAI_HACHIMI_TRANSLATE') return error('invalid_request');
       if (typeof message.source !== 'string' || !message.source.trim() || message.source.length > 1240 || message.model !== 'hachimi40') return error('invalid_source');
       if (old) return old.source === message.source ? { ok: true, state: old.state, result: old.result } : error('request_mismatch');
