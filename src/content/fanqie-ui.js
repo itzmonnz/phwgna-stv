@@ -127,10 +127,14 @@
   const titleRegions = '.muye-bottom-choiceness-item .book-text .title, .muye-bottom-rank-content h3.title, .muye-home-top-rank-list-item-info-name, .update-item.book-name a[href^="/page/"], .book-item-text .title, a.book-item-title[href^="/page/"], .muye-stack-book-list .book-name, .page-header-info .info-name h1, .home-publish-list-item-text-first-book, .rank-book-item .title, .tutorial-item-text-title, [class*="article"] h1, [class*="article-title"], [class*="article"] [class*="title"]';
   const metadataRegions = '.author-name-text, .author-desc, .book-item-author, .book-text .author, .book-item-text .author, .muye-home-top-rank-list-item-info-author, a.chapter-item-title[href^="/reader/"], a.update-item-chapter[href^="/reader/"], .page-abstract-content p, .muye-reader-title, .muye-reader-nav-title, .muye-home-news-content-item, .writer-list-current-first .bottom .title, .writer-list-current-first .desc, .muye-bottom-rank-content .book-text .desc, .update-item-author, .home-publish-list-item-text-first-author, .home-publish-list-item-text-second-from, .rank-book-item .author, .rank-book-item .desc, .rank-book-item .book-item-footer-last .chapter, .home-authortalk-list-item-card1-content-introduction, [class*="article-author"], [class*="article-byline"], [class*="article-desc"], [class*="article-content"], [class*="article"] [class*="author"], [class*="article"] [class*="desc"], [class*="article"] [class*="content"]';
   const commentRegions = '.comment, [class*="comment-content"], [class*="comment-text"], [class*="comment-item"] .content, [class*="reply-content"], [class*="reply-text"]';
+  const genreRegions = '.muye-home-top-rank-list-item-info-cate, .rank-book-item .category, .book-item-text .category, .book-item-category, .book-item-text .genre';
+  const categoryRegions = `.book-item-text .tags, .book-item .book-item-label, .info-label, .rank-book-item .tags,${genreRegions}`;
+  function contentPriority(kind) { return ({ ui: 0, title: 1, category: 2, introduction: 3, description: 3, author: 4, chapter: 5, comment: 6 })[kind] ?? 6; }
   const fallbackScope = /(?:book|rank|home|writer|author|tutorial|publish|search|category|library|menu|header|update|news|zone|article|detail|richtext|markdown)/i;
   const fallbackBlocked = /(?:comment|reply|user|avatar|account|login|password|phone|email|form|input|textarea|button|reader-content|chapter-content|copyright|footer|nav-item)/i;
   const knownRegions = `${regions},${titleRegions},${metadataRegions}`;
   function metadataKind(region) {
+    if (region.matches(categoryRegions)) return region.matches(genreRegions) ? 'category' : 'ui';
     const className = typeof region.className === 'string' ? region.className : '';
     if (/(?:comment|reply)/i.test(className)) return 'comment';
     if (/(?:author|byline)/i.test(className)) return 'author';
@@ -143,6 +147,8 @@
   }
   function fallbackKind(region) {
     const classes = typeof region.className === 'string' ? region.className : '';
+    if (/(?:tag|label|menu|header|filter)/i.test(classes)) return 'ui';
+    if (/(?:category|cate|genre)/i.test(classes)) return 'category';
     if (/(?:comment|reply)/i.test(classes)) return 'comment';
     if (/(?:author|writer|creator)/i.test(classes)) return 'author';
     if (/(?:desc|abstract|intro|summary|content|bio)/i.test(classes)) return 'description';
@@ -314,18 +320,29 @@
         input.setAttribute('placeholder', translated);
         count += 1;
       }
-      const candidates = Array.from(document.querySelectorAll(titleEngine?.remote ? `${titleRegions},${metadataRegions},${commentRegions}` : titleRegions));
+      const candidates = Array.from(document.querySelectorAll(titleEngine?.remote ? `${titleRegions},${metadataRegions},${categoryRegions},${commentRegions}` : titleRegions));
+      const fixedLabels = new Set();
       if (titleEngine?.remote) {
+        for (const region of document.querySelectorAll(regions)) {
+          if (region.closest(excluded) || region.closest('.writer-login,input,textarea,[contenteditable]')) continue;
+          const walker = document.createTreeWalker(region, 4);
+          let node;
+          while ((node = walker.nextNode())) {
+            const parent = node.parentElement;
+            if (!parent || parent.children.length || !/[\u3400-\u9fff]/u.test(node.data)
+              || parent.closest(`${titleRegions},${metadataRegions},${categoryRegions},${commentRegions}`)) continue;
+            fixedLabels.add(parent);
+          }
+        }
+        candidates.push(...fixedLabels);
         for (const region of fallbackRegions(document)) candidates.push(region);
       }
-      const visibility = new Map();
-      // Visible metadata first; then pretranslate the loaded chapter directory
-      // in bounded waves, without opening every chapter or flooding the worker.
+      const kindOf = region => fixedLabels.has(region) ? 'ui' : region.matches(`${titleRegions},${metadataRegions},${categoryRegions},${commentRegions}`) ? metadataKind(region) : fallbackKind(region);
+      // Translate all loaded page content in bounded waves, ordered by kind.
       if (titleEngine?.remote) {
-        for (const region of candidates) visibility.set(region, visibleTitle(document, region));
-        candidates.sort((a, b) => Number(visibility.get(b)) - Number(visibility.get(a)));
+        candidates.sort((a, b) => contentPriority(kindOf(a)) - contentPriority(kindOf(b)));
       }
-      if (titleEngine) for (const region of candidates) {
+      if (titleEngine) for (const region of new Set(candidates)) {
         if (region.closest('script,style,textarea,[contenteditable],.reader-content')) continue;
         const walker = document.createTreeWalker(region, 4), nodes = [];
         const isComment = region.matches(commentRegions);
@@ -338,7 +355,9 @@
         if (!nodes.length || nodes.every(n => originals.get(n)?.translated === n.data) && (!titleEngine.remote || remoteTranslated.has(region))) continue;
         const source = nodes.map(n => n.data).join('');
         if (titleEngine.remote) {
-          if (!visibility.get(region) && !region.matches('a.chapter-item-title[href^="/reader/"]')) continue;
+          if (!/[\u3400-\u9fff\ue000-\uf8ff]/u.test(source)) continue;
+          const kind = kindOf(region);
+          if (kind === 'chapter' && !/^\/(?:page|reader)\/\d+\/?$/.test(document.location.pathname)) continue;
           const old = pending.get(region);
           if (old?.source === source && old.generation === generation && old.path === document.location.pathname
             && old.nodes.length === nodes.length && old.nodes.every((n, i) => n === nodes[i])) continue;
@@ -346,8 +365,7 @@
           const request = { source, generation, path: document.location.pathname, values: nodes.map(n => n.data), nodes };
           pending.set(region, request);
           inflight++;
-          const kind = region.matches(`${titleRegions},${metadataRegions},${commentRegions}`) ? metadataKind(region) : fallbackKind(region);
-          const priority = visibleTitle(document, region) ? 0 : (kind === 'chapter' ? 2 : 1);
+          const priority = contentPriority(kind);
           Promise.resolve(titleEngine.convert(source, titleFont(document, region), kind, priority)).then(result => {
             if (!result || pending.get(region) !== request || !enabled || generation !== request.generation
               || document.location.pathname !== request.path || !allowedPath(document.location.pathname)
@@ -541,9 +559,9 @@
     const updateButton = () => {
       introStatus.hidden = language !== 'vi';
       button.textContent = language === 'vi' ? 'Tiếng Việt · 中文' : '中文 · Tiếng Việt';
-      button.title = 'Phwgna: dịch nhãn giao diện; tên truyện dùng nguồn đã chọn. Rê chuột tên để xem gốc. Không dịch chương hoặc bình luận.';
+      button.title = 'Dịch toàn bộ nội dung công khai đã tải: giao diện/tag → tên truyện → thể loại → mô tả → tác giả → tên chương → bình luận. Tên chương chỉ dịch khi mở truyện. Rê chuột để xem gốc.';
       providerButton.textContent = 'Hachimi 40 · thử lại phần chưa dịch';
-      providerButton.title = 'Dịch trên máy qua tab Mặc Hi chạy nền, không quota API. Tên truyện, tác giả, tên chương và giới thiệu dùng cache riêng. Không dịch nội dung chương hoặc bình luận.';
+      providerButton.title = 'Dịch trên máy qua tối đa hai tab Mặc Hi chạy nền, không quota API. Dịch cả phần ngoài màn hình đã tải, dùng cache riêng. Giữ nguyên nội dung chương và ô nhập.';
     };
     const persist = async (patch = {}) => {
       host.dataset.storageState = 'saving';

@@ -5,7 +5,8 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function() {
   'use strict';
   const model = 'hachimi40';
-  const kinds = Object.freeze(['title', 'introduction', 'author', 'chapter', 'description', 'comment']);
+  const kinds = Object.freeze(['title', 'introduction', 'author', 'chapter', 'description', 'comment', 'ui', 'category']);
+  function priority(kind) { return ({ ui: 0, title: 1, category: 2, introduction: 3, description: 3, author: 4, chapter: 5, comment: 6 })[kind] ?? 6; }
   function normalize(source, kind) {
     if (!kinds.includes(kind) || typeof source !== 'string' || source.length > (['introduction', 'description'].includes(kind) ? 12000 : kind === 'comment' ? 1200 : 240)) return null;
     const text = source.normalize('NFC').trim();
@@ -49,5 +50,5 @@
   function validOutput(value) {
     return typeof value === 'string' && Boolean(value.trim()) && !/<0x[0-9a-f]{2}>|<unk>|<pad>|<\/s>|\ufffd/i.test(value);
   }
-  return Object.freeze({ model, kinds, normalize, segments, prepare, finish, validOutput });
+  return Object.freeze({ model, kinds, priority, normalize, segments, prepare, finish, validOutput });
 });

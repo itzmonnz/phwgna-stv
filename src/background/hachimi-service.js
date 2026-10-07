@@ -13,7 +13,7 @@
   const GROUP_MAX_INPUT = 1200;
   function createService({ tabs, read, write, enabled = async () => true, pollMs = DEFAULT_POLL_MS, timeout = 270000, poolSize = 2 }) {
     const maxSlots = Math.max(1, Math.min(2, Math.trunc(Number(poolSize) || 2)));
-    let queued = 0, cache = null, cacheLoading = null, tabsLoading = null, draining = false, active = 0, fairness = 0;
+    let queued = 0, cache = null, cacheLoading = null, tabsLoading = null, draining = false, active = 0;
     const waiting = [];
     const pending = new Map();
     const slotLocks = new Set();
@@ -135,7 +135,7 @@
       return save(source, kind, key, output);
     }
     function groupInput(item) {
-      if (!['title', 'author', 'chapter', 'description', 'comment'].includes(item.kind)) return null;
+      if (!['title', 'author', 'chapter', 'description', 'comment', 'ui', 'category'].includes(item.kind)) return null;
       const prepared = text.prepare(item.source, item.kind);
       const parts = text.segments(prepared.input, 240);
       return parts.length === 1 && parts[0].source && !/[\r\n]/.test(prepared.input) ? prepared : null;
@@ -145,13 +145,9 @@
     }
     function takeNext() {
       if (!waiting.length) return null;
-      const preferred = fairness < 4
-        ? waiting.findIndex(item => item.priority < 2)
-        : waiting.findIndex(item => item.priority >= 2);
-      const index = preferred >= 0 ? preferred : 0;
-      const item = waiting.splice(index, 1)[0];
-      fairness = item.priority >= 2 ? 0 : fairness + 1;
-      return item;
+      let index = 0;
+      for (let i = 1; i < waiting.length; i++) if (waiting[i].priority < waiting[index].priority) index = i;
+      return waiting.splice(index, 1)[0];
     }
     async function processGroup(group) {
       try {
@@ -210,7 +206,7 @@
         const hit = cached(source, kind, key);
         if (hit) return hit;
         return new Promise(resolve => {
-          waiting.push({ source, kind, key, priority: Math.max(0, Math.min(2, Number(options.priority) || 0)), resolve });
+          waiting.push({ source, kind, key, priority: text.priority(kind), resolve });
           scheduleDrain();
         });
       })().catch(failure)
