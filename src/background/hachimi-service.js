@@ -116,9 +116,10 @@
       let journal = existingJournal;
       if (journal && journal.tabId !== tab.id) throw Error('provider_busy');
       const requestId = journal?.requestId || `h40_${crypto.randomUUID().replace(/-/g, '')}`;
-      let started = Boolean(journal);
+      // Old journals have an uncertain dispatch state and must stay conservative.
+      let started = Boolean(journal && journal.dispatchStarted !== false);
       let reloaded = false;
-      if (!journal) { journal = { slotId: slotIndex, key, source, tabId: tab.id, requestId }; await updateJournals(current => [...current, journal]); }
+      if (!journal) { journal = { slotId: slotIndex, key, source, tabId: tab.id, requestId, dispatchStarted: false }; await updateJournals(current => [...current, journal]); }
       const clearJournal = () => updateJournals(current => current.filter(item => item.slotId !== slotIndex || item.requestId !== requestId));
       const end = Date.now() + timeout;
       while (Date.now() < end) {
@@ -130,12 +131,17 @@
           // existing physical tab, before dispatch, when no request was in flight.
           if (!started && !reloaded && tabs.reload && /Receiving end does not exist|Extension context invalidated|Could not establish connection/i.test(e.message || '')) {
             const current = tabs.get ? await tabs.get(tab.id) : tab;
+            if (current.status === 'loading' && (current.pendingUrl === providerUrl || current.url === providerUrl || !current.url)) {
+              await sleep(pollMs); continue;
+            }
             if (current.url !== providerUrl) throw Error('provider_unreachable');
             if (current.status !== 'loading') { reloaded = true; await tabs.reload(tab.id); }
           }
           await sleep(pollMs); continue;
         }
         if (state?.state === 'missing' && !started) {
+          journal = { ...journal, dispatchStarted: true };
+          await updateJournals(current => current.map(item => item.slotId === slotIndex && item.requestId === requestId ? journal : item));
           started = true; // Persisted receipt on the provider makes a lost ACK safe.
           try { state = await tabs.sendMessage(tab.id, { type: 'STVAI_HACHIMI_TRANSLATE', requestId, source, model: text.model }); }
           catch (_) { continue; }
