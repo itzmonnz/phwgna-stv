@@ -7,7 +7,10 @@
   const providerUrl = 'https://moxhi.vietphrase.app/#phwgna-hachimi40';
   const cacheKey = 'stvai-hachimi40-cache-v1';
   const journalKey = 'stvai-hachimi40-dispatch-v1';
-  function createService({ tabs, read, write, enabled = async () => true, pollMs = 500, timeout = 270000 }) {
+  const DEFAULT_POLL_MS = 250;
+  const GROUP_MAX_ITEMS = 12;
+  const GROUP_MAX_INPUT = 1200;
+  function createService({ tabs, read, write, enabled = async () => true, pollMs = DEFAULT_POLL_MS, timeout = 270000 }) {
     let queued = 0, cache = null, cacheLoading = null, draining = false;
     const waiting = [];
     const pending = new Map();
@@ -114,12 +117,12 @@
       try {
         while (waiting.length) {
           const first = waiting.shift(), group = [first];
-          let size = groupInput(first)?.input.length || 1200;
+          let size = groupInput(first)?.input.length || GROUP_MAX_INPUT;
           // Coalesce only identical kinds, with short local ordinals. Long IDs
           // were altered by the real model; never use model output as identity.
-          if (groupInput(first)) for (let i = 0; i < waiting.length && group.length < 8;) {
+          if (groupInput(first)) for (let i = 0; i < waiting.length && group.length < GROUP_MAX_ITEMS;) {
             const item = waiting[i], prepared = groupInput(item);
-            if (item.kind === first.kind && prepared && size + prepared.input.length + 5 <= 1200) {
+            if (item.kind === first.kind && prepared && size + prepared.input.length + 5 <= GROUP_MAX_INPUT) {
               waiting.splice(i, 1); group.push(item); size += prepared.input.length + 5;
             } else i++;
           }
