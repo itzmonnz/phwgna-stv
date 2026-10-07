@@ -17,6 +17,7 @@
     let queued = 0, cache = null, cacheLoading = null, tabsLoading = null, pool = null, draining = false, active = 0;
     const waiting = [];
     const pending = new Map();
+    const priorities = new Map();
     const slotLocks = new Set();
     let journalUpdates = Promise.resolve();
     const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -197,6 +198,10 @@
       const results = [];
       for (let i = 0; i < parts.length; i++) {
         if (parts[i].separator || !/[\u3400-\u9fff]/u.test(parts[i].source)) { results.push(parts[i].separator ?? parts[i].source); continue; }
+        // Yield between model dispatches; never cancel an in-flight receipt.
+        while (waiting.some(item => Math.floor(item.priority / 10) < Math.floor(priorities.get(key) / 10))) {
+          await processGroup([takeNext()]);
+        }
         const part = kind === 'title' ? text.prepare(parts[i].source, 'title') : { input: parts[i].source, prefix: '' };
         results.push(text.finish(await dispatch(part.input, `${key}:${i}`), part));
       }
@@ -267,20 +272,31 @@
       const source = text.normalize(input, kind);
       if (!source) return Promise.resolve({ ok: false, reason: 'invalid_source' });
       const key = JSON.stringify([text.model, kind, source]);
-      if (pending.has(key)) return pending.get(key);
-      if (queued >= 100) return Promise.resolve({ ok: false, reason: 'queue_full' });
-      queued++;
+      const priority = Number.isInteger(options.priority) && options.priority >= 0 && options.priority <= 26 ? options.priority : 20 + text.priority(kind);
+      if (pending.has(key)) {
+        priorities.set(key, Math.min(priorities.get(key), priority));
+        const item = waiting.find(item => item.key === key);
+        if (item) item.priority = priorities.get(key);
+        return pending.get(key);
+      }
+      priorities.set(key, priority);
+      let counted = false;
       const task = (async () => {
         await loadCache();
         if (!(await enabled())) return { ok: false, reason: 'disabled' };
         const hit = cached(source, kind, key);
         if (hit) return hit;
+        // Reserve capacity for deliberate user actions, without evicting or
+        // resending provider work already in flight. Cache hits never need a slot.
+        if (queued >= (priorities.get(key) < 10 ? 124 : 100)) return { ok: false, reason: 'queue_full' };
+        queued++;
+        counted = true;
         return new Promise(resolve => {
-          waiting.push({ source, kind, key, priority: text.priority(kind), resolve });
+          waiting.push({ source, kind, key, priority: priorities.get(key), resolve });
           scheduleDrain();
         });
       })().catch(failure)
-        .finally(() => { queued--; pending.delete(key); });
+        .finally(() => { if (counted) queued--; pending.delete(key); priorities.delete(key); });
       pending.set(key, task); return task;
     }
     return { translate, poolSize: maxSlots };

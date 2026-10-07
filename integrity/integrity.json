@@ -135,7 +135,7 @@
     },
     {
       "path": "src/background/hachimi-service.js",
-      "sha256": "77012ed767007beed9ddf7e1eaede4842b1b0f3612491ee51cb877666751f707"
+      "sha256": "d0bad10390dc3b3e330c23e309a05a4b81c98e2eba176666ec8827910dde9f37"
     },
     {
       "path": "src/background/message-router.js",
@@ -167,11 +167,11 @@
     },
     {
       "path": "src/content/fanqie-book-preview.js",
-      "sha256": "c91f7c3f2536b0be8220f7bd3c0dda5eb2b03b51b4e692992fcbea24958e3a2a"
+      "sha256": "9f2e4e7add3c3ccdb57df34c3b7282a692591cbd4ba0982423519d661abe2144"
     },
     {
       "path": "src/content/fanqie-ui.js",
-      "sha256": "515272856f4de60cab648834a2389fed66c6fbfe7849938335124c045b967499"
+      "sha256": "4851499bd3ca120020dc0298f20fc94ba992eafc2ed593e9a6a76c50327bd3dd"
     },
     {
       "path": "src/content/gemini-account-probe.js",
@@ -467,7 +467,7 @@
     }
   ],
   "product": "Phwgna Stv",
-  "sourceCommit": "8bb0a78d37668ab9a0016b440bc9495f8069f858",
+  "sourceCommit": "0e0fc382d2d44cd58a82926d8bb094fc134ad66e",
   "officialRepository": "https://github.com/itzmonnz/phwgna-stv",
   "officialReleaseUrl": "https://github.com/itzmonnz/phwgna-stv/releases/tag/v0.2.8",
   "publicKeyFingerprint": "85ac74c199d0a6028bce843d6f68d7632317912b460aad1a7431193767ec9871"

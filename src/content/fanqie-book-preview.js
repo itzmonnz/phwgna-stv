@@ -99,11 +99,18 @@
       const fields = [[title,record.title,'title'],[author,record.author,'author'],...tagNodes.map((node,i)=>[node,record.tags[i],'category']),[intro,record.intro,'introduction']].filter(([,source])=>source);
       status.textContent = translate ? 'Đang dịch thông tin bằng Hachimi 40…' : '';
       let missing = false;
+      const errors = new Set();
+      const safeReasons = new Set(['queue_full','disabled','invalid_source','provider_busy','provider_unreachable','provider_ui_changed','model_timeout','model_error','response_receipt_missing','response_mismatch','invalid_translation','provider_edited','model_unavailable']);
+      delete host.dataset.translationErrors;
       await Promise.all(fields.map(async ([node,source,kind]) => {
-        try { const result = await translate?.(source,kind); if (destroyed || token !== generation || !dialog.open) return; if (result?.text) node.textContent = result.text; else if (/[\u3400-\u9fff]/.test(source)) missing = true; }
-        catch (_) { missing = true; }
+        try { const result = await translate?.(source,kind); if (destroyed || token !== generation || !dialog.open) return; if (result?.text) node.textContent = result.text; else if (/[\u3400-\u9fff]/.test(source)) { missing = true; errors.add(safeReasons.has(result?.reason) ? result.reason : 'translation_unavailable'); } }
+        catch (_) { missing = true; errors.add('provider_unreachable'); }
       }));
-      if (!destroyed && token === generation && dialog.open) status.textContent = missing ? 'Một số phần chưa dịch được; đang giữ chữ gốc.' : 'Hachimi 40 · bản dịch được dùng lại từ cache khi có.';
+      if (!destroyed && token === generation && dialog.open) {
+        host.dataset.translationErrors = [...errors].join(',');
+        status.textContent = missing ? 'Một số phần chưa dịch được; đang giữ chữ gốc.' : 'Hachimi 40 · bản dịch được dùng lại từ cache khi có.';
+        if (errors.size) status.textContent += ` (${[...errors].join(', ')})`;
+      }
     }
     const cancel = () => { view.clearTimeout(timer); gesture = null; };
     const down = event => {

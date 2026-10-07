@@ -379,8 +379,9 @@
       }
       const kindOf = region => fixedLabels.has(region) ? 'ui' : region.matches(`${titleRegions},${metadataRegions},${categoryRegions},${commentRegions}`) ? metadataKind(region) : fallbackKind(region);
       // Translate all loaded page content in bounded waves, ordered by kind.
+      const priorityOf = region => (visibleTitle(document, region) ? 10 : 20) + contentPriority(kindOf(region));
       if (titleEngine?.remote) {
-        candidates.sort((a, b) => contentPriority(kindOf(a)) - contentPriority(kindOf(b)));
+        candidates.sort((a, b) => priorityOf(a) - priorityOf(b));
       }
       if (titleEngine) for (const region of new Set(candidates)) {
         if (region.closest('script,style,textarea,[contenteditable],.reader-content')) continue;
@@ -400,12 +401,16 @@
           if (kind === 'chapter' && !/^\/(?:page|reader)\/\d+\/?$/.test(document.location.pathname)) continue;
           const old = pending.get(region);
           if (old?.source === source && (!old.retryAt || Date.now() < old.retryAt) && old.generation === generation && old.path === document.location.pathname
-            && old.nodes.length === nodes.length && old.nodes.every((n, i) => n === nodes[i])) continue;
+            && old.nodes.length === nodes.length && old.nodes.every((n, i) => n === nodes[i])) {
+            const priority = priorityOf(region);
+            if (priority < old.priority) { old.priority = priority; void Promise.resolve(titleEngine.convert(source, titleFont(document, region), kind, priority)).catch(() => {}); }
+            continue;
+          }
           if (inflight >= 24) continue;
-          const request = { source, generation, path: document.location.pathname, values: nodes.map(n => n.data), nodes };
+          const priority = priorityOf(region);
+          const request = { source, priority, generation, path: document.location.pathname, values: nodes.map(n => n.data), nodes };
           pending.set(region, request);
           inflight++;
-          const priority = contentPriority(kind);
           Promise.resolve(titleEngine.convert(source, titleFont(document, region), kind, priority)).then(result => {
             if (!result) request.retryAt = Date.now() + 5000;
             if (!result || pending.get(region) !== request || !enabled || generation !== request.generation
@@ -447,9 +452,10 @@
           if (!/[\u3400-\u9fff]/.test(source)) continue;
           const old = pending.get(region);
           if (old?.source === source && (!old.retryAt || Date.now() < old.retryAt) && old.generation === generation && old.path === document.location.pathname) continue;
-          const request = { source, generation, path: document.location.pathname, values: nodes.map(n => n.data) };
+          const priority = (visibleTitle(document, region) ? 10 : 20) + 3;
+          const request = { source, priority, generation, path: document.location.pathname, values: nodes.map(n => n.data) };
           pending.set(region, request);
-          Promise.resolve().then(() => introductionEngine(source, 0)).then(result => {
+          Promise.resolve().then(() => introductionEngine(source, priority)).then(result => {
             if (!result?.ok || result.source !== source.normalize('NFC').trim() || result.provider !== 'hachimi40'
               || pending.get(region) !== request || !enabled || generation !== request.generation
               || document.location.pathname !== request.path || region.textContent !== source
@@ -509,13 +515,19 @@
           const engineDecoder = engine;
           const cache = new Map();
           const failures = new Map();
+          const priorities = new Map();
           engine = { remote: true, convert(source, font, kind = 'title', priority = 0) {
             const decoded = engineDecoder.decode ? engineDecoder.decode(source, font) : engineDecoder.convert(source, font)?.source;
             if (!decoded) return null;
             const key = `${kind}:${decoded}`;
             const failed = failures.get(key);
             if (failed && Date.now() < failed.until) return null;
+            if (cache.has(key) && priority < priorities.get(key)) {
+              priorities.set(key, priority);
+              void Promise.resolve(storage.translateText?.(decoded, kind, priority)).catch(() => {});
+            }
             if (!cache.has(key)) {
+              priorities.set(key, priority);
               status.textContent = 'Hachimi 40 đang dịch trên máy…';
               const call = storage.translateText ? storage.translateText(decoded, kind, priority) : kind === 'title' ? storage.translateTitle(decoded, priority) : storage.translateIntroduction?.(decoded, priority);
               const request = Promise.resolve(call).then(response => {
@@ -703,7 +715,7 @@
       if (language !== 'vi') return { text: source };
       if (kind === 'category' && translations.has(source)) return { text: translations.get(source) };
       const response = await storage?.translateText?.(source, kind, 0);
-      return response?.ok && response.provider === 'hachimi40' && response.source === source ? { text: response.text } : null;
+      return response?.ok && response.provider === 'hachimi40' && response.source === source ? { text: response.text } : { reason: response?.ok ? 'response_mismatch' : response?.reason || 'provider_unreachable' };
     } });
     translator.setEnabled(language === 'vi'); updateButton(); void persist();
     status.textContent = 'Hachimi 40 · dịch nhóm và danh mục chương';
