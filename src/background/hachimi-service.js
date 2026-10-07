@@ -7,33 +7,80 @@
   const providerUrl = 'https://moxhi.vietphrase.app/#phwgna-hachimi40';
   const cacheKey = 'stvai-hachimi40-cache-v1';
   const journalKey = 'stvai-hachimi40-dispatch-v2';
+  const poolKey = 'stvai-hachimi40-pool-v1';
   const legacyJournalKey = 'stvai-hachimi40-dispatch-v1';
   const DEFAULT_POLL_MS = 250;
   const GROUP_MAX_ITEMS = 12;
   const GROUP_MAX_INPUT = 1200;
   function createService({ tabs, read, write, enabled = async () => true, pollMs = DEFAULT_POLL_MS, timeout = 270000, poolSize = 2 }) {
     const maxSlots = Math.max(1, Math.min(2, Math.trunc(Number(poolSize) || 2)));
-    let queued = 0, cache = null, cacheLoading = null, tabsLoading = null, draining = false, active = 0;
+    let queued = 0, cache = null, cacheLoading = null, tabsLoading = null, pool = null, draining = false, active = 0;
     const waiting = [];
     const pending = new Map();
     const slotLocks = new Set();
+    let journalUpdates = Promise.resolve();
     const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
     async function providerTabs() {
       if (tabsLoading) return tabsLoading;
       tabsLoading = (async () => {
-      const existing = (await tabs.query({ url: 'https://moxhi.vietphrase.app/*' }))
-        .filter(tab => tab.url === providerUrl && Number.isInteger(tab.id));
-      const result = [];
-      const add = tab => { if (tab?.id && !result.some(candidate => candidate.id === tab.id)) result.push(tab); };
-      existing.forEach(add);
-      for (let attempts = 0; typeof tabs.create === 'function' && result.length < maxSlots && attempts < maxSlots * 2; attempts++) {
-        const before = result.length;
-        add(await tabs.create({ url: providerUrl, active: false }));
-        if (result.length === before) break;
+      // URL queries can omit a freshly created/loading tab. Ownership must
+      // survive those gaps and worker restarts, rather than creating a new pool.
+      if (!pool) {
+        const saved = await read(poolKey);
+        pool = Array.from({ length: maxSlots }, (_, slotId) => {
+          const entry = saved?.version === 1 && saved.slots?.[slotId];
+          return entry && (Number.isInteger(entry.tabId) || entry.creating === true) ? { ...entry } : null;
+        });
       }
-      if (!result.length) throw Error('provider_unreachable');
-      for (const tab of result) await tabs.update(tab.id, { autoDiscardable: false });
-      return result.slice(0, maxSlots);
+      const persist = () => write(poolKey, { version: 1, slots: pool });
+      const open = await tabs.query({});
+      const owned = open.filter(tab => (tab.url === providerUrl || tab.pendingUrl === providerUrl) && Number.isInteger(tab.id));
+      const journals = await readJournals();
+      const result = Array(maxSlots);
+      const claimed = new Set(pool.filter(Boolean).map(entry => entry.tabId).filter(Number.isInteger));
+      for (let slotId = 0; slotId < maxSlots; slotId++) {
+        const entry = pool[slotId];
+        if (Number.isInteger(entry?.tabId)) {
+          let tab = open.find(candidate => candidate.id === entry.tabId);
+          if (!tab && tabs.get) {
+            try { tab = await tabs.get(entry.tabId); }
+            catch (e) {
+              // Only affirmative evidence of closure permits replacement.
+              if (/No tab with id|Invalid tab ID/i.test(e.message || '')) {
+                claimed.delete(entry.tabId); pool[slotId] = null; await persist();
+                continue;
+              }
+            }
+          }
+          if (!tab || tab.url === providerUrl || tab.pendingUrl === providerUrl || !tab.url || (tab.url === 'about:blank' && tab.status === 'loading')) {
+            result[slotId] = tab || { id: entry.tabId, url: providerUrl, status: 'loading' };
+          }
+        }
+      }
+      for (let slotId = 0; slotId < maxSlots; slotId++) {
+        if (result[slotId] || Number.isInteger(pool[slotId]?.tabId)) continue;
+        const journal = journals.find(item => item.slotId === slotId);
+        const candidate = owned.find(tab => !claimed.has(tab.id) && (!journal || journal.tabId === tab.id));
+        if (candidate) {
+          result[slotId] = candidate; claimed.add(candidate.id);
+          pool[slotId] = { tabId: candidate.id }; await persist();
+        } else if (journal) {
+          // An unresolved receipt stays tied to its original physical tab.
+          result[slotId] = { id: journal.tabId, url: providerUrl };
+          claimed.add(journal.tabId); pool[slotId] = { tabId: journal.tabId }; await persist();
+        } else if (!pool[slotId]?.creating && typeof tabs.create === 'function') {
+          // Persist the reservation BEFORE create. An ambiguous create error
+          // or worker restart must not open another tab on the next retry.
+          pool[slotId] = { creating: true }; await persist();
+          const created = await tabs.create({ url: providerUrl, active: false });
+          if (!Number.isInteger(created?.id) || claimed.has(created.id)) throw Error('provider_creation_uncertain');
+          result[slotId] = created; claimed.add(created.id);
+          pool[slotId] = { tabId: created.id }; await persist();
+        }
+      }
+      if (!result.some(Boolean)) throw Error(pool.some(entry => entry?.creating) ? 'provider_creation_uncertain' : 'provider_unreachable');
+      for (const tab of result.filter(Boolean)) await tabs.update(tab.id, { autoDiscardable: false });
+      return result;
       })().finally(() => { tabsLoading = null; });
       return tabsLoading;
     }
@@ -48,12 +95,17 @@
       return normalizeJournals(await read(legacyJournalKey));
     }
     async function writeJournals(slots) { await write(journalKey, { version: 2, slots }); }
+    function updateJournals(change) {
+      const task = journalUpdates.then(async () => writeJournals(change(await readJournals())));
+      journalUpdates = task.catch(() => {});
+      return task;
+    }
     async function dispatch(source, key) {
       const journals = await readJournals();
       const tabsList = await providerTabs();
       const journal = journals.find(item => item.key === key && item.source === source);
       const used = new Set([...journals.map(item => item.slotId), ...slotLocks]);
-      const slotIndex = journal ? journal.slotId : tabsList.findIndex((_, index) => !used.has(index));
+      const slotIndex = journal ? journal.slotId : tabsList.findIndex((tab, index) => tab && !used.has(index));
       if (slotIndex < 0 || !tabsList[slotIndex] || slotLocks.has(slotIndex)) throw Error('provider_busy');
       slotLocks.add(slotIndex);
       try {
@@ -66,8 +118,8 @@
       const requestId = journal?.requestId || `h40_${crypto.randomUUID().replace(/-/g, '')}`;
       let started = Boolean(journal);
       let reloaded = false;
-      if (!journal) { journal = { slotId: slotIndex, key, source, tabId: tab.id, requestId }; await writeJournals([...journals, journal]); }
-      const clearJournal = async () => writeJournals((await readJournals()).filter(item => item.slotId !== slotIndex || item.requestId !== requestId));
+      if (!journal) { journal = { slotId: slotIndex, key, source, tabId: tab.id, requestId }; await updateJournals(current => [...current, journal]); }
+      const clearJournal = () => updateJournals(current => current.filter(item => item.slotId !== slotIndex || item.requestId !== requestId));
       const end = Date.now() + timeout;
       while (Date.now() < end) {
         if (!(await enabled())) throw Error('disabled');
@@ -141,7 +193,7 @@
       return parts.length === 1 && parts[0].source && !/[\r\n]/.test(prepared.input) ? prepared : null;
     }
     function failure(e) {
-      return { ok: false, reason: ['disabled', 'provider_busy', 'model_timeout', 'model_error', 'provider_edited', 'model_unavailable', 'auto_translate_enabled', 'provider_ui_changed', 'response_receipt_missing', 'response_mismatch', 'invalid_translation'].includes(e.message) ? e.message : 'provider_unreachable' };
+      return { ok: false, reason: ['disabled', 'provider_busy', 'provider_creation_uncertain', 'model_timeout', 'model_error', 'provider_edited', 'model_unavailable', 'auto_translate_enabled', 'provider_ui_changed', 'response_receipt_missing', 'response_mismatch', 'invalid_translation'].includes(e.message) ? e.message : 'provider_unreachable' };
     }
     function takeNext() {
       if (!waiting.length) return null;
@@ -215,5 +267,5 @@
     }
     return { translate, poolSize: maxSlots };
   }
-  return { createService, providerUrl, cacheKey, journalKey };
+  return { createService, providerUrl, cacheKey, journalKey, poolKey };
 });

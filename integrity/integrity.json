@@ -135,7 +135,7 @@
     },
     {
       "path": "src/background/hachimi-service.js",
-      "sha256": "ba5ca8ac1ad5bfa45f4f4b3d1139b18f8e6aa3bb85e0ac4656a176ce71cc8d49"
+      "sha256": "587d02bad406da575477ad332c8cb7fc0c41baa420cea46d8954af93d583e36f"
     },
     {
       "path": "src/background/message-router.js",
@@ -455,7 +455,7 @@
     }
   ],
   "product": "Phwgna Stv",
-  "sourceCommit": "7a5eb7f4981112090fa773f1399edace4e2fd55d",
+  "sourceCommit": "29bd99856971c435d58b9c1695cecda334094add",
   "officialRepository": "https://github.com/itzmonnz/phwgna-stv",
   "officialReleaseUrl": "https://github.com/itzmonnz/phwgna-stv/releases/tag/v0.2.8",
   "publicKeyFingerprint": "85ac74c199d0a6028bce843d6f68d7632317912b460aad1a7431193767ec9871"
