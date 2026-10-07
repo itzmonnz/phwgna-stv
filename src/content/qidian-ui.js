@@ -100,8 +100,11 @@
     controls.append(label,toggle,retry,scale);toolbar.root.querySelector('.stvai-menu-body').prepend(controls);shadow.append(css,style,toolbar.root);document.body.append(host);
     const layout=document.createElement('style');layout.dataset.stvaiQidian='layout';layout.textContent=`
       body,.nav-wrap,.main-nav-wrap,.read-content{font-family:"Segoe UI",Arial,"Microsoft YaHei",sans-serif!important}
+      body :is(a,p,h1,h2,h3,h4,span,strong,li,dd,dt):not([class*="icon"]){font-family:"Segoe UI",Arial,"Microsoft YaHei",sans-serif!important}
       body,.nav-wrap{font-weight:500}
       .nav-wrap a,.main-nav-wrap a,.intro-detail p{font-weight:500!important}
+      .book-list a.name,.edit-rec-list p{font-weight:500!important}
+      .edit-rec-list h3 a{font-weight:600!important}
       .main-nav-wrap li{width:auto!important;min-width:0}.main-nav-wrap .nav-list{display:flex;flex-wrap:wrap}.main-nav-wrap .nav-list a{padding-left:12px!important;padding-right:12px!important}
       .nav-left .cate-normal,.nav-left .cate-base{width:auto!important;flex:none}
       .nav-left .cate-normal li,.nav-left .cate-base li{width:auto!important;min-width:0;padding-left:8px!important;padding-right:8px!important}
