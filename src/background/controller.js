@@ -434,6 +434,15 @@
         });
         const tab = Array.isArray(providerWindow?.tabs) ? providerWindow.tabs[0] : null;
         if (!tab || !Number.isInteger(tab.id)) throw new Error("Provider window did not create a tab");
+        // Chrome/window managers can restore a newly created window despite
+        // the requested initial state. Correct that returned state before
+        // READY starts; never apply this rule to a user-opened existing window.
+        if (Number.isInteger(providerWindow.id)
+          && ["normal", "maximized", "fullscreen"].includes(providerWindow.state)
+          && typeof windows.update === "function") {
+          try { await windows.update(providerWindow.id, { state: "minimized", focused: false }); }
+          catch (_) { /* retain the created physical tab; do not spawn another */ }
+        }
         return {
           ...tab,
           active: true,
@@ -2279,13 +2288,20 @@
             await sendToTab(job.providerTabId, { type: "STVAI_PROVIDER_CANCEL", jobId: job.id });
             await persistJob(job);
             if (job.poolSlotId) {
+              let navigationReset = null;
               await withPoolLock(async () => {
                 const used = warmPool.slots.find((candidate) => candidate.slotId === job.poolSlotId);
                 // A prefetch belongs to the pool, not to the old reader DOM.
                 // Navigation cancels its request, but must not destroy the
                 // physical READY tab; otherwise three in-flight prefetches can
                 // erase the entire Gemini pool before the new chapter starts.
-                if (job.prefetch === true && used?.state === "leased") {
+                if (used?.jobId && used.jobId !== job.id) {
+                  // Cancellation awaited a provider reply. A newer chapter
+                  // may now own this physical slot; leave that lease intact.
+                } else if (used?.state === "ready" && !used.jobId) {
+                  // The old job has already released this verified session.
+                  // Navigation alone is not a reason to replay READY.
+                } else if (job.prefetch === true && used?.state === "leased") {
                   used.state = "ready";
                   used.jobId = "";
                   used.errorCode = "";
@@ -2293,11 +2309,28 @@
                   used.handoffPredecessorSlotId = "";
                   used.handoffSuccessorSlotId = "";
                   await persistPool();
+                } else if (used?.provider === "gemini" && used.desiredSession === "temporary"
+                  && ["leased", "recovering"].includes(used.state)) {
+                  // Cancel the old chapter's request, then reset its chat on
+                  // the same tab. Closing/reopening an AI window on reader
+                  // navigation creates a new opportunity to steal focus.
+                  used.state = "recovering";
+                  used.jobId = "";
+                  used.laneRole = "";
+                  used.errorCode = "";
+                  used.recoveryJobId ||= createId("setup-recovery");
+                  used.recoveryCancelled = false;
+                  used.recoveryStage = "clear_owned_prompt";
+                  await persistPool();
+                  navigationReset = used;
                 } else if (used) {
                   await removeOwnedSlot(used, { removalReason: "stv_navigation" });
                 }
                 job.poolSlotId = "";
               });
+              if (navigationReset) {
+                void recoverGeminiSlotInPlace(navigationReset, warmPool.settings || job.settings);
+              }
             } else await closeLegacyProviderTab(job);
             retainTerminalJob(job);
           }
