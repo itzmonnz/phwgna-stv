@@ -12,6 +12,18 @@
     '人气榜单':'Bảng nổi bật','热门作品排行':'Xếp hạng truyện nổi bật','月票榜':'Bảng phiếu tháng','畅销榜':'Bảng bán chạy','留存榜':'Bảng giữ chân độc giả','阅读指数榜':'Bảng chỉ số đọc','书友榜':'Bảng độc giả','推荐榜':'Bảng đề cử','追读榜':'Bảng theo đọc','收藏榜':'Bảng lượt lưu','更新榜':'Bảng cập nhật','VIP收藏榜':'Bảng lượt lưu VIP','新书排行':'Xếp hạng truyện mới','签约新书榜':'Truyện mới ký hợp đồng','潜力榜':'Bảng tiềm năng','未签约新书榜':'Truyện mới chưa ký','其他排行':'Bảng khác','女生精选榜':'Truyện nữ chọn lọc','女生月票榜':'Phiếu tháng truyện nữ','榜单规则':'Quy tắc xếp hạng',
     '作品简介':'Giới thiệu','目录':'Mục lục','免费试读':'Đọc thử miễn phí','立即阅读':'Đọc ngay','加入书架':'Thêm vào tủ sách','书籍详情':'Chi tiết truyện','作品荣誉':'Thành tích','作者':'Tác giả','上一章':'Chương trước','下一章':'Chương sau','设置':'Cài đặt','书评':'Bình luận','本章说':'Bình luận chương','发表评论':'Gửi bình luận','订阅':'Mua chương','打赏':'Tặng thưởng','返回书页':'Về trang truyện'
   }));
+  for(const [source,text] of [
+    ['登录起点、书架、阅读进度多端同步！','Đăng nhập Qidian để đồng bộ tủ sách và tiến độ đọc!'],
+    ['登录起点，书架、阅读进度多端同步！','Đăng nhập Qidian để đồng bộ tủ sách và tiến độ đọc!'],
+    ['立即登录','Đăng nhập ngay'],['首次使用？点我注册','Lần đầu dùng? Đăng ký'],
+    ['登录起点','Đăng nhập Qidian'],['阅读进度多端同步','Đồng bộ tiến độ đọc trên nhiều thiết bị']
+  ]) fixed.set(source,text);
+  const fixedText=source=>{
+    const exact=fixed.get(source);if(exact)return exact;
+    let text=source,changed=false;
+    for(const [from,to] of fixed){if(from.length<3||!text.includes(from))continue;text=text.split(from).join(to);changed=true;}
+    return changed?text:null;
+  };
   const blocked='script,style,noscript,svg,canvas,iframe,input,textarea,select,[contenteditable],code,pre,[data-stvai-qidian],#stvai-qidian-ui,#stvai-fanqie-book-preview,a[href*="/user/"],[class*="login"],[class*="account"],[class*="avatar"],[class*="nickname"],[class*="user-name"],[class*="username"],[class*="user-info"],[class*="payment"],[class*="charge"]';
   const kindOrder={ui:0,title:1,category:2,description:3,author:4,chapter:5,comment:6};
   function kindFor(el,route){
@@ -54,7 +66,13 @@
       const walker=document.createTreeWalker(document.body,4);let node;
       while((node=walker.nextNode())){
         const el=node.parentElement,raw=node.data,source=raw.trim().replace(/^[\ue000-\uf8ff\s]+|[\ue000-\uf8ff\s]+$/gu,'');
-        if(!el||el.closest(blocked)||!/[\u3400-\u9fff]/u.test(source))continue;
+        if(!el||!/[\u3400-\u9fff]/u.test(source))continue;
+        const label=fixedText(source);
+        if(label&&!el.closest('input,textarea,select,[contenteditable],code,pre')){
+          let r=records.get(node);if(r&&(node.data===r.output||node.data===r.raw))continue;
+          r={node,raw,source,kind:'ui',generation,output:null,pending:false,failed:false};records.set(node,r);apply(r,label);continue;
+        }
+        if(el.closest(blocked))continue;
         let r=records.get(node);if(r&&(node.data===r.output||node.data===r.raw))continue;
         if(source.length>12000)continue;
         let kind=kindFor(el,route);
@@ -62,7 +80,7 @@
         // Do not translate chapter lists linked from catalog cards before opening a book.
         if(kind==='chapter'&&!['book','reader'].includes(route))continue;
         r={node,raw,source,kind,generation,output:null,pending:false,failed:false};records.set(node,r);
-        const label=fixed.get(source);if(label)apply(r,label);
+        const fixedLabel=fixedText(source);if(fixedLabel)apply(r,fixedLabel);
       }
       const waiting=[...records.values()].filter(r=>r.node.isConnected&&r.generation===generation&&!r.output&&r.node.data===r.raw).sort((a,b)=>priority(a)-priority(b));
       for(const r of waiting){
@@ -86,12 +104,12 @@
     if(!sites.allowed(document.location.href)||document.getElementById('stvai-qidian-ui'))return null;
     let preference;
     try{const result=await runtime.sendMessage({type:'STVAI_QIDIAN_UI_GET'});if(!result?.ok)throw new Error('settings');preference=prefs.normalize(result);}catch(_){return null;}
-    const host=document.createElement('div');host.id='stvai-qidian-ui';host.style.cssText='position:relative;z-index:2147483200';
+    const host=document.createElement('div');host.id='stvai-qidian-ui';host.style.cssText='position:fixed;inset:0;pointer-events:none;z-index:2147483200';
     const shadow=host.attachShadow({mode:'open'}),css=document.createElement('link');css.rel='stylesheet';css.href=runtime.getURL('src/content/stv.css');
-    const style=document.createElement('style');style.textContent=':host{all:initial}.stvai-toolbar{left:12px;top:50%;max-width:calc(100vw / var(--stvai-ui-scale,1) - 24px);max-height:calc(100dvh / var(--stvai-ui-scale,1) - 24px)}.qidian-controls{display:grid;gap:10px}.qidian-controls p{font-size:12px;margin:0;color:var(--stvai-text-muted)}.qidian-controls select{padding:8px;background:var(--stvai-surface);color:var(--stvai-text);border:1px solid var(--stvai-border);border-radius:8px}';
+    const style=document.createElement('style');style.textContent=':host{all:initial;position:fixed;inset:0;display:block;pointer-events:none}.stvai-toolbar{position:fixed!important;pointer-events:auto;left:12px;top:50%;max-width:calc(100vw / var(--stvai-ui-scale,1) - 24px);max-height:calc(100dvh / var(--stvai-ui-scale,1) - 24px)}.qidian-controls{display:grid;gap:10px}.qidian-controls p{font-size:12px;margin:0;color:var(--stvai-text-muted)}.qidian-controls select{padding:8px;background:var(--stvai-surface);color:var(--stvai-text);border:1px solid var(--stvai-border);border-radius:8px}';
     let drag;
     const save=async patch=>{const result=await runtime.sendMessage({type:'STVAI_QIDIAN_UI_SET',...patch});if(!result?.ok)toolbar.status.textContent='Chưa lưu được cài đặt Qidian.';};
-    const toolbar=ui.createToolbar(document,{}, {initialCollapsed:preference.collapsed,onLayoutChange(anchor,icon){drag?.anchorTo(anchor,icon);},onCollapsedChange(collapsed){preference.collapsed=collapsed;void save({collapsed});}});
+    const toolbar=ui.createToolbar(document,{}, {initialCollapsed:preference.collapsed,onLayoutChange(){},onCollapsedChange(collapsed){preference.collapsed=collapsed;void save({collapsed});}});
     toolbar.root.dataset.site='qidian';toolbar.root.setAttribute('aria-label','Phwgna Stv · Qidian');toolbar.root.style.setProperty('--stvai-ui-scale',String(preference.uiScale));
     toolbar.root.querySelector('.stvai-actions').remove();for(const node of [toolbar.names,toolbar.clearCache,toolbar.cacheConfirmation,toolbar.progress,toolbar.recoveryStatus,toolbar.miniProgress,toolbar.miniCompleteRing,toolbar.miniTomoe])node.remove();
     const controls=document.createElement('div');controls.className='qidian-controls';const label=document.createElement('p');label.textContent='Qidian · Hachimi 40';
@@ -105,16 +123,19 @@
       .nav-wrap a,.main-nav-wrap a,.intro-detail p{font-weight:500!important}
       .book-list a.name,.edit-rec-list p{font-weight:500!important}
       .edit-rec-list h3 a{font-weight:600!important}
+      .nav-wrap ul,.main-nav-wrap ul{display:flex!important;flex-wrap:wrap!important;align-items:center!important;gap:4px 10px!important;margin:0!important;padding:0!important}
+      .nav-wrap li,.main-nav-wrap li{float:none!important;width:auto!important;min-width:0;margin:0!important;line-height:1.45!important;display:flex!important;align-items:center!important}
+      .nav-wrap a,.main-nav-wrap a{display:inline-flex!important;align-items:center!important;white-space:nowrap!important;line-height:1.45!important}
       .main-nav-wrap li{width:auto!important;min-width:0}.main-nav-wrap .nav-list{display:flex;flex-wrap:wrap}.main-nav-wrap .nav-list a{padding-left:12px!important;padding-right:12px!important}
       .nav-left .cate-normal,.nav-left .cate-base{width:auto!important;flex:none}
       .nav-left .cate-normal li,.nav-left .cate-base li{width:auto!important;min-width:0;padding-left:8px!important;padding-right:8px!important}
       .nav-left .cate-normal-item{width:auto!important;white-space:nowrap}
-      .work-filter li,.work-filter a,.rank-nav-list a{height:auto!important;white-space:normal!important;overflow-wrap:anywhere}
+      .work-filter li,.work-filter a,.rank-nav-list a{height:auto!important;white-space:normal!important;word-break:normal!important;overflow-wrap:break-word!important}
       .book-mid-info,.book-info,.book-info-detail,.rank-list .name-box{min-width:0}
-      .book-mid-info h2,.book-info h1{height:auto!important;white-space:normal!important;overflow-wrap:anywhere;line-height:1.45!important}
+      .book-mid-info h2,.book-info h1{height:auto!important;white-space:normal!important;word-break:normal!important;overflow-wrap:break-word!important;line-height:1.45!important}
       .book-mid-info .intro{height:auto!important;max-height:6em;overflow:hidden;line-height:1.5!important}
-      .book-mid-info .author{height:auto!important;white-space:normal!important;overflow-wrap:anywhere}
-      .book-info .tag{display:flex;flex-wrap:wrap;gap:6px;height:auto!important}.book-info .tag span,.book-info .tag a{margin:0!important;max-width:100%;white-space:normal;overflow-wrap:anywhere}
+      .book-mid-info .author{height:auto!important;white-space:normal!important;word-break:normal!important;overflow-wrap:break-word!important}
+      .book-info .tag{display:flex;flex-wrap:wrap;gap:6px;height:auto!important}.book-info .tag span,.book-info .tag a{margin:0!important;max-width:100%;white-space:normal;word-break:normal;overflow-wrap:break-word}
       .book-author,.book-information-normal,.book-info,.book-info-top{height:auto!important}
       .book-info .all-btn,.book-info .normal-btn{height:auto!important;display:flex;flex-wrap:wrap;align-items:center;gap:8px}
       .book-info .normal-btn{width:auto!important;max-width:100%}
