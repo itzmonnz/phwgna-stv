@@ -42,7 +42,10 @@
     '.home-authortalk-title-text', '.home-authortalk-list-item-card1-content-introduction',
     '.home-publish-list-item-text-second-from'
   ].join(',');
-  const excluded = 'script,style,textarea,[contenteditable],.muye-home-news-content-item,.muye-stack-book-list,.page-directory-content,.reader-content';
+  const readerBodyRegions = '.muye-reader-content, .reader-content';
+  const readerParagraphs = '.muye-reader-content p, .reader-content p';
+  const readerControlNodes = 'button,[role="button"],a,input,textarea,select,[aria-hidden="true"],[class*="toolbar"],[class*="action"],[class*="control"],[class*="tool"]';
+  const excluded = 'script,style,textarea,[contenteditable],.muye-home-news-content-item,.muye-stack-book-list,.page-directory-content';
   const translations = new Map(dictionary.entries.flatMap(entry => entry.source.endsWith('：')
     ? [[entry.source, entry.vietnamese], [entry.source.slice(0, -1), entry.vietnamese.replace(/:$/, '')]]
     : [[entry.source, entry.vietnamese]]));
@@ -128,7 +131,7 @@
   }
 
   const titleRegions = '.muye-bottom-choiceness-item .book-text .title, .muye-bottom-rank-content h3.title, .muye-home-top-rank-list-item-info-name, .update-item.book-name a[href^="/page/"], .book-item-text .title, a.book-item-title[href^="/page/"], .muye-stack-book-list .book-name, .page-header-info .info-name h1, .home-publish-list-item-text-first-book, .rank-book-item .title, .tutorial-item-text-title, [class*="article"] h1, [class*="article-title"], [class*="article"] [class*="title"]';
-  const metadataRegions = '.author-name-text, .author-desc, .book-item-author, .book-text .author, .book-item-text .author, .muye-home-top-rank-list-item-info-author, a.chapter-item-title[href^="/reader/"], a.update-item-chapter[href^="/reader/"], .page-abstract-content p, .muye-reader-title, .muye-reader-nav-title, .muye-home-news-content-item, .writer-list-current-first .bottom .title, .writer-list-current-first .desc, .muye-bottom-rank-content .book-text .desc, .update-item-author, .home-publish-list-item-text-first-author, .home-publish-list-item-text-second-from, .rank-book-item .author, .rank-book-item .desc, .rank-book-item .book-item-footer-last .chapter, .home-authortalk-list-item-card1-content-introduction, [class*="article-author"], [class*="article-byline"], [class*="article-desc"], [class*="article-content"], [class*="article"] [class*="author"], [class*="article"] [class*="desc"], [class*="article"] [class*="content"]';
+  const metadataRegions = `.author-name-text, .author-desc, .book-item-author, .book-text .author, .book-item-text .author, .muye-home-top-rank-list-item-info-author, a.chapter-item-title[href^="/reader/"], a.update-item-chapter[href^="/reader/"], .page-abstract-content p, .muye-reader-title, .muye-reader-nav-title, ${readerParagraphs}, .muye-home-news-content-item, .writer-list-current-first .bottom .title, .writer-list-current-first .desc, .muye-bottom-rank-content .book-text .desc, .update-item-author, .home-publish-list-item-text-first-author, .home-publish-list-item-text-second-from, .rank-book-item .author, .rank-book-item .desc, .rank-book-item .book-item-footer-last .chapter, .home-authortalk-list-item-card1-content-introduction, [class*="article-author"], [class*="article-byline"], [class*="article-desc"], [class*="article-content"], [class*="article"] [class*="author"], [class*="article"] [class*="desc"], [class*="article"] [class*="content"]`;
   const commentRegions = '.comment, [class*="comment-content"], [class*="comment-text"], [class*="comment-item"] .content, [class*="reply-content"], [class*="reply-text"]';
   const genreRegions = '.muye-home-top-rank-list-item-info-cate, .rank-book-item .category, .book-item-text .category, .book-item-category, .book-item-text .genre';
   const categoryRegions = `.book-item-text .tags, .book-item .book-item-label, .info-label, .rank-book-item .tags,${genreRegions}`;
@@ -137,6 +140,7 @@
   const fallbackBlocked = /(?:comment|reply|user|avatar|account|login|password|phone|email|form|input|textarea|button|reader-content|chapter-content|copyright|footer|nav-item)/i;
   const knownRegions = `${regions},${titleRegions},${metadataRegions}`;
   function metadataKind(region) {
+    if (region.matches(readerParagraphs)) return 'description';
     if (region.matches(categoryRegions)) return region.matches(genreRegions) ? 'category' : 'ui';
     const className = typeof region.className === 'string' ? region.className : '';
     if (/(?:comment|reply)/i.test(className)) return 'comment';
@@ -384,13 +388,14 @@
         candidates.sort((a, b) => priorityOf(a) - priorityOf(b));
       }
       if (titleEngine) for (const region of new Set(candidates)) {
-        if (region.closest('script,style,textarea,[contenteditable],.reader-content')) continue;
+        if (region.closest('script,style,textarea,[contenteditable]')) continue;
         const walker = document.createTreeWalker(region, 4), nodes = [];
         const isComment = region.matches(commentRegions);
         let node;
         while ((node = walker.nextNode())) {
           if (isComment && node.parentElement?.closest(commentRegions) !== region) continue;
           if (isComment && node.parentElement?.closest('button,[role="button"],input,textarea,[contenteditable],[class*="comment-author"],[class*="comment-user"],[class*="user-name"],[class*="comment-time"],[class*="comment-action"],[class*="reply-action"]')) continue;
+          if (region.matches(readerParagraphs) && node.parentElement?.closest(readerControlNodes)) continue;
           nodes.push(node);
         }
         if (!nodes.length || nodes.every(n => originals.get(n)?.translated === n.data) && (!titleEngine.remote || remoteTranslated.has(region))) continue;
@@ -415,13 +420,14 @@
             if (!result) request.retryAt = Date.now() + 5000;
             if (!result || pending.get(region) !== request || !enabled || generation !== request.generation
               || document.location.pathname !== request.path || !allowedPath(document.location.pathname)
-              || nodes.some((n, i) => !n.isConnected || !region.contains(n) || n.data !== request.values[i])
-              || (!isComment && region.textContent !== source)) return;
+              || nodes.some((n, i) => !n.isConnected || !region.contains(n) || n.data !== request.values[i])) return;
             nodes.forEach((n, i) => { const translated = i ? '' : result.text; remember(n, n.data, translated); n.data = translated; });
             remoteTranslated.add(region);
-            const tooltip = `${result.text}\n${result.source}\nHachimi 40 · ngocdang83 · CC BY 4.0`;
-            remember(region, region.getAttribute('title'), tooltip, 'title');
-            region.setAttribute('title', tooltip);
+            if (!region.matches(readerParagraphs)) {
+              const tooltip = `${result.text}\n${result.source}\nHachimi 40 · ngocdang83 · CC BY 4.0`;
+              remember(region, region.getAttribute('title'), tooltip, 'title');
+              region.setAttribute('title', tooltip);
+            }
           }).catch(() => { /* Failure leaves the original title, never local cache. */ }).finally(() => {
             if (generation === request.generation) inflight--;
             if (enabled && generation === request.generation && !nextApply) nextApply = document.defaultView.setTimeout(() => { nextApply = null; apply(); }, 32);
