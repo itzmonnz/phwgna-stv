@@ -38,6 +38,17 @@
       if (latest) { prefix = 'Mới cập nhật: '; source = source.slice(latest[0].length); }
       const chapter = /^第\s*(\d+)\s*章\s*/.exec(source);
       if (chapter) { prefix += `Chương ${chapter[1]}: `; source = source.slice(chapter[0].length); }
+      const volume = /^第\s*(\d+|[零〇一二三四五六七八九十百两]+)\s*卷\s*[：:]?\s*/.exec(source);
+      if (volume) {
+        const digits = '零一二三四五六七八九';
+        let number = 0, digit = 0;
+        for (const char of volume[1]) {
+          if (char === '百' || char === '十') { number += (digit || 1) * (char === '百' ? 100 : 10); digit = 0; }
+          else digit = char === '两' ? 2 : char === '〇' ? 0 : digits.indexOf(char);
+        }
+        prefix += `Quyển ${/^\d+$/.test(volume[1]) ? volume[1] : number + digit}: `;
+        source = source.slice(volume[0].length);
+      }
     }
     const wrapped = kind === 'title';
     return { prefix, input: wrapped ? `《${source.replace(/^[《](.*)[》]$/s, '$1')}》` : source, wrapped };
