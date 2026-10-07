@@ -135,7 +135,7 @@
       return save(source, kind, key, output);
     }
     function groupInput(item) {
-      if (!['title', 'author', 'chapter', 'description'].includes(item.kind)) return null;
+      if (!['title', 'author', 'chapter', 'description', 'comment'].includes(item.kind)) return null;
       const prepared = text.prepare(item.source, item.kind);
       const parts = text.segments(prepared.input, 240);
       return parts.length === 1 && parts[0].source && !/[\r\n]/.test(prepared.input) ? prepared : null;

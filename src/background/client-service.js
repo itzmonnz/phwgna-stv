@@ -113,7 +113,7 @@
 
     async function fanqieTextTranslate(message, sender) {
       if (!isFanqieSender(sender)) return { ok: false, reason: 'unauthorized-sender' };
-      if (!['title', 'author', 'chapter', 'description', 'introduction'].includes(message.kind)) return { ok: false, reason: 'invalid_kind' };
+      if (!['title', 'author', 'chapter', 'description', 'introduction', 'comment'].includes(message.kind)) return { ok: false, reason: 'invalid_kind' };
       return titleService.translate(message.source, message.kind, { priority: message.priority });
     }
 

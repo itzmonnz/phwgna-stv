@@ -42,7 +42,7 @@
     '.home-authortalk-title-text', '.home-authortalk-list-item-card1-content-introduction',
     '.home-publish-list-item-text-second-from'
   ].join(',');
-  const excluded = 'script,style,textarea,[contenteditable],.muye-home-news-content-item,.muye-stack-book-list,.page-directory-content,.reader-content,[class*="comment"]';
+  const excluded = 'script,style,textarea,[contenteditable],.muye-home-news-content-item,.muye-stack-book-list,.page-directory-content,.reader-content';
   const translations = new Map(dictionary.entries.flatMap(entry => entry.source.endsWith('：')
     ? [[entry.source, entry.vietnamese], [entry.source.slice(0, -1), entry.vietnamese.replace(/:$/, '')]]
     : [[entry.source, entry.vietnamese]]));
@@ -126,11 +126,13 @@
 
   const titleRegions = '.muye-bottom-choiceness-item .book-text .title, .muye-bottom-rank-content h3.title, .muye-home-top-rank-list-item-info-name, .update-item.book-name a[href^="/page/"], .book-item-text .title, a.book-item-title[href^="/page/"], .muye-stack-book-list .book-name, .page-header-info .info-name h1, .home-publish-list-item-text-first-book, .rank-book-item .title, .tutorial-item-text-title, [class*="article"] h1, [class*="article-title"], [class*="article"] [class*="title"]';
   const metadataRegions = '.author-name-text, .author-desc, .book-item-author, .book-text .author, .book-item-text .author, .muye-home-top-rank-list-item-info-author, a.chapter-item-title[href^="/reader/"], a.update-item-chapter[href^="/reader/"], .page-abstract-content p, .muye-reader-title, .muye-reader-nav-title, .muye-home-news-content-item, .writer-list-current-first .bottom .title, .writer-list-current-first .desc, .muye-bottom-rank-content .book-text .desc, .update-item-author, .home-publish-list-item-text-first-author, .home-publish-list-item-text-second-from, .rank-book-item .author, .rank-book-item .desc, .rank-book-item .book-item-footer-last .chapter, .home-authortalk-list-item-card1-content-introduction, [class*="article-author"], [class*="article-byline"], [class*="article-desc"], [class*="article-content"], [class*="article"] [class*="author"], [class*="article"] [class*="desc"], [class*="article"] [class*="content"]';
+  const commentRegions = '.comment, [class*="comment-content"], [class*="comment-text"], [class*="comment-item"] .content, [class*="reply-content"], [class*="reply-text"]';
   const fallbackScope = /(?:book|rank|home|writer|author|tutorial|publish|search|category|library|menu|header|update|news|zone|article|detail|richtext|markdown)/i;
   const fallbackBlocked = /(?:comment|reply|user|avatar|account|login|password|phone|email|form|input|textarea|button|reader-content|chapter-content|copyright|footer|nav-item)/i;
   const knownRegions = `${regions},${titleRegions},${metadataRegions}`;
   function metadataKind(region) {
     const className = typeof region.className === 'string' ? region.className : '';
+    if (/(?:comment|reply)/i.test(className)) return 'comment';
     if (/(?:author|byline)/i.test(className)) return 'author';
     if (/(?:desc|abstract|intro|summary|content)/i.test(className)) return 'description';
     if (region.matches('.page-abstract-content p')) return 'introduction';
@@ -141,6 +143,7 @@
   }
   function fallbackKind(region) {
     const classes = typeof region.className === 'string' ? region.className : '';
+    if (/(?:comment|reply)/i.test(classes)) return 'comment';
     if (/(?:author|writer|creator)/i.test(classes)) return 'author';
     if (/(?:desc|abstract|intro|summary|content|bio)/i.test(classes)) return 'description';
     if (/(?:chapter|latest|update)/i.test(classes)) return 'chapter';
@@ -311,7 +314,7 @@
         input.setAttribute('placeholder', translated);
         count += 1;
       }
-      const candidates = Array.from(document.querySelectorAll(titleEngine?.remote ? `${titleRegions},${metadataRegions}` : titleRegions));
+      const candidates = Array.from(document.querySelectorAll(titleEngine?.remote ? `${titleRegions},${metadataRegions},${commentRegions}` : titleRegions));
       if (titleEngine?.remote) {
         for (const region of fallbackRegions(document)) candidates.push(region);
       }
@@ -323,10 +326,15 @@
         candidates.sort((a, b) => Number(visibility.get(b)) - Number(visibility.get(a)));
       }
       if (titleEngine) for (const region of candidates) {
-        if (region.closest('script,style,textarea,[contenteditable],[class*="comment"],.reader-content')) continue;
+        if (region.closest('script,style,textarea,[contenteditable],.reader-content')) continue;
         const walker = document.createTreeWalker(region, 4), nodes = [];
+        const isComment = region.matches(commentRegions);
         let node;
-        while ((node = walker.nextNode())) nodes.push(node);
+        while ((node = walker.nextNode())) {
+          if (isComment && node.parentElement?.closest(commentRegions) !== region) continue;
+          if (isComment && node.parentElement?.closest('button,[role="button"],input,textarea,[contenteditable],[class*="comment-author"],[class*="comment-user"],[class*="user-name"],[class*="comment-time"],[class*="comment-action"],[class*="reply-action"]')) continue;
+          nodes.push(node);
+        }
         if (!nodes.length || nodes.every(n => originals.get(n)?.translated === n.data) && (!titleEngine.remote || remoteTranslated.has(region))) continue;
         const source = nodes.map(n => n.data).join('');
         if (titleEngine.remote) {
@@ -338,13 +346,13 @@
           const request = { source, generation, path: document.location.pathname, values: nodes.map(n => n.data), nodes };
           pending.set(region, request);
           inflight++;
-          const kind = region.matches(`${titleRegions},${metadataRegions}`) ? metadataKind(region) : fallbackKind(region);
+          const kind = region.matches(`${titleRegions},${metadataRegions},${commentRegions}`) ? metadataKind(region) : fallbackKind(region);
           const priority = visibleTitle(document, region) ? 0 : (kind === 'chapter' ? 2 : 1);
           Promise.resolve(titleEngine.convert(source, titleFont(document, region), kind, priority)).then(result => {
             if (!result || pending.get(region) !== request || !enabled || generation !== request.generation
               || document.location.pathname !== request.path || !allowedPath(document.location.pathname)
               || nodes.some((n, i) => !n.isConnected || !region.contains(n) || n.data !== request.values[i])
-              || region.textContent !== source) return;
+              || (!isComment && region.textContent !== source)) return;
             nodes.forEach((n, i) => { const translated = i ? '' : result.text; remember(n, n.data, translated); n.data = translated; });
             remoteTranslated.add(region);
             const tooltip = `${result.text}\n${result.source}\nHachimi 40 · ngocdang83 · CC BY 4.0`;

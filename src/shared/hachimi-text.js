@@ -5,9 +5,9 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function() {
   'use strict';
   const model = 'hachimi40';
-  const kinds = Object.freeze(['title', 'introduction', 'author', 'chapter', 'description']);
+  const kinds = Object.freeze(['title', 'introduction', 'author', 'chapter', 'description', 'comment']);
   function normalize(source, kind) {
-    if (!kinds.includes(kind) || typeof source !== 'string' || source.length > (['introduction', 'description'].includes(kind) ? 12000 : 240)) return null;
+    if (!kinds.includes(kind) || typeof source !== 'string' || source.length > (['introduction', 'description'].includes(kind) ? 12000 : kind === 'comment' ? 1200 : 240)) return null;
     const text = source.normalize('NFC').trim();
     return text && /[\u3400-\u9fff]/u.test(text) && !/[\ue000-\uf8ff]/u.test(text) ? text : null;
   }
