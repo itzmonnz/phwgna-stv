@@ -30,7 +30,9 @@
     else for (const child of Object.values(value)) collect(child, output, depth + 1);
     return output;
   }
-  function install(document, { translate, loadBook, loadBookIndex, loadRankBooks, decodeName = source=>source, holdMs = 550 } = {}) {
+  function install(document, { translate, loadBook, loadBookIndex, loadRankBooks, decodeName = source=>source, holdMs = 550,
+    cardSelector = cards, titleSelector = titles, siteLabel = 'Fanqie', resolveBook, bookHref = id => `/page/${id}` } = {}) {
+    const cards = cardSelector, titles = titleSelector;
     const view = document.defaultView;
     let gesture, timer, blocked, generation = 0, destroyed = false, indexRequest;
     const details = new Map();
@@ -43,7 +45,7 @@
     const close = document.createElement('button'); close.type = 'button'; close.className = 'close'; close.textContent = '×'; close.setAttribute('aria-label', 'Đóng xem nhanh');
     const content = document.createElement('div'); content.className = 'content';
     const make = (tag, className, text) => { const node = document.createElement(tag); node.className = className; if (text) node.textContent = text; return node; };
-    const eyebrow = make('p','eyebrow','Fanqie · Xem nhanh'), head = make('div','head'), cover = make('img','cover'); cover.alt = ''; cover.hidden = true;
+    const eyebrow = make('p','eyebrow',siteLabel + ' · Xem nhanh'), head = make('div','head'), cover = make('img','cover'); cover.alt = ''; cover.hidden = true;
     const heading = make('div','heading'), title = make('h2','title'), author = make('p','author'); heading.append(title,author); head.append(cover,heading);
     const tags = make('div','tags'), label = make('p','label','Giới thiệu'), intro = make('p','intro'), status = make('p','status'); status.setAttribute('role','status');
     const open = make('a','open','Mở truyện'); open.hidden = true;
@@ -57,6 +59,7 @@
       return indexRequest;
     };
     const load = async (card, source) => {
+      if (resolveBook) return resolveBook(card, source);
       const href = card.matches('a') ? card.getAttribute('href') : card.querySelector('a[href*="/page/"]')?.getAttribute('href');
       const match = /^\/page\/(\d{10,25})\/?$/.exec(href || '');
       const matches = [...new Map(collect(state(document,'home')).map(record=>[record.id,record])).values()].filter(record => record.title === source);
@@ -94,7 +97,7 @@
       const safeImage = /^https:\/\//.test(record.cover) ? record.cover : '';
       if (safeImage) { cover.src = safeImage; cover.hidden = false; }
       title.textContent = record.title; author.textContent = record.author; intro.textContent = record.intro || 'Trang chưa cung cấp giới thiệu.';
-      open.href = `/page/${record.id}`; open.hidden = false;
+      open.href = bookHref(record.id); open.hidden = false;
       const tagNodes = record.tags.map(text=>make('span','tag',text)); tags.append(...tagNodes);
       const fields = [[title,record.title,'title'],[author,record.author,'author'],...tagNodes.map((node,i)=>[node,record.tags[i],'category']),[intro,record.intro,'introduction']].filter(([,source])=>source);
       status.textContent = translate ? 'Đang dịch thông tin bằng Hachimi 40…' : '';

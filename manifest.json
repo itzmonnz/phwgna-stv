@@ -31,7 +31,10 @@
     "https://api.openai.com/*",
     "https://api.deepseek.com/*",
     "https://raw.githubusercontent.com/itzmonnz/phwgna-stv-updates/*",
-    "https://accounts.google.com/SignOutOptions*"
+    "https://accounts.google.com/SignOutOptions*",
+    "https://www.qidian.com/*",
+    "https://qidian.com/*",
+    "https://my.qidian.com/author/*"
   ],
   "background": {
     "service_worker": "src/background.js"
@@ -86,17 +89,44 @@
         "http://sangtacviet.com/*",
         "http://14.225.254.182/*"
       ]
+    },
+    {
+      "resources": [
+        "src/content/stv.css",
+        "assets/icons/phwgna-cat-128.png"
+      ],
+      "matches": [
+        "https://www.qidian.com/*",
+        "https://qidian.com/*",
+        "https://my.qidian.com/author/*"
+      ]
     }
   ],
   "content_scripts": [
     {
-      "matches": ["https://fanqienovel.com/*", "https://sangtacviet.app/*", "https://sangtacviet.com/*", "https://sangtacviet.vip/*", "http://sangtacviet.com/*", "http://14.225.254.182/*"],
-      "js": ["src/content/site-translation-guard.js"],
+      "matches": [
+        "https://fanqienovel.com/*",
+        "https://sangtacviet.app/*",
+        "https://sangtacviet.com/*",
+        "https://sangtacviet.vip/*",
+        "http://sangtacviet.com/*",
+        "http://14.225.254.182/*",
+        "https://www.qidian.com/*",
+        "https://qidian.com/*",
+        "https://my.qidian.com/author/*"
+      ],
+      "js": [
+        "src/content/site-translation-guard.js"
+      ],
       "run_at": "document_start"
     },
     {
-      "matches": ["https://moxhi.vietphrase.app/*"],
-      "js": ["src/content/hachimi-provider.js"],
+      "matches": [
+        "https://moxhi.vietphrase.app/*"
+      ],
+      "js": [
+        "src/content/hachimi-provider.js"
+      ],
       "run_at": "document_idle"
     },
     {
@@ -237,6 +267,26 @@
       ],
       "js": [
         "src/content/gemini-account-probe.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://www.qidian.com/*",
+        "https://qidian.com/*",
+        "https://my.qidian.com/author/*"
+      ],
+      "js": [
+        "src/shared/qidian-sites.js",
+        "src/shared/fanqie-preferences.js",
+        "src/shared/branding.js",
+        "src/vendor/gsap.min.js",
+        "src/content/stv-motion.js",
+        "src/content/stv-ui.js",
+        "src/content/stv-name-manager.js",
+        "src/content/fanqie-book-preview.js",
+        "src/content/qidian-book-preview.js",
+        "src/content/qidian-ui.js"
       ],
       "run_at": "document_idle"
     }

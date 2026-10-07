@@ -3,6 +3,7 @@ if (typeof importScripts === "function") {
   const backgroundImports = [
     "shared/fanqie-ui-dictionary.js",
     "shared/fanqie-preferences.js",
+    "shared/qidian-sites.js",
     "shared/fanqie-public-books.js",
     "shared/hachimi-text.js",
     "background/hachimi-service.js",

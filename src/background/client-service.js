@@ -7,6 +7,7 @@
   "use strict";
 
   const fanqiePrefs = globalThis.STVAIFanqiePreferences || (typeof require === 'function' ? require('../shared/fanqie-preferences.js') : null);
+  const qidianSites = globalThis.STVAIQidianSites || (typeof require === 'function' ? require('../shared/qidian-sites.js') : null);
   const CLIENT_STORAGE_KEYS = Object.freeze([
     "settings", "toolEnabled", "transmissionConsent", "automationConsentVersion",
     "automationConsentProvider", "ttsConsent", "ttsConsentVersion",
@@ -40,10 +41,9 @@
       poolSize: 2,
       read: async key => (await storageCall(storage.local, 'get', [key]))?.[key],
       write: (key, value) => storageCall(storage.local, 'set', { [key]: value }),
-      enabled: async () => {
-        const pref = (await storageCall(storage.local, 'get', ['stvai-fanqie-ui-v1']))?.['stvai-fanqie-ui-v1'];
-        return pref?.language !== 'zh';
-      }
+      // Each site's broker checks its own preference; both sites share the
+      // same bounded provider pool and exact model/kind/source cache.
+      enabled: async () => true
     });
 
     function isStvSender(sender) {
@@ -125,13 +125,52 @@
     async function fanqieIntroductionTranslate(message, sender) {
       if (!isFanqieSender(sender) || ![sender.url, sender.tab.url].filter(Boolean)
         .every(value => /^\/page\/\d+\/?$/.test(new URL(value).pathname))) return { ok: false, reason: 'unauthorized-sender' };
+      const pref = (await storageCall(storage.local, 'get', [fanqiePrefs.storageKey]))?.[fanqiePrefs.storageKey];
+      if (pref?.language === 'zh') return { ok: false, reason: 'disabled' };
       return titleService.translate(message.source, 'introduction', { priority: message.priority });
     }
 
     async function fanqieTextTranslate(message, sender) {
       if (!isFanqieSender(sender)) return { ok: false, reason: 'unauthorized-sender' };
+      const pref = (await storageCall(storage.local, 'get', [fanqiePrefs.storageKey]))?.[fanqiePrefs.storageKey];
+      if (pref?.language === 'zh') return { ok: false, reason: 'disabled' };
       if (!['title', 'author', 'chapter', 'description', 'introduction', 'comment', 'ui', 'category'].includes(message.kind)) return { ok: false, reason: 'invalid_kind' };
       return titleService.translate(message.source, message.kind, { priority: message.priority });
+    }
+
+    function isQidianSender(sender) {
+      return sender?.frameId === 0 && Number.isInteger(sender?.tab?.id)
+        && [sender.url,sender.tab.url].filter(Boolean).length > 0
+        && [sender.url,sender.tab.url].filter(Boolean).every(url => qidianSites.allowed(url));
+    }
+    let qidianWriteQueue = Promise.resolve();
+    async function qidianUIGet(message,sender) {
+      if (!isQidianSender(sender) && !isFanqieSettingsSender(sender)) return {ok:false,reason:'unauthorized-sender'};
+      const values=await storageCall(storage.local,'get',[qidianSites.storageKey]);
+      const preferences=fanqiePrefs.normalize(values?.[qidianSites.storageKey]);
+      if(preferences.language!=='zh' && isQidianSender(sender))void titleService.warm().catch(()=>{});
+      return {ok:true,...preferences};
+    }
+    async function qidianUISet(message,sender) {
+      if(!isQidianSender(sender) && !isFanqieSettingsSender(sender))return {ok:false,reason:'unauthorized-sender'};
+      if(message.language!==undefined&&!['vi','zh'].includes(message.language))return {ok:false,reason:'invalid-language'};
+      const task=qidianWriteQueue.then(async()=>{
+        const old=(await storageCall(storage.local,'get',[qidianSites.storageKey]))?.[qidianSites.storageKey];
+        const preferences=fanqiePrefs.patch(old,message);
+        await storageCall(storage.local,'set',{[qidianSites.storageKey]:preferences});
+        if(tabs?.query&&tabs?.sendMessage)try{
+          const open=await tabs.query({url:['https://www.qidian.com/*','https://qidian.com/*','https://my.qidian.com/author/*']});
+          await Promise.allSettled(open.filter(tab=>tab.id!==sender?.tab?.id).map(tab=>tabs.sendMessage(tab.id,{type:'STVAI_QIDIAN_UI_CHANGED',preferences})));
+        }catch(_){/* A closed page must not fail saving preferences. */}
+        return {ok:true,...preferences};
+      });
+      qidianWriteQueue=task.catch(()=>{});return task;
+    }
+    async function qidianTextTranslate(message,sender) {
+      if(!isQidianSender(sender))return {ok:false,reason:'unauthorized-sender'};
+      const pref=(await storageCall(storage.local,'get',[qidianSites.storageKey]))?.[qidianSites.storageKey];
+      if(pref?.language==='zh')return {ok:false,reason:'disabled'};
+      return titleService.translate(message.source,message.kind,{priority:message.priority});
     }
 
     function safeSettings(value) {
@@ -369,6 +408,9 @@
       fanqieTitleTranslate,
       fanqieIntroductionTranslate,
       fanqieTextTranslate,
+      qidianUIGet,
+      qidianUISet,
+      qidianTextTranslate,
       changeZoom,
       restoreZoom,
       restoreZoomForTab,

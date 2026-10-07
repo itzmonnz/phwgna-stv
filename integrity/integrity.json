@@ -63,7 +63,7 @@
     },
     {
       "path": "manifest.json",
-      "sha256": "865ea572f19471fa2d75f4a4c7c7cd2cd64ebca525ee3deef50782e870b6c1d5"
+      "sha256": "1473c0a28573240d74e26649882d2b7b00f0082b9ac9bd3abc37fd4def77fdf1"
     },
     {
       "path": "onboarding/onboarding.css",
@@ -83,7 +83,7 @@
     },
     {
       "path": "options/options.html",
-      "sha256": "14b8ad9e1194bc4f2b7dea67add34c056c4f6ae34fc26953183549bac31136a9"
+      "sha256": "1c2e32050a384d95b31d75dac7c31d31b7942017dc95ae9955c6f61394df64fd"
     },
     {
       "path": "options/options.js",
@@ -91,7 +91,7 @@
     },
     {
       "path": "options/site-settings.js",
-      "sha256": "fce9e9282a00b1a21de3a4b8d3d8f89119bf8c92588fd24e4f31b041ec26d0cf"
+      "sha256": "89ecb051877efec1ad9c3c7a78008ed1ce55c5791503b35717f743b85e31cab3"
     },
     {
       "path": "popup/popup.css",
@@ -115,11 +115,11 @@
     },
     {
       "path": "src/background.js",
-      "sha256": "282f0f38f96625bb8fd482ae382fdf3e501917f251ab67c3dd503b5b2f7b4503"
+      "sha256": "5646ccb78b0b602ddcfec12312e438e1e267a4a52cada9b716ccd10e44159e95"
     },
     {
       "path": "src/background/client-service.js",
-      "sha256": "4833f156cb9e42e64fba8bf905afdd6f3f49b3495d62cf8741c30181fd9e21b2"
+      "sha256": "10dc22c94c179f9d1200eee32608856dfd2264aba6e8fc7c3938b9f107731ebc"
     },
     {
       "path": "src/background/contracts.js",
@@ -127,7 +127,7 @@
     },
     {
       "path": "src/background/controller.js",
-      "sha256": "be720673364588065e7b04e94daf329405dce3092283cc1b0274824c376ac224"
+      "sha256": "a2233bd92d0aac96da1a0934155eb3ab0c360973cf132c57cb2db0dbf4d00b2e"
     },
     {
       "path": "src/background/gemini-account-service.js",
@@ -167,7 +167,7 @@
     },
     {
       "path": "src/content/fanqie-book-preview.js",
-      "sha256": "9f2e4e7add3c3ccdb57df34c3b7282a692591cbd4ba0982423519d661abe2144"
+      "sha256": "81a1c7bfa1d82af1348e523c1768ecdef5f28b039e8df6dc85c7cacb6421988d"
     },
     {
       "path": "src/content/fanqie-ui.js",
@@ -196,6 +196,14 @@
     {
       "path": "src/content/provider-diagnostics.js",
       "sha256": "807f596c4e1fd6bc9d1ddd4ebe4aac9bb7f4369c53b3cebadee9a5784b56d2af"
+    },
+    {
+      "path": "src/content/qidian-book-preview.js",
+      "sha256": "70eaac09e86e32d0f8f8906ca1515526e58c9a6b63dc94f345f01738ee2ae839"
+    },
+    {
+      "path": "src/content/qidian-ui.js",
+      "sha256": "80e417464dbc5b0e124cc2eb019f09cacf4766dae1786a398aa3ac3775223109"
     },
     {
       "path": "src/content/site-translation-guard.js",
@@ -418,6 +426,10 @@
       "sha256": "09d2ae157975f8b79142d1707d7f47de71c40480f4c1e427c15e51f55691c318"
     },
     {
+      "path": "src/shared/qidian-sites.js",
+      "sha256": "6005f2113778ace1a0451873ec0d6764419aa18b25be6a8f0ec952a6f1633ba6"
+    },
+    {
       "path": "src/shared/stv-sites.js",
       "sha256": "72da0d1b795a9829de49715bca8448853e4963469ae31c2acfc44bd0704563f5"
     },
@@ -467,7 +479,7 @@
     }
   ],
   "product": "Phwgna Stv",
-  "sourceCommit": "66de7443cd7c484684276926e5d3b348427ad3d7",
+  "sourceCommit": "21c67193206198a52e15c8152c9a2770a8d109f6",
   "officialRepository": "https://github.com/itzmonnz/phwgna-stv",
   "officialReleaseUrl": "https://github.com/itzmonnz/phwgna-stv/releases/tag/v0.2.8",
   "publicKeyFingerprint": "85ac74c199d0a6028bce843d6f68d7632317912b460aad1a7431193767ec9871"

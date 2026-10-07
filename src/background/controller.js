@@ -2180,8 +2180,8 @@
         case "STVAI_PROVIDER_SETUP_PROGRESS":
           return providerSetupProgress(message, sender);
         case "STVAI_OPEN_OPTIONS": {
-          if (message.site === 'fanqie' && runtime?.getURL && tabs?.create) {
-            await tabs.create({ url: runtime.getURL('options/options.html') + '#fanqie', active: true });
+          if (['fanqie','qidian'].includes(message.site) && runtime?.getURL && tabs?.create) {
+            await tabs.create({ url: runtime.getURL('options/options.html') + '#' + message.site, active: true });
             return { ok: true };
           }
           if (typeof runtime?.openOptionsPage === "function") {
@@ -2221,6 +2221,9 @@
         STVAI_FANQIE_BOOK_PREVIEW: (message, sender) => clientService.fanqieBookPreview(message, sender),
         STVAI_FANQIE_INTRODUCTION_TRANSLATE: (message, sender) => clientService.fanqieIntroductionTranslate(message, sender),
         STVAI_FANQIE_TEXT_TRANSLATE: (message, sender) => clientService.fanqieTextTranslate(message, sender),
+        STVAI_QIDIAN_UI_GET: (message, sender) => clientService.qidianUIGet(message, sender),
+        STVAI_QIDIAN_UI_SET: (message, sender) => clientService.qidianUISet(message, sender),
+        STVAI_QIDIAN_TEXT_TRANSLATE: (message, sender) => clientService.qidianTextTranslate(message, sender),
         STVAI_TTS_SESSION_START: (message, sender) => ttsSession.handle(message, sender),
         STVAI_TTS_SESSION_CLAIM_NEXT: (message, sender) => ttsSession.handle(message, sender),
         STVAI_TTS_SESSION_UPDATE: (message, sender) => ttsSession.handle(message, sender),

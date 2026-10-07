@@ -9,11 +9,10 @@
   'use strict';
   async function init(document, runtime) {
     const tabs = [...document.querySelectorAll('[data-settings-site]')];
-    const form = document.getElementById('fanqieSettingsForm');
-    if (!tabs.length || !form) return null;
+    if (!tabs.length) return null;
     const view = document.defaultView;
     const select = (site, focus = false) => {
-      site = site === 'fanqie' ? 'fanqie' : 'stv';
+      site = ['fanqie','qidian'].includes(site) ? site : 'stv';
       for (const tab of tabs) {
         const selected = tab.dataset.settingsSite === site;
         tab.setAttribute('aria-selected', String(selected)); tab.tabIndex = selected ? 0 : -1;
@@ -34,13 +33,16 @@
         tabs[index].click();
       });
     }
-    const status = document.getElementById('fanqieSaveStatus');
-    const save = document.getElementById('fanqieSaveButton');
+    for (const site of ['fanqie','qidian']) {
+      const form = document.getElementById(site + 'SettingsForm');
+      if (!form) continue;
+    const status = document.getElementById(site + 'SaveStatus');
+    const save = document.getElementById(site + 'SaveButton');
     const fields = {
-      language: document.getElementById('fanqieLanguage'),
-      titleProvider: document.getElementById('fanqieTitleProvider'),
-      uiScale: document.getElementById('fanqieUiScale'),
-      collapsed: document.getElementById('fanqieCollapsed')
+      language: document.getElementById(site + 'Language'),
+      titleProvider: document.getElementById(site + 'TitleProvider'),
+      uiScale: document.getElementById(site + 'UiScale'),
+      collapsed: document.getElementById(site + 'Collapsed')
     };
     const dirty = new Set(); let loaded = false, saving = false;
     function fill(value) {
@@ -59,9 +61,9 @@
       saving = true; save.disabled = true; status.textContent = 'Đang lưu…';
       for (const field of Object.values(fields)) field.disabled = true;
       try {
-        const result = await runtime.sendMessage({ type: 'STVAI_FANQIE_UI_SET', ...patch });
+        const result = await runtime.sendMessage({ type: 'STVAI_' + site.toUpperCase() + '_UI_SET', ...patch });
         if (!result?.ok) throw new Error('save_failed');
-        fill(result); dirty.clear(); status.textContent = 'Đã lưu. Các tab Fanqie đang mở được áp dụng ngay.';
+        fill(result); dirty.clear(); status.textContent = `Đã lưu. Các tab ${site === 'qidian' ? 'Qidian' : 'Fanqie'} đang mở được áp dụng ngay.`;
       } catch (_) { status.textContent = 'Chưa lưu được. Hãy thử lại; cài đặt STV vẫn được giữ.'; }
       finally {
         saving = false; save.disabled = false;
@@ -71,11 +73,12 @@
     save.disabled = true;
     for (const field of Object.values(fields)) field.disabled = true;
     try {
-      const result = await runtime.sendMessage({ type: 'STVAI_FANQIE_UI_GET' });
+      const result = await runtime.sendMessage({ type: 'STVAI_' + site.toUpperCase() + '_UI_GET' });
       if (!result?.ok) throw new Error('read_failed');
       fill(result); loaded = true; save.disabled = false; status.textContent = 'Sẵn sàng.';
       for (const field of Object.values(fields)) field.disabled = false;
-    } catch (_) { status.textContent = 'Chưa tải được cài đặt Fanqie. Hãy tải lại trang cài đặt.'; }
+    } catch (_) { status.textContent = `Chưa tải được cài đặt ${site === 'qidian' ? 'Qidian' : 'Fanqie'}. Hãy tải lại trang cài đặt.`; }
+    }
     return { select, destroy() { view.removeEventListener('hashchange', onHash); } };
   }
   return Object.freeze({ init });
