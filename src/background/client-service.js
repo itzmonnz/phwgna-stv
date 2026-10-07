@@ -76,8 +76,8 @@
       const values = await storageCall(storage.local, 'get', [fanqiePrefs.storageKey]);
       const preferences = fanqiePrefs.normalize(values?.[fanqiePrefs.storageKey]);
       // Start one owned Hachimi tab while Fanqie is loading. The first user
-      // translation then reuses a warm WebGPU session; a second tab is still
-      // created lazily only when two requests truly run in parallel.
+      // translation then reuses a warm WebGPU session; the normal pool path
+      // still restores the configured second slot when real work begins.
       if (preferences.language !== 'zh' && isFanqieSender(sender)) void titleService.warm().catch(() => {});
       return { ok: true, ...preferences };
     }
