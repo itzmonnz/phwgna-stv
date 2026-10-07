@@ -35,6 +35,7 @@
     const hachimi = globalThis.STVAIHachimiService || (typeof require === 'function' ? require('./hachimi-service.js') : null);
     const titleService = hachimi.createService({
       tabs,
+      poolSize: 2,
       read: async key => (await storageCall(storage.local, 'get', [key]))?.[key],
       write: (key, value) => storageCall(storage.local, 'set', { [key]: value }),
       enabled: async () => {
@@ -102,18 +103,18 @@
       if (!isFanqieSender(sender)) return { ok: false, reason: 'unauthorized-sender' };
       const pref = (await storageCall(storage.local, 'get', ['stvai-fanqie-ui-v1']))?.['stvai-fanqie-ui-v1'];
       if (pref?.language === 'zh') return { ok: false, reason: 'disabled' };
-      return titleService.translate(message.source);
+      return titleService.translate(message.source, 'title', { priority: message.priority });
     }
     async function fanqieIntroductionTranslate(message, sender) {
       if (!isFanqieSender(sender) || ![sender.url, sender.tab.url].filter(Boolean)
         .every(value => /^\/page\/\d+\/?$/.test(new URL(value).pathname))) return { ok: false, reason: 'unauthorized-sender' };
-      return titleService.translate(message.source, 'introduction');
+      return titleService.translate(message.source, 'introduction', { priority: message.priority });
     }
 
     async function fanqieTextTranslate(message, sender) {
       if (!isFanqieSender(sender)) return { ok: false, reason: 'unauthorized-sender' };
       if (!['title', 'author', 'chapter', 'description', 'introduction'].includes(message.kind)) return { ok: false, reason: 'invalid_kind' };
-      return titleService.translate(message.source, message.kind);
+      return titleService.translate(message.source, message.kind, { priority: message.priority });
     }
 
     function safeSettings(value) {

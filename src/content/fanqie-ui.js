@@ -119,17 +119,20 @@
         if (!result?.ok) throw new Error('fanqie_storage_unavailable');
       },
       translateTitle(source) { return runtime.sendMessage({ type: 'STVAI_FANQIE_TITLE_TRANSLATE', source }); },
-      translateText(source, kind) { return runtime.sendMessage({ type: 'STVAI_FANQIE_TEXT_TRANSLATE', source, kind }); },
-      translateIntroduction(source) { return runtime.sendMessage({ type: 'STVAI_FANQIE_INTRODUCTION_TRANSLATE', source }); }
+      translateText(source, kind, priority = 0) { return runtime.sendMessage({ type: 'STVAI_FANQIE_TEXT_TRANSLATE', source, kind, priority }); },
+      translateIntroduction(source, priority = 0) { return runtime.sendMessage({ type: 'STVAI_FANQIE_INTRODUCTION_TRANSLATE', source, priority }); }
     };
   }
 
-  const titleRegions = '.muye-bottom-choiceness-item .book-text .title, .muye-bottom-rank-content h3.title, .muye-home-top-rank-list-item-info-name, .update-item.book-name a[href^="/page/"], .book-item-text .title, a.book-item-title[href^="/page/"], .muye-stack-book-list .book-name, .page-header-info .info-name h1, .home-publish-list-item-text-first-book, .rank-book-item .title, .tutorial-item-text-title';
-  const metadataRegions = '.author-name-text, .author-desc, .book-item-author, .book-text .author, .book-item-text .author, .muye-home-top-rank-list-item-info-author, a.chapter-item-title[href^="/reader/"], a.update-item-chapter[href^="/reader/"], .page-abstract-content p, .muye-reader-title, .muye-reader-nav-title, .muye-home-news-content-item, .writer-list-current-first .bottom .title, .writer-list-current-first .desc, .muye-bottom-rank-content .book-text .desc, .update-item-author, .home-publish-list-item-text-first-author, .home-publish-list-item-text-second-from, .rank-book-item .author, .rank-book-item .desc, .rank-book-item .book-item-footer-last .chapter, .home-authortalk-list-item-card1-content-introduction';
-  const fallbackScope = /(?:book|rank|home|writer|author|tutorial|publish|search|category|library|menu|header|update|news|zone)/i;
+  const titleRegions = '.muye-bottom-choiceness-item .book-text .title, .muye-bottom-rank-content h3.title, .muye-home-top-rank-list-item-info-name, .update-item.book-name a[href^="/page/"], .book-item-text .title, a.book-item-title[href^="/page/"], .muye-stack-book-list .book-name, .page-header-info .info-name h1, .home-publish-list-item-text-first-book, .rank-book-item .title, .tutorial-item-text-title, [class*="article"] h1, [class*="article-title"], [class*="article"] [class*="title"]';
+  const metadataRegions = '.author-name-text, .author-desc, .book-item-author, .book-text .author, .book-item-text .author, .muye-home-top-rank-list-item-info-author, a.chapter-item-title[href^="/reader/"], a.update-item-chapter[href^="/reader/"], .page-abstract-content p, .muye-reader-title, .muye-reader-nav-title, .muye-home-news-content-item, .writer-list-current-first .bottom .title, .writer-list-current-first .desc, .muye-bottom-rank-content .book-text .desc, .update-item-author, .home-publish-list-item-text-first-author, .home-publish-list-item-text-second-from, .rank-book-item .author, .rank-book-item .desc, .rank-book-item .book-item-footer-last .chapter, .home-authortalk-list-item-card1-content-introduction, [class*="article-author"], [class*="article-byline"], [class*="article-desc"], [class*="article-content"], [class*="article"] [class*="author"], [class*="article"] [class*="desc"], [class*="article"] [class*="content"]';
+  const fallbackScope = /(?:book|rank|home|writer|author|tutorial|publish|search|category|library|menu|header|update|news|zone|article|detail|richtext|markdown)/i;
   const fallbackBlocked = /(?:comment|reply|user|avatar|account|login|password|phone|email|form|input|textarea|button|reader-content|chapter-content|copyright|footer|nav-item)/i;
   const knownRegions = `${regions},${titleRegions},${metadataRegions}`;
   function metadataKind(region) {
+    const className = typeof region.className === 'string' ? region.className : '';
+    if (/(?:author|byline)/i.test(className)) return 'author';
+    if (/(?:desc|abstract|intro|summary|content)/i.test(className)) return 'description';
     if (region.matches('.page-abstract-content p')) return 'introduction';
     if (region.matches('.author-desc, .muye-home-news-content-item, .writer-list-current-first .desc, .muye-bottom-rank-content .book-text .desc, .rank-book-item .desc, .home-authortalk-list-item-card1-content-introduction')) return 'description';
     if (region.matches('a.chapter-item-title, a.update-item-chapter, .muye-reader-title')) return 'chapter';
@@ -336,7 +339,8 @@
           pending.set(region, request);
           inflight++;
           const kind = region.matches(`${titleRegions},${metadataRegions}`) ? metadataKind(region) : fallbackKind(region);
-          Promise.resolve(titleEngine.convert(source, titleFont(document, region), kind)).then(result => {
+          const priority = visibleTitle(document, region) ? 0 : (kind === 'chapter' ? 2 : 1);
+          Promise.resolve(titleEngine.convert(source, titleFont(document, region), kind, priority)).then(result => {
             if (!result || pending.get(region) !== request || !enabled || generation !== request.generation
               || document.location.pathname !== request.path || !allowedPath(document.location.pathname)
               || nodes.some((n, i) => !n.isConnected || !region.contains(n) || n.data !== request.values[i])
@@ -378,7 +382,7 @@
           if (old?.source === source && old.generation === generation && old.path === document.location.pathname) continue;
           const request = { source, generation, path: document.location.pathname, values: nodes.map(n => n.data) };
           pending.set(region, request);
-          Promise.resolve().then(() => introductionEngine(source)).then(result => {
+          Promise.resolve().then(() => introductionEngine(source, 0)).then(result => {
             if (!result?.ok || result.source !== source.normalize('NFC').trim() || result.provider !== 'hachimi40'
               || pending.get(region) !== request || !enabled || generation !== request.generation
               || document.location.pathname !== request.path || region.textContent !== source
@@ -435,13 +439,13 @@
         if (currentProvider === 'hachimi40' && (storage?.translateText || storage?.translateTitle)) {
           const engineDecoder = engine;
           const cache = new Map();
-          engine = { remote: true, convert(source, font, kind = 'title') {
+          engine = { remote: true, convert(source, font, kind = 'title', priority = 0) {
             const decoded = engineDecoder.decode ? engineDecoder.decode(source, font) : engineDecoder.convert(source, font)?.source;
             if (!decoded) return null;
             const key = `${kind}:${decoded}`;
             if (!cache.has(key)) {
               status.textContent = 'Hachimi 40 đang dịch trên máy…';
-              const call = storage.translateText ? storage.translateText(decoded, kind) : kind === 'title' ? storage.translateTitle(decoded) : storage.translateIntroduction?.(decoded);
+              const call = storage.translateText ? storage.translateText(decoded, kind, priority) : kind === 'title' ? storage.translateTitle(decoded, priority) : storage.translateIntroduction?.(decoded, priority);
               const request = Promise.resolve(call).then(response => {
                 if (!response?.ok || response.provider !== 'hachimi40' || response.source !== decoded) {
                   if (!stopped && currentGeneration === loadGeneration) {
