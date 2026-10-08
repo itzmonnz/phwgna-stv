@@ -320,10 +320,14 @@
       return domResolver.resolve("stop", { composer: findComposer() }).element || null;
     }
 
-    function hasError1095() {
-      error1095Seen ||= common.pageHasText(document,
+    function hasVisibleError1095() {
+      return common.pageHasText(document,
         ["[role='alert']", ".error-message", "mat-error", "[class*='snack']", "[class*='toast']", ".cdk-overlay-container"],
         /(?:error|lỗi)[^\n]{0,80}\b1095\b|(?:hãy\s+)?kiểm tra kết nối internet của bạn\s+(?:rồi|và)\s+thử lại|(?:please\s+)?check your internet connection and try again/i);
+    }
+
+    function hasError1095() {
+      error1095Seen ||= hasVisibleError1095();
       return error1095Seen;
     }
     // Gemini's toast can disappear before the response poll. Retain only its
@@ -334,7 +338,7 @@
       document.defaultView.addEventListener?.("pagehide", () => errorObserver.disconnect(), { once: true });
     }
 
-    function getStatus() {
+    function getStatus(statusOptions = {}) {
       if (common.pageHasText(
         document,
         ["body"],
@@ -364,7 +368,7 @@
       )) {
         return { state: "paused", code: "rate_limited", message: "Gemini đang giới hạn lượt sử dụng." };
       }
-      if (hasError1095()) {
+      if (statusOptions.ignoreGemini1095 !== true && hasError1095()) {
         return { state: "paused", code: "gemini_1095", message: "Gemini báo lỗi 1095." };
       }
       if (!findComposer()) {
@@ -759,8 +763,11 @@
       );
     }
 
-    async function restartTemporaryChat({ signal, timeoutMs } = {}) {
-      const status = getStatus();
+    async function restartTemporaryChat({ signal, timeoutMs, resetErrorState = false } = {}) {
+      // Only an explicit recovery may navigate past the old error. Keep its
+      // latch until the replacement conversation is visible and the snackbar
+      // has disappeared, so a failed navigation cannot erase the failure.
+      const status = getStatus({ ignoreGemini1095: resetErrorState === true });
       if (status.code === "gemini_1095") throw new common.ProviderError(status.code, status.message);
       const deadline = now() + Math.max(1, Number(timeoutMs ?? options.temporaryTimeoutMs ?? 10_000) || 10_000);
       // Responsive drawers hide the editor from the resolver. Release the
@@ -769,9 +776,9 @@
       // Gemini can replace its editor after finishing READY or a batch. A
       // transient missing editor is not evidence that the physical tab failed.
       // Wait before clearing owned text or clicking navigation, and recheck
-      // blockers so CAPTCHA/login/1095 never become an automatic reset.
+      // blockers so CAPTCHA/login never become an automatic reset.
       await common.waitForElement(() => {
-        const currentStatus = getStatus();
+        const currentStatus = getStatus({ ignoreGemini1095: resetErrorState === true });
         if (currentStatus.state !== "ready" && currentStatus.code !== "ui_changed"
           && currentStatus.code !== "temporary_unavailable"
           && currentStatus.code !== "send_not_confirmed") {
@@ -832,7 +839,12 @@
             || chatWindow !== previousChatWindow
             || turnCount < previousTurnCount
             || (!temporaryPageIsActive() && !readComposerText(composer));
-          return newConversationVisible ? composer : null;
+          if (!newConversationVisible) return null;
+          if (resetErrorState === true) {
+            if (hasVisibleError1095()) return null;
+            error1095Seen = false;
+          }
+          return composer;
         },
         {
           timeoutMs: Math.max(1, deadline - now()),

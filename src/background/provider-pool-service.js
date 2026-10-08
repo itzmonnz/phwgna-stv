@@ -1067,7 +1067,8 @@
             let reset;
             try {
               reset = await sendProviderMessage("gemini", slot.providerTabId, {
-                type: "STVAI_PROVIDER_RESTART_TEMPORARY", timeoutMs: warmTemporaryTimeoutMs
+                type: "STVAI_PROVIDER_RESTART_TEMPORARY", timeoutMs: warmTemporaryTimeoutMs,
+                resetErrorState: true
               });
             } catch (_) { /* verify fresh document through normal READY probing */ }
             if (reset?.ok === false) throw Object.assign(new Error("account_reset_failed"), { code: reset.error?.code || "temporary_unavailable" });
@@ -1573,6 +1574,7 @@
         reset = await sendProviderMessage("gemini", tabId, {
           type: "STVAI_PROVIDER_RESTART_TEMPORARY",
           timeoutMs: options.timeoutMs,
+          resetErrorState: true,
           recoveryGeneration: Math.max(0, Number(slot.recoveryGeneration) || 0),
           recoveryAttempt: Math.max(1, Number(slot.inPlaceRecoveryAttempts) || 1)
         });
@@ -1660,6 +1662,7 @@
               nextReset = await sendProviderMessage("gemini", tabId, {
                 type: "STVAI_PROVIDER_RESTART_TEMPORARY",
                 timeoutMs: options.timeoutMs,
+                resetErrorState: true,
                 recoveryGeneration: Math.max(0, Number(slot.recoveryGeneration) || 0),
                 recoveryAttempt: slot.inPlaceRecoveryAttempts
               });

@@ -758,7 +758,8 @@
         try {
           const result = await adapter.restartTemporaryChat({
             signal: activeJob?.controller?.signal,
-            timeoutMs: message.timeoutMs
+            timeoutMs: message.timeoutMs,
+            resetErrorState: message.resetErrorState === true
           });
           if (result?.ok) setDiagnosticState("idle", "setup", "none");
           else setDiagnosticState("error", "setup", result?.error?.code || "temporary_unavailable");
