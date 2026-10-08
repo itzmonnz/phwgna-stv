@@ -111,6 +111,7 @@
     let activeBatchRequestId = "";
     let learnedCurrentDocument = false;
     let error1095Seen = false;
+    let error1095At = 0;
     const verifiedReadySteps = new Set();
     const now = options.now || Date.now;
     const temporaryLossGraceMs = Math.max(0, Number(options.temporaryLossGraceMs ?? 500) || 0);
@@ -327,7 +328,9 @@
     }
 
     function hasError1095() {
-      error1095Seen ||= hasVisibleError1095();
+      const visible = hasVisibleError1095();
+      if (!error1095Seen && visible) error1095At = Date.now();
+      error1095Seen ||= visible;
       return error1095Seen;
     }
     // Gemini's toast can disappear before the response poll. Retain only its
@@ -843,6 +846,7 @@
           if (resetErrorState === true) {
             if (hasVisibleError1095()) return null;
             error1095Seen = false;
+            error1095At = 0;
           }
           return composer;
         },
@@ -1267,6 +1271,7 @@
       findSendButton,
       getSubmissionDiagnostic,
       getPerformanceState,
+      getErrorState: () => ({ errorVisible: hasVisibleError1095(), errorLatched: error1095Seen, errorAt: error1095At }),
       getDomDiagnostic: () => domResolver.probe?.() || domResolver.getDiagnosticSnapshot(),
       getSessionState,
       getStatus,

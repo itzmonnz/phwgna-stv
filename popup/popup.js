@@ -280,6 +280,7 @@
 
   function sanitizeSupport(value) {
     const input = safeObject(value);
+    const timelineApi = globalThis.STVAIProviderTimeline || (typeof require === 'function' ? require('../src/shared/provider-timeline.js') : null);
     const jobStates = new Set(["idle", "waiting-provider", "running", "paused", "completed", "cancelled", "failed", "error"]);
     const phases = new Set(["idle", "setup", "batch", "repair", "completed"]);
     const workStates = new Set(["queued", "sending", "settled"]);
@@ -289,6 +290,7 @@
       schemaVersion: 1,
       targetCount: Math.min(10, Math.max(2, Math.trunc(Number(input.targetCount)) || 2)),
       reconfiguring: input.reconfiguring === true,
+      providerTimeline: timelineApi.prune(input.providerTimeline, Date.now()),
       jobs: Array.isArray(input.jobs) ? input.jobs.slice(0, 3).map(raw => {
         const job = safeObject(raw);
         return {
@@ -397,10 +399,12 @@
 
   function sanitizeErrorReport(value) {
     const input = safeObject(value);
+    const timelineApi = globalThis.STVAIProviderTimeline || (typeof require === "function" ? require("../src/shared/provider-timeline.js") : null);
+    const providerTimeline = timelineApi.prune(input.providerTimeline, Date.now());
     const rawPrimary = safeObject(input.incident);
     const rawRecent = Array.isArray(input.incidents) ? input.incidents.slice(0, 5).map(safeObject) : [];
     if (!Object.keys(rawPrimary).length && !rawRecent.some(item => Object.keys(item).length)) {
-      return { schemaVersion: 1, generatedAt: Math.max(0, Number(input.generatedAt) || 0), incident: null, incidents: [] };
+      return { schemaVersion: 1, generatedAt: Math.max(0, Number(input.generatedAt) || 0), incident: null, incidents: [], ...(providerTimeline.length ? { providerTimeline } : {}) };
     }
     const providers = new Set(["chatgpt", "gemini", "openrouter_api", "gemini_api", "openai_api", "deepseek_api", "unknown"]);
     const phases = new Set(["setup", "batch", "prefetch", "chapter", "tts", "name_lookup", "pool", "unknown"]);
@@ -499,6 +503,7 @@
     return {
       schemaVersion: 1,
       generatedAt: Math.max(0, Number(input.generatedAt) || 0),
+      ...(providerTimeline.length ? { providerTimeline } : {}),
       incident,
       incidents
     };

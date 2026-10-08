@@ -84,6 +84,22 @@
       now,
       extensionVersion
     });
+    const timelineApi = globalThis.STVAIProviderTimeline || (typeof require === 'function' ? require('../shared/provider-timeline.js') : null);
+    const providerTimeline = timelineApi.create({ now,
+      read: async key => (await storageCall(storage?.local, 'get', [key]))?.[key],
+      write: (key, rows) => storageCall(storage?.local, 'set', { [key]: rows })
+    });
+    function recordProviderEvent(slot, detail = {}) {
+      if (slot?.provider !== 'gemini' || !Number.isInteger(slot.providerTabId)) return;
+      try {
+        void providerTimeline.append({ tabId: slot.providerTabId, event: 'pool', trigger: 'pool_state',
+          state: slot.state, session: timelineApi.identity(slot.warmSessionId), generation: slot.recoveryGeneration || 0,
+          checkpoint: slot.setupCheckpoint || 0, readyStep: slot.readyWatchdogStep || 'idle',
+          readyState: slot.readyWatchdogState || 'idle', error: slot.errorCode || 'none',
+          visibility: slot.pageVisibility || 'unknown', focused: slot.pageFocused === true,
+          progressAt: Math.max(slot.setupLastProgressAt || 0, slot.firstBatchDispatchedAt || 0), ...detail }).catch(() => {});
+      } catch (_) { /* diagnostics must never stop a translation */ }
+    }
 
     const jobs = new Map();
     const terminalJobLimit = Math.max(1, Math.min(100, Math.trunc(Number(options.terminalJobLimit ?? 20) || 20)));
@@ -360,15 +376,31 @@
       const windowState = provider === "gemini"
         ? await captureGeminiWindowState(tabId)
         : null;
+      const slot = warmPool.slots.find(candidate => candidate.providerTabId === tabId);
+      const resetting = message.type === 'STVAI_PROVIDER_RESTART_TEMPORARY';
+      const trigger = resetting ? slot?.accountNeedsReset ? 'account_reset' : 'restart_temporary' : message.phase === 'setup' ? 'setup_send' : 'batch_send';
+      const requestOrdinal = slot ? slot.timelineRequestOrdinal = (slot.timelineRequestOrdinal || 0) + 1 : 0;
+      const eventContext = {session: timelineApi.identity(slot?.warmSessionId), generation: slot?.recoveryGeneration || 0,
+        checkpoint: slot?.setupCheckpoint || 0};
+      recordProviderEvent(slot, { ...eventContext, event: resetting ? 'reset_requested' : 'send_start', trigger,
+        requestOrdinal, windowState: windowState?.state || 'unknown' });
       try {
-        return await withProviderPerformanceLease(
+        const result = await withProviderPerformanceLease(
           provider,
           tabId,
           performanceMessage,
           () => tabs.sendMessage(tabId, performanceMessage)
         );
-      } finally {
-        if (provider === "gemini") await restoreUnexpectedGeminiRaise(windowState);
+        const progressed = result?.ok === true && typeof result.response === 'string' && result.response.length > 0;
+        const afterWindow = provider === 'gemini' ? await captureGeminiWindowState(tabId) : null;
+        recordProviderEvent(slot, { ...eventContext, event: resetting ? result?.ok ? 'reset_completed' : 'reset_rejected' : 'send_end',
+          trigger, requestOrdinal, windowState: afterWindow?.state || 'unknown', error: result?.error?.code || 'none',
+          activity: progressed ? 'progressing' : 'responsive_no_progress', ...(progressed ? {progressAt: now()} : {}) });
+        return result;
+      } catch (error) {
+        recordProviderEvent(slot, { ...eventContext, event: resetting ? 'reset_rejected' : 'send_end', trigger,
+          requestOrdinal, error: 'provider_unreachable', activity: 'unreachable' });
+        throw error;
       }
     }
 
@@ -391,19 +423,6 @@
         const window = await windows.get(tab.windowId);
         return { windowId: tab.windowId, state: String(window?.state || "") };
       } catch (_) { return null; }
-    }
-
-    async function restoreUnexpectedGeminiRaise(before) {
-      // Undo only a minimized -> normal transition caused during this provider
-      // operation. A window already opened by the user is left alone.
-      if (!before || before.state !== "minimized" || typeof windows?.get !== "function"
-        || typeof windows?.update !== "function") return;
-      try {
-        const current = await windows.get(before.windowId);
-        if (String(current?.state || "") !== "minimized") {
-          await windows.update(before.windowId, { state: "minimized", focused: false });
-        }
-      } catch (_) { /* user may have closed the window */ }
     }
 
     async function resolveProviderWindowId() {
@@ -872,7 +891,8 @@
           ...(providerDiagnostic ? { providerDiagnostic } : {})
         };
       }));
-      return { ok: true, support: { schemaVersion: 1, targetCount: warmPool.targetCount, reconfiguring: warmPool.reconfiguring === true, jobs: jobsForTab, slots } };
+      return { ok: true, support: { schemaVersion: 1, targetCount: warmPool.targetCount, reconfiguring: warmPool.reconfiguring === true, jobs: jobsForTab, slots,
+        providerTimeline: await providerTimeline.recent().catch(() => []) } };
     }
 
     async function persistOwnedProviderTabs() {
@@ -891,6 +911,7 @@
     }
 
     async function persistPool() {
+      for (const slot of warmPool.slots) recordProviderEvent(slot);
       await persistOwnedProviderTabs();
       if (!sessionStorage?.set) return;
       const record = {
@@ -1692,7 +1713,7 @@
       storage, storageCall, tabs, now, sleep: retrySleep, preferAlternateAccount: true
     });
     const providerPool = providerPoolApi.createProviderPoolService({
-      geminiAccounts,
+      geminiAccounts, recordProviderEvent,
       core, tabs, windows, storage, sessionStorage, runtime, debuggerApi, alarms, now,
       warmTemporaryTimeoutMs, providerReadyAttempts, providerReadyDelayMs,
       providerReadyPasses, poolCleanupDelayMs, poolCleanupSleep, jobs, warmPool,
@@ -2073,6 +2094,7 @@
             report: {
               schemaVersion: 1,
               generatedAt: now(),
+              providerTimeline: await providerTimeline.recent().catch(() => []),
               incident: latestIncident,
               incidents: incidents.length ? incidents : (latestIncident ? [latestIncident] : [])
             }

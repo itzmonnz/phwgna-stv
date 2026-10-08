@@ -242,8 +242,9 @@
       // completed Gemini conversation to finish a full READY reset. The reset
       // continues durably in the background while another READY slot can accept
       // next-chapter prefetch immediately.
+      let completedReset;
       if (!cached) {
-        if (job.poolSlotId) await spendJobSlot(job, { deferReadyReset: true, resetAfterChapter: true });
+        if (job.poolSlotId) completedReset = await spendJobSlot(job, { deferReadyReset: true, resetAfterChapter: true, deferStartUntilNotified: true });
         else await closeLegacyProviderTab(job);
       }
       if (job.prefetch) await notifyPrefetch(job, 'completed');
@@ -258,6 +259,7 @@
           apiBatchIndexes
         });
       }
+      if (completedReset) void recoverGeminiSlotInPlace(completedReset, warmPool.settings || job.settings, {afterChapterNotification: true});
       retainTerminalJob(job);
       return { ok: true, jobId: job.id, status: "completed", cached: Boolean(cached), items, totalBatches, fallbackCount,
         apiBatchIndexes,

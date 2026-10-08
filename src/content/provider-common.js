@@ -607,6 +607,9 @@
     let preparedEvidence = null;
     let acceptedStaleStop = null;
     const acceptedSetupReceipts = new Set();
+    let lastSetupAttempt = null;
+    let progressAt = 0;
+    let progressSignature = '';
 
     function setupReceiptKey(message) {
       if (message?.phase !== "setup") return "";
@@ -643,6 +646,11 @@
             ...adapter.getStatus(),
             ...(session ? { session } : {}),
             ...(performance ? { performance } : {}),
+            ...(typeof adapter.getErrorState === 'function' ? {
+              progress: { at: progressAt, readyStep: diagnosticState.readyStep, readyState: diagnosticState.readyState,
+                firstSeenAt: diagnosticState.readyFirstSeenAt || 0, acceptedAt: diagnosticState.acceptedAt || 0 },
+              errorState: adapter.getErrorState()
+            } : {}),
             prepared: preparedEvidence ? { ...preparedEvidence } : null,
             operation: activeJob ? {
               active: true,
@@ -667,6 +675,13 @@
         if (!requestedMarker || !markerAllowed) {
           return { ok: false, confirmed: false, error: { code: "invalid_message" } };
         }
+        const receiptKey = setupReceiptKey({ ...message, phase: 'setup' });
+        // Background recovery must identify the setup that actually sent this
+        // marker. Identical READY text from an older chat is not a receipt.
+        const scoped = Boolean(message.setupId);
+        const currentAttempt = !scoped || acceptedSetupReceipts.has(receiptKey)
+          || (lastSetupAttempt?.key === receiptKey && !lastSetupAttempt.markerWasPresent);
+        if (!currentAttempt) return { ok: true, confirmed: false, part, marker: requestedMarker, reason: 'setup_mismatch' };
         const responseState = typeof adapter.readResponseState === "function"
           ? adapter.readResponseState()
           : { text: adapter.readLatestResponse?.(), generating: undefined };
@@ -676,7 +691,9 @@
           responseMarker: requestedMarker
         }) === requestedMarker;
         const markerFound = adapter.hasResponseMarker?.(requestedMarker) === true || latestMatches;
-        const confirmed = markerFound && !generating;
+        const status = adapter.getStatus();
+        const blocked = status.state !== 'ready';
+        const confirmed = markerFound && !generating && !activeJob && !blocked;
         const finalReadyMarker = part === "system" || requestedMarker === refusalMarker;
         if (confirmed && finalReadyMarker && message?.warmSessionId && message?.settingsHash) {
           preparedEvidence = {
@@ -696,7 +713,7 @@
           confirmed,
           part,
           marker: requestedMarker,
-          ...(!confirmed ? { reason: generating ? "generating" : "marker_missing" } : {})
+          ...(!confirmed ? { reason: activeJob ? 'operation_active' : blocked ? status.code || 'ui_changed' : generating ? "generating" : "marker_missing" } : {})
         };
       }
 
@@ -745,6 +762,7 @@
         // reset, so a later STATUS probe cannot revive this tab as READY.
         preparedEvidence = null;
         acceptedSetupReceipts.clear();
+        lastSetupAttempt = null;
         // Reset is navigation, not a fresh READY 1 submission. Old timestamps
         // must not make a failed reset look like a confirmed setup send.
         resetReadyDiagnostic({ phase: "idle" });
@@ -876,6 +894,9 @@
           ? adapter.readLatestResponse()
           : "";
         const currentSetupReceiptKey = setupReceiptKey(message);
+        if (currentSetupReceiptKey) lastSetupAttempt = { key: currentSetupReceiptKey,
+          markerWasPresent: adapter.hasResponseMarker?.(message.responseMarker) === true
+            || extractProtocolResponse(previousResponse, message) === message.responseMarker };
         const existingSetupState = currentSetupReceiptKey
           && acceptedSetupReceipts.has(currentSetupReceiptKey)
           && message.responseMarker
@@ -949,6 +970,11 @@
             }
             if (state) {
               const responseText = String(state?.text || "").trim();
+              const signature = `${message.phase}:${responseText.length}:${state.generating}:${diagnosticState.readyState}`;
+              if (signature !== progressSignature) {
+                progressSignature = signature;
+                progressAt = Date.now();
+              }
               const currentBatchResponse = message.phase === "batch"
                 && responseHasRequestId(responseText, message.requestId || message.batchId);
               if (state?.generating === false
