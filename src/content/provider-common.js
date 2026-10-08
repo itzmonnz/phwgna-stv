@@ -583,7 +583,7 @@
       security_verification: "Trang AI đang yêu cầu xác minh bảo mật thủ công.",
       login_browser_rejected: "Google đã từ chối cửa sổ tự động. Hãy đăng nhập bằng cửa sổ Chrome AI thường.",
       rate_limited: "Trang AI đang giới hạn lượt sử dụng. Hãy thử lại sau.",
-      gemini_1095: "Gemini báo lỗi 1095; đang thử lại hoặc chuyển tài khoản Pro.",
+      gemini_1095: "Gemini báo lỗi 1095/1155; đang thử lại hoặc chuyển tài khoản Pro.",
       ui_changed: "Không nhận diện được giao diện trang AI hiện tại.",
       ab_comparison: "Trang AI đang yêu cầu lựa chọn phản hồi thủ công.",
       temporary_unavailable: "Không thể bật chế độ trò chuyện tạm thời trên giao diện hiện tại.",

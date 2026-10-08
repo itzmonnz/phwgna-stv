@@ -1144,6 +1144,7 @@
       if (!slot || slot.provider !== "gemini" || settings?.geminiAccountRotationEnabled !== true) return false;
       if (slot.accountRecoveryRunning) return false;
       slot.accountRecoveryRunning = true;
+      const recoveryCode = String(options.recoveryCode || "gemini_1095");
       const stopped = () => options.shouldStop?.() === true || slot.recoveryCancelled || !warmPool.slots.includes(slot);
       try {
         while (!stopped()) {
@@ -1163,7 +1164,7 @@
             timeoutMs: warmTemporaryTimeoutMs
           });
           if (ready) return true;
-          if (slot.errorCode !== "gemini_1095") return false;
+          if (slot.errorCode !== recoveryCode) return false;
         }
         return false;
       } catch (error) {
@@ -1783,11 +1784,12 @@
       }
       // A normal leased restart has no outer in-place recovery owner. Rotate
       // here only after removing its promise from the single-flight map.
-      if (!ready && slot.errorCode === "gemini_1095" && !options.accountRecovery && !options.inPlaceRecovery
+      const recoveryCode = String(options.recoveryCode || "gemini_1095");
+      if (!ready && slot.errorCode === recoveryCode && !options.accountRecovery && !options.inPlaceRecovery
         && !slot.recoveryCancelled && options.shouldStop?.() !== true
         && (Number(slot.recoveryGeneration) || 0) === generation
         && settings?.geminiAccountRotationEnabled === true) {
-        return recoverGemini1095Slot(slot, settings, options);
+        return recoverGemini1095Slot(slot, settings, { ...options, recoveryCode });
       }
       return ready;
     }
@@ -1894,9 +1896,13 @@
           inPlaceRecovery: true,
           shouldStop: () => slot.recoveryCancelled === true
         });
-        if (!recovered && slot.errorCode === "gemini_1095" && settings.geminiAccountRotationEnabled === true) {
+        if (!recovered
+          && settings.geminiAccountRotationEnabled === true
+          && ["gemini_1095", "send_not_confirmed"].includes(String(slot.errorCode || ""))) {
           recovered = await recoverGemini1095Slot(slot, settings, {
-            inPlaceRecovery: true, shouldStop: () => slot.recoveryCancelled === true
+            inPlaceRecovery: true,
+            recoveryCode: String(slot.errorCode || "gemini_1095"),
+            shouldStop: () => slot.recoveryCancelled === true
           });
         }
         if (slot.recoveryCancelled) {
