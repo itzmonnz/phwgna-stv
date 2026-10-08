@@ -28,6 +28,7 @@
       validateSetupProviderResult, verifiedReadySlotByPriority, verifyPreparedSlot,
       isStvSender, sites, warmTemporaryTimeoutMs, providerDiagnosticTimeoutMs
     } = options;
+    const resumeOperations = new Map();
     const {
       SETUP_PARTS, READY_MARKER_GRACE_MS, REPLACEABLE_WARM_FAILURES,
       GEMINI_SEND_NOT_CONFIRMED_RETRIES, GEMINI_SESSION_BATCH_LIMIT,
@@ -2886,6 +2887,17 @@
     }
 
     async function resumeJob(message, sender) {
+      const key = String(message?.jobId || "");
+      const existing = resumeOperations.get(key);
+      if (existing) return existing;
+      const operation = resumeJobCore(message, sender).finally(() => {
+        if (resumeOperations.get(key) === operation) resumeOperations.delete(key);
+      });
+      resumeOperations.set(key, operation);
+      return operation;
+    }
+
+    async function resumeJobCore(message, sender) {
       const job = await ensureJob(String(message.jobId || ""));
       if (!job) return { ok: false, reason: "stale-job" };
       if (sender?.tab?.id !== job.sourceTabId) return { ok: false, reason: "wrong-source-tab" };
