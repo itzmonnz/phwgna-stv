@@ -2439,6 +2439,7 @@
           return;
         }
         if (slot.state === "failed") {
+          if (String(slot.recoveryStage || "").startsWith("blocked:")) return;
           if (isAuthenticationBlocker(slot.errorCode)) return;
           if ((slot.recoveryAttempts || 0) >= 1) return;
           if (retryDelayMs > 0 && Date.now() - Number(slot.failedAt || 0) < retryDelayMs) return;

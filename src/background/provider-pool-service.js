@@ -70,7 +70,16 @@
       "provider_busy", "provider_busy_timeout", "provider_unreachable", "ui_changed",
       "gemini_account_probe_failed"
     ]);
-    const GEMINI_BOUNDED_RECOVERY_CODES = new Set(["provider_unreachable", "ui_changed"]);
+    const GEMINI_BOUNDED_RECOVERY_CODES = new Set([
+      "provider_unreachable", "ui_changed", "send_not_confirmed",
+      "temporary_unavailable", "temporary_session_lost", "provider_busy_timeout"
+    ]);
+    function recoveryBudgetExhausted(slot) {
+      const code = String(slot.errorCode || "");
+      const limit = ["provider_unreachable", "ui_changed"].includes(code) ? 3 : 6;
+      return GEMINI_BOUNDED_RECOVERY_CODES.has(code)
+        && Math.max(0, Number(slot.inPlaceRecoveryAttempts) || 0) >= limit;
+    }
 
     function wantsTemporaryGeminiSession(slot) {
       return slot?.provider === "gemini" && slot?.desiredSession === "temporary";
@@ -102,6 +111,8 @@
     function isResumableGeminiRecoverySlot(slot) {
       if (slot?.provider !== "gemini" || !Number.isInteger(slot?.providerTabId)
         || slot?.recoveryCancelled === true) return false;
+      if (slot.state === "failed" && recoveryBudgetExhausted(slot)
+        && String(slot.recoveryStage || "").startsWith("blocked:")) return true;
       // Older workers persisted this transient account-bridge failure as
       // `failed` before the in-place recovery path existed. Retain that exact
       // physical tab across worker restart and promote it to recovery below;
@@ -565,7 +576,9 @@
               sessionState: String(slot?.sessionState || "unknown"),
               purpose: ["shared", "general", "prefetch"].includes(slot?.purpose)
                 ? slot.purpose : warmPool.targetCount <= MIN_POOL_TABS ? "shared" : "general",
-              state: slot?.state === "retiring" ? "retiring"
+              state: slot?.state === "failed" && recoveryBudgetExhausted(slot)
+                && String(slot.recoveryStage || "").startsWith("blocked:") ? "failed"
+                : slot?.state === "retiring" ? "retiring"
                 : resumableGeminiRecovery ? "recovering" : "restoring",
               restoreState: slot?.state === "leased" ? "leased"
                 : slot?.state === "preparing" ? "preparing" : "ready",
@@ -599,7 +612,8 @@
               jobId: ["leased", "ready"].includes(slot?.state) || slot?.accountSwitching === true
                 ? String(slot?.jobId || "") : "",
               recoveryJobId: resumableGeminiRecovery
-                ? String(slot?.recoveryJobId || createId("setup-recovery")) : "",
+                ? (slot?.state === "failed" && recoveryBudgetExhausted(slot) ? ""
+                  : String(slot?.recoveryJobId || createId("setup-recovery"))) : "",
               recoveryGeneration: resumableGeminiRecovery
                 ? Math.max(0, Number(slot?.recoveryGeneration) || 0) : 0,
               inPlaceRecoveryAttempts: resumableGeminiRecovery
@@ -1683,6 +1697,10 @@
           if (!prepared && options.accountRecovery && slot.errorCode === "gemini_1095") return false;
           if (options.inPlaceRecovery
             && GEMINI_IN_PLACE_RECOVERY_CODES.has(slot.errorCode)) {
+            // Bound retries inside this continuation too. Returning only from
+            // the outer recovery handler never stopped a successful-reset /
+            // rejected-READY loop, which could keep resetting for hours.
+            if (recoveryBudgetExhausted(slot)) return false;
             if (slot.errorCode === "provider_busy") {
               // Another preparation continuation still owns the content
               // script. Wait for it to settle; navigating the chat underneath
@@ -1883,8 +1901,7 @@
         }
         if (warmPool.slots.includes(slot)) {
           const recoveryCode = String(slot.errorCode || "");
-          const boundedRecoveryExhausted = GEMINI_BOUNDED_RECOVERY_CODES.has(recoveryCode)
-            && Math.max(0, Number(slot.inPlaceRecoveryAttempts) || 0) >= 3;
+          const boundedRecoveryExhausted = recoveryBudgetExhausted(slot);
           if (!slot.recoveryCancelled && !boundedRecoveryExhausted
             && GEMINI_IN_PLACE_RECOVERY_CODES.has(recoveryCode)) {
             // A rejected Gemini conversation is not evidence that its physical
@@ -2163,6 +2180,8 @@
     }
 
     async function replaceFailedWarmSlot(failedSlot) {
+      if (recoveryBudgetExhausted(failedSlot)
+        && String(failedSlot.recoveryStage || "").startsWith("blocked:")) return false;
       if (isGeminiSetupRejection(failedSlot)) {
         let shouldRefill = false;
         await withPoolLock(async () => {

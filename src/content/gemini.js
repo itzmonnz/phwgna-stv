@@ -945,10 +945,18 @@
       };
       const now = options.now || Date.now;
       const busyTimeoutMs = sendOptions.busyTimeoutMs ?? sendOptions.timeoutMs ?? options.sendTimeoutMs ?? 30_000;
+      function throwSendBlocker() {
+        const status = getStatus();
+        if (["gemini_1095", "captcha", "login_required", "security_verification",
+          "login_browser_rejected", "rate_limited"].includes(status.code)) {
+          throw new common.ProviderError(status.code, status.message);
+        }
+      }
       async function waitForSafeSendButton(timeoutMs) {
         try {
           const button = await common.waitForElement(
             () => {
+              throwSendBlocker();
               const candidate = updateSendButtonState();
               return common.buttonIsEnabled(candidate) ? candidate : null;
             },
@@ -957,6 +965,7 @@
           return { button, alreadySent: false };
         } catch (error) {
           if (error?.code === "cancelled") throw error;
+          throwSendBlocker();
           if (reconcileExistingRequest()) return { button: null, alreadySent: true };
 
           const pendingComposer = findComposer();
@@ -1071,6 +1080,7 @@
         );
       }
       settledButton = liveSendButton;
+      throwSendBlocker();
       submissionDiagnostic.clickAttempted = true;
       submissionDiagnostic.sendButtonState = "clicked";
       settledButton.click();
@@ -1083,6 +1093,7 @@
       try {
         await common.waitForElement(
           () => {
+            throwSendBlocker();
             const responseOrGenerationStarted = alreadySent() || Boolean(findStopButton());
             if (!setupPrompt && responseOrGenerationStarted) return document.body;
             const current = findComposer();
@@ -1140,6 +1151,9 @@
         }
       }
       submissionDiagnostic.sendButtonState = "click_unconfirmed";
+      // A connection/authentication rejection is actionable evidence, not an
+      // ambiguous click timeout. Preserve it for account recovery and reporting.
+      throwSendBlocker();
       throw new common.ProviderError(
         "send_not_confirmed",
         "Gemini chưa nhận thao tác gửi nội dung."

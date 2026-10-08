@@ -115,7 +115,7 @@
     },
     {
       "path": "popup/popup.js",
-      "sha256": "0f08dd14184c1ce32cd90d20ea74288ccbed4636d08041ddcda7827e7a2f3635"
+      "sha256": "cfbfb1b0e71ef22a50b5173c1e10986638bc0ab70c1ac23a628aaa2cb3b3369c"
     },
     {
       "path": "security/OWNER-FINGERPRINT.txt",
@@ -139,7 +139,7 @@
     },
     {
       "path": "src/background/controller.js",
-      "sha256": "aa93a486a2beefa9a8674d7f2fca7ec02f32f2848da1de58c081905f548d1b01"
+      "sha256": "c0be7ba2646b8add321accb822819761c3658f190f50cd06152120d54d25a55b"
     },
     {
       "path": "src/background/gemini-account-service.js",
@@ -155,7 +155,7 @@
     },
     {
       "path": "src/background/provider-pool-service.js",
-      "sha256": "6c3d795e6ffc345ea3ff178e566a818a29a4d65f08a9c48c6d7442d962a99699"
+      "sha256": "69ca722f8a895ccd0e0478a76764a5001dbc2d00f24edbaf311f9af41421ffab"
     },
     {
       "path": "src/background/translation-job-service.js",
@@ -195,7 +195,7 @@
     },
     {
       "path": "src/content/gemini.js",
-      "sha256": "a510e97031662c3cc0d8b7ef6fb2791368bc900bc2e20018e2a7b428ab48b076"
+      "sha256": "03419ec03b34f6211e2cfc89e318e028fd333be34421d77b556e1f7be952faaf"
     },
     {
       "path": "src/content/hachimi-provider.js",
@@ -207,7 +207,7 @@
     },
     {
       "path": "src/content/provider-diagnostics.js",
-      "sha256": "807f596c4e1fd6bc9d1ddd4ebe4aac9bb7f4369c53b3cebadee9a5784b56d2af"
+      "sha256": "86f1798c62fce43aa04b447c7579330baaa4db69328817769803f71964d9d1dc"
     },
     {
       "path": "src/content/qidian-book-preview.js",
@@ -495,7 +495,7 @@
     }
   ],
   "product": "Phwgna Stv",
-  "sourceCommit": "0e9499af6cdd11855eb977a878e6f1aa2f42c554",
+  "sourceCommit": "3452e248760454458d6a345da6744e37a580c26e",
   "officialRepository": "https://github.com/itzmonnz/phwgna-stv",
   "officialReleaseUrl": "https://github.com/itzmonnz/phwgna-stv/releases/tag/v0.2.8",
   "publicKeyFingerprint": "85ac74c199d0a6028bce843d6f68d7632317912b460aad1a7431193767ec9871"

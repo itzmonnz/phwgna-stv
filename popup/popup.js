@@ -188,7 +188,7 @@
         state: safeEnum(adapter.state, new Set(["ready", "paused", "unknown"]), "unknown"),
         code: safeEnum(adapter.code, new Set([
           "none", "captcha", "login_required", "rate_limited", "ui_changed", "ab_comparison",
-          "temporary_unavailable", "temporary_session_lost", "unknown"
+          "gemini_1095", "temporary_unavailable", "temporary_session_lost", "unknown"
         ]), "unknown")
       },
       session: {
@@ -242,7 +242,7 @@
         ]), "idle"),
         phase: safeEnum(runtime.phase, new Set(["idle", "setup", "batch", "repair"]), "idle"),
         errorCode: safeEnum(runtime.errorCode, new Set([
-          "none", "response_timeout", "send_not_confirmed", "provider_busy", "provider_unreachable", "captcha",
+          "none", "response_timeout", "gemini_1095", "send_not_confirmed", "provider_busy", "provider_unreachable", "captcha",
           "login_required", "rate_limited", "ui_changed", "ab_comparison", "temporary_unavailable", "temporary_session_lost",
           "provider_error", "cancelled", "content_refused", "incomplete_response", "recovering_response", "fallback_unavailable"
         ]), "none"),
@@ -422,7 +422,7 @@
     const performanceModes = new Set(["stable", "max", "none", "unknown"]);
     const errorCodes = new Set([
       "line_count_mismatch", "response_id_mismatch", "invalid_response", "incomplete_response",
-      "response_timeout", "send_not_confirmed", "content_refused", "provider_unreachable",
+      "response_timeout", "gemini_1095", "send_not_confirmed", "content_refused", "provider_unreachable",
       "provider_unavailable", "network_error", "provider_error", "ui_changed", "temporary_unavailable", "temporary_session_lost",
       "login_required", "login_window_open", "captcha", "security_verification", "login_browser_rejected",
       "batch_recovery_exhausted", "provider_tab_close_failed", "provider_origin_mismatch",

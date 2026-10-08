@@ -231,7 +231,7 @@
         state: safeEnum(adapterStatus.state, ["ready", "paused"], "unknown"),
         code: safeEnum(adapterStatus.code, [
           "none", "captcha", "login_required", "security_verification", "login_browser_rejected", "rate_limited", "ui_changed", "ab_comparison",
-          "temporary_unavailable", "temporary_session_lost", "background_performance_degraded"
+          "gemini_1095", "temporary_unavailable", "temporary_session_lost", "background_performance_degraded"
         ], adapterStatus.state === "ready" ? "none" : "unknown")
       },
       session: {
@@ -265,7 +265,7 @@
         sendFailures: (Array.isArray(runtime.sendFailures) ? runtime.sendFailures : []).slice(-8).map(entry => ({
           at: Math.max(0, Math.min(Number.MAX_SAFE_INTEGER, Number(entry?.at) || 0)),
           code: safeEnum(entry?.code, ["send_not_confirmed", "provider_busy_timeout", "provider_busy", "ui_changed",
-            "captcha", "temporary_unavailable", "temporary_session_lost", "cancelled", "provider_error"], "provider_error"),
+            "captcha", "gemini_1095", "temporary_unavailable", "temporary_session_lost", "cancelled", "provider_error"], "provider_error"),
           requestId: /^batch_\d+_\d{4}$/.test(String(entry?.requestId || "")) ? entry.requestId : "",
           batchAttempt: Math.max(0, Math.min(3, Number(entry?.batchAttempt) || 0)),
           composerState: safeEnum(entry?.composerState,
@@ -279,7 +279,7 @@
         ], "idle"),
         phase: safeEnum(runtime.phase, ["idle", "setup", "batch", "repair"], "idle"),
         errorCode: safeEnum(runtime.errorCode, [
-          "none", "response_timeout", "send_not_confirmed", "provider_busy", "provider_busy_timeout", "provider_unreachable", "captcha",
+          "none", "response_timeout", "gemini_1095", "send_not_confirmed", "provider_busy", "provider_busy_timeout", "provider_unreachable", "captcha",
           "login_required", "security_verification", "login_browser_rejected", "rate_limited", "ui_changed", "ab_comparison", "temporary_unavailable", "temporary_session_lost", "background_performance_degraded",
           "provider_error", "cancelled", "content_refused", "incomplete_response",
           "recovering_response", "fallback_unavailable"
