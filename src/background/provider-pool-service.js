@@ -1280,6 +1280,14 @@
           if (!current()) return false;
           slot.uiDiagnostic = sanitizeProviderUiDiagnostic(status?.state?.diagnostic);
           slot.sessionState = String(status?.state?.session?.state || slot.sessionState || "unknown");
+          if (status?.state?.operation?.active === true
+            && !isAuthenticationBlocker(status?.state?.code)
+            && status?.state?.code !== "gemini_1095"
+            && attempt < providerReadyAttempts - 1) {
+            await retrySleep(providerReadyDelayMs);
+            if (!current()) return false;
+            continue;
+          }
           break;
         } catch (_error) {
           if (!options.deferUnavailable || attempt === providerReadyAttempts - 1) break;
@@ -1312,8 +1320,12 @@
         return false;
       }
       slot.preparationPasses = 0;
-      const runtimeStatusCode = status?.state?.runtime?.stage === "error"
+      const runtimeErrorCode = status?.state?.runtime?.stage === "error"
         ? String(status?.state?.runtime?.errorCode || "") : "";
+      // A settled cancellation belongs to the previous READY owner. A new
+      // owner may prepare this same document once the old operation stops.
+      const runtimeStatusCode = runtimeErrorCode === "cancelled"
+        && status?.state?.operation?.active !== true ? "" : runtimeErrorCode;
       const operationStatusCode = status?.state?.operation?.active === true ? "provider_busy" : "";
       if (status?.state?.state !== "ready" || runtimeStatusCode || operationStatusCode) {
         if (options.deferUnavailable && !status?.state?.state && !status?.error?.code) {
@@ -2633,8 +2645,9 @@
           }
         }
         if (!slot) {
-          if (isAuthenticationBlocker(warmPool.errorCode)) {
-            blockedReason = warmPool.errorCode;
+          if (isAuthenticationBlocker(warmPool.errorCode)
+            || (warmPool.slots.length > 0 && warmPool.slots.every(candidate => ["failed", "retiring"].includes(candidate.state)))) {
+            blockedReason = warmPool.errorCode || "provider_unreachable";
             return;
           }
           if (!warmPool.waiters.includes(job.id)) warmPool.waiters.push(job.id);
@@ -2662,6 +2675,26 @@
       if (!assigned) return true;
       await notifyStatus(job, "running");
       await dispatchCurrent(job);
+      return true;
+    }
+
+    async function retryFailedGeminiSlots(settings) {
+      await restorePoolMetadata();
+      const candidates = warmPool.slots.filter(slot => slot.state === "failed"
+        && wantsTemporaryGeminiSession(slot) && !slot.jobId
+        && (GEMINI_IN_PLACE_RECOVERY_CODES.has(slot.errorCode)
+          || (slot.errorCode === "cancelled" && !slot.recoveryCancelled)));
+      for (const slot of candidates) {
+        slot.inPlaceRecoveryAttempts = 0;
+        slot.recoveryCancelled = false;
+        slot.recoveryStage = "manual_retry";
+        slot.recoveryJobId = createId("setup-recovery");
+        slot.state = "recovering";
+      }
+      if (!candidates.length) return false;
+      warmPool.errorCode = "";
+      await persistPool();
+      await Promise.all(candidates.map(slot => recoverGeminiSlotInPlace(slot, settings)));
       return true;
     }
 
@@ -2971,7 +3004,7 @@
       prepareWarmSlot, restartLeasedGeminiSlot, wakeOrphanedReadyLease, recoverGeminiSlotInPlace, recoverGemini1095Slot, cancelGeminiRecovery, handleGeminiRecoveryAlarm, createWarmSlot, replaceFailedWarmSlot, fillWarmPool,
       ensureWarmPool, performWarmPoolReconfiguration, reconfigureWarmPool,
       cleanupWarmPool, scheduleLastStvCleanup, assignWarmSlot, acquireWarmSlot,
-      drainWarmWaiters, spendJobSlot, closeLegacyProviderTab, openProvider
+      retryFailedGeminiSlots, drainWarmWaiters, spendJobSlot, closeLegacyProviderTab, openProvider
     });
   }
 

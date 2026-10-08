@@ -20,7 +20,7 @@
       ensureWarmPool, exposeSlotFailureToPool, fillWarmPool, findPoolSlotByTab,
       hasEligibleStvTab, hasPrefetchParent, isStvUrl, markWarmSlotFailed,
       markWarmSlotRecovered, notifyPoolStatus, openProvider, persistPool,
-      prepareWarmSlot, restartLeasedGeminiSlot, recoverGeminiSlotInPlace, cancelGeminiRecovery, providerTabMatches, readySendTimeoutFor, readyTimeoutFor,
+      prepareWarmSlot, restartLeasedGeminiSlot, recoverGeminiSlotInPlace, retryFailedGeminiSlots, cancelGeminiRecovery, providerTabMatches, readySendTimeoutFor, readyTimeoutFor,
       wakeOrphanedReadyLease,
       registerStvTab, releaseChatGPTSetupPerformanceLease, rememberPrefetchParent,
       removeOwnedSlot, recycleOwnedSlot, requestedPurposePriorities, resolveStvSenderChapter,
@@ -2890,6 +2890,9 @@
       if (!job) return { ok: false, reason: "stale-job" };
       if (sender?.tab?.id !== job.sourceTabId) return { ok: false, reason: "wrong-source-tab" };
       if (job.status !== "paused") return { ok: false, reason: "job-not-paused" };
+      if (job.provider === "gemini" && !Number.isInteger(job.providerTabId)) {
+        await retryFailedGeminiSlots?.(job.settings);
+      }
       if (job.resetContinuationPending === true && job.workState === "settled"
         && job.pauseReason === "service_worker_restarted") {
         await restorePoolMetadata();

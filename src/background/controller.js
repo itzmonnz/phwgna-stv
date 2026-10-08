@@ -1133,6 +1133,15 @@
 
     async function notifyPoolStatus() {
       const snapshot = publicPoolSnapshot();
+      if (snapshot.state === "error" && snapshot.totalCount > 0
+        && warmPool.slots.every(slot => ["failed", "retiring"].includes(slot.state))) {
+        for (const job of jobs.values()) {
+          if (job.status === "waiting-provider" && !job.pending) {
+            warmPool.waiters = warmPool.waiters.filter(id => id !== job.id);
+            await pause(job, snapshot.errorCode || "provider_unreachable");
+          }
+        }
+      }
       const activeLease = snapshot.slots.find((slot) => slot.performanceLease.state === "active");
       const message = {
         type: "STVAI_POOL_STATUS",
@@ -1756,7 +1765,7 @@
       prepareWarmSlot, restartLeasedGeminiSlot, wakeOrphanedReadyLease, recoverGeminiSlotInPlace, recoverGemini1095Slot, cancelGeminiRecovery, handleGeminiRecoveryAlarm, createWarmSlot, replaceFailedWarmSlot, fillWarmPool,
       ensureWarmPool, performWarmPoolReconfiguration, reconfigureWarmPool,
       cleanupWarmPool, scheduleLastStvCleanup, assignWarmSlot, acquireWarmSlot,
-      drainWarmWaiters, spendJobSlot, closeLegacyProviderTab, openProvider
+      retryFailedGeminiSlots, drainWarmWaiters, spendJobSlot, closeLegacyProviderTab, openProvider
     } = providerPool;
     translationJobs = translationJobApi.createTranslationJobService({
       geminiAccounts, recoverGemini1095Slot,
@@ -1770,7 +1779,7 @@
       ensureWarmPool, exposeSlotFailureToPool, fillWarmPool, findPoolSlotByTab,
       hasEligibleStvTab, hasPrefetchParent, isStvUrl, markWarmSlotFailed,
       markWarmSlotRecovered, notifyPoolStatus, openProvider, persistPool,
-      prepareWarmSlot, restartLeasedGeminiSlot, recoverGeminiSlotInPlace, cancelGeminiRecovery, providerTabMatches, readySendTimeoutFor, readyTimeoutFor,
+      prepareWarmSlot, restartLeasedGeminiSlot, recoverGeminiSlotInPlace, retryFailedGeminiSlots, cancelGeminiRecovery, providerTabMatches, readySendTimeoutFor, readyTimeoutFor,
       wakeOrphanedReadyLease,
       registerStvTab, releaseChatGPTSetupPerformanceLease, rememberPrefetchParent,
       removeOwnedSlot, recycleOwnedSlot, requestedPurposePriorities, resolveStvSenderChapter,
@@ -2278,6 +2287,8 @@
           const keepsGeminiRecovery = loadingSlot.provider === "gemini"
             && loadingSlot.desiredSession === "temporary"
             && (loadingSlot.state === "recovering" || Boolean(loadingSlot.recoveryJobId));
+          const oldWarmJobId = loadingSlot.state === "preparing" && !keepsGeminiRecovery
+            ? loadingSlot.warmJobId : "";
           loadingSlot.documentGeneration = (loadingSlot.documentGeneration || 0) + 1;
           loadingSlot.documentLoading = true;
           loadingSlot.sessionState = keepsGeminiRecovery ? "navigation_in_progress" : loadingSlot.sessionState;
@@ -2290,6 +2301,9 @@
             loadingSlot.warmSessionId = createId("warm");
           }
           await persistPool();
+          // Soft navigation can preserve the old content-script operation.
+          // Abort only our previous READY owner before the next document prepares.
+          if (oldWarmJobId) await sendToTab(tabId, { type: "STVAI_PROVIDER_CANCEL", jobId: oldWarmJobId });
         }
         return;
       }
