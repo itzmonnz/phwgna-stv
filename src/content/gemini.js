@@ -324,7 +324,7 @@
     function hasVisibleError1095() {
       return common.pageHasText(document,
         ["[role='alert']", ".error-message", "mat-error", "[class*='snack']", "[class*='toast']", ".cdk-overlay-container"],
-        /(?:error|lỗi)[^\n]{0,80}\b1095\b|(?:hãy\s+)?kiểm tra kết nối internet của bạn\s+(?:rồi|và)\s+thử lại|(?:please\s+)?check your internet connection and try again/i);
+        /(?:error|lỗi|something\s+went\s+wrong)[^\n]{0,80}\b(?:1095|1155)\b|(?:hãy\s+)?kiểm tra kết nối internet của bạn\s+(?:rồi|và)\s+thử lại|(?:please\s+)?check your internet connection and try again/i);
     }
 
     function hasError1095() {
