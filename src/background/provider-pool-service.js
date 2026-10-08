@@ -1129,10 +1129,11 @@
           slot.documentLoading = false;
           await persistPool();
         }
-        if (initial1095) return recoverGemini1095Slot(slot, settings, options);
+        if (initial1095) return options.deferAccountRecovery ? false : recoverGemini1095Slot(slot, settings, options);
       }
       const prepared = await prepareWarmSlotCore(slot, settings, options);
       if (!prepared && slot?.errorCode === "gemini_1095" && !options.accountRecovery
+        && !options.deferAccountRecovery
         && settings?.geminiAccountRotationEnabled === true) {
         return recoverGemini1095Slot(slot, settings, options);
       }
@@ -1688,13 +1689,17 @@
             setupPrompts: options.setupPrompts,
             setupParts: options.setupParts,
             setupMarkers: options.setupMarkers,
-            accountRecovery: options.accountRecovery === true
+            accountRecovery: options.accountRecovery === true,
+            deferAccountRecovery: true
           });
           if (cancelled()) return false;
           if (prepared && warmPool.slots.includes(slot) && slot.state === "ready") {
             return reclaimPreparedLease();
           }
-          if (!prepared && options.accountRecovery && slot.errorCode === "gemini_1095") return false;
+          // Let the restart promise settle before its outer owner rotates.
+          // Calling account recovery here would await this same restart via
+          // the single-flight map and deadlock the physical tab.
+          if (!prepared && slot.errorCode === "gemini_1095") return false;
           if (options.inPlaceRecovery
             && GEMINI_IN_PLACE_RECOVERY_CODES.has(slot.errorCode)) {
             // Bound retries inside this continuation too. Returning only from
@@ -1755,13 +1760,24 @@
       if (!slot) return false;
       const existing = activeLeasedRestarts.get(slot);
       if (existing) return existing;
+      const generation = Number(slot.recoveryGeneration) || 0;
       const operation = restartLeasedGeminiSlotCore(slot, settings, options);
       activeLeasedRestarts.set(slot, operation);
+      let ready;
       try {
-        return await operation;
+        ready = await operation;
       } finally {
         activeLeasedRestarts.delete(slot);
       }
+      // A normal leased restart has no outer in-place recovery owner. Rotate
+      // here only after removing its promise from the single-flight map.
+      if (!ready && slot.errorCode === "gemini_1095" && !options.accountRecovery && !options.inPlaceRecovery
+        && !slot.recoveryCancelled && options.shouldStop?.() !== true
+        && (Number(slot.recoveryGeneration) || 0) === generation
+        && settings?.geminiAccountRotationEnabled === true) {
+        return recoverGemini1095Slot(slot, settings, options);
+      }
+      return ready;
     }
 
     async function wakeOrphanedReadyLease(slot) {

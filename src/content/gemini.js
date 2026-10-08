@@ -487,6 +487,7 @@
       const deadline = startedAt + Math.min(requiredMs, Math.max(0, Number(timeoutMs) || requiredMs));
       while (now() < deadline) {
         if (signal?.aborted) throw new common.ProviderError("cancelled", "Tác vụ đã bị hủy.");
+        throwSendBlocker();
         if (!temporaryPageIsActive()) {
           clearReturnedSetupPrompt();
           throw new common.ProviderError(
@@ -672,10 +673,19 @@
       await releaseChatMask({ signal, timeoutMs: Math.min(1_000, Math.max(1, timeoutMs)) });
     }
 
+    function throwSendBlocker() {
+      const status = getStatus();
+      if (["gemini_1095", "captcha", "login_required", "security_verification",
+        "login_browser_rejected", "rate_limited"].includes(status.code)) {
+        throw new common.ProviderError(status.code, status.message);
+      }
+    }
+
     async function waitForStableTemporary(signal, timeoutMs) {
       let consecutiveReads = 0;
       await common.waitForElement(
         () => {
+          throwSendBlocker();
           if (!temporaryPageIsActive()) {
             consecutiveReads = 0;
             return null;
@@ -702,6 +712,7 @@
       await domResolver.ready?.();
       temporaryRequired = temporaryChat;
       if (!temporaryChat) return;
+      throwSendBlocker();
       const stageTimeoutMs = timeoutMs ?? options.temporaryTimeoutMs ?? 10_000;
       const startedAt = now();
       const remaining = () => Math.max(0, stageTimeoutMs - (now() - startedAt));
@@ -711,6 +722,7 @@
           await waitForStableTemporary(signal, remaining());
         } catch (error) {
           if (error?.code === "cancelled" || !verifiedTemporaryOnce || !submittedSetupPrompt) throw error;
+          throwSendBlocker();
           clearReturnedSetupPrompt();
           throw new common.ProviderError(
             "temporary_unavailable",
@@ -733,6 +745,7 @@
       const attemptTimeoutMs = Math.max(1, Number(options.temporaryAttemptMs ?? 1_500) || 1_500);
       const pollSleep = options.sleep || ((duration) => new Promise((resolve) => setTimeout(resolve, duration)));
       while (remaining() > 0) {
+        throwSendBlocker();
         if (temporaryPageIsActive()) {
           await waitForStableTemporary(signal, remaining());
           verifiedTemporaryOnce = true;
@@ -758,8 +771,10 @@
           return;
         } catch (error) {
           if (error?.code === "cancelled") throw error;
+          throwSendBlocker();
         }
       }
+      throwSendBlocker();
       throw new common.ProviderError(
         "temporary_unavailable",
         "Không xác nhận được chế độ trò chuyện tạm thời trên Gemini."
@@ -767,6 +782,18 @@
     }
 
     async function restartTemporaryChat({ signal, timeoutMs, resetErrorState = false } = {}) {
+      try {
+        return await restartTemporaryChatCore({ signal, timeoutMs, resetErrorState });
+      } catch (error) {
+        // A failed reset must retain the original connection/auth blocker.
+        // Only the core's verified fresh conversation may clear an old latch.
+        if (error?.code === "cancelled" || signal?.aborted) throw error;
+        throwSendBlocker();
+        throw error;
+      }
+    }
+
+    async function restartTemporaryChatCore({ signal, timeoutMs, resetErrorState = false } = {}) {
       // Only an explicit recovery may navigate past the old error. Keep its
       // latch until the replacement conversation is visible and the snackbar
       // has disappeared, so a failed navigation cannot erase the failure.
@@ -945,13 +972,6 @@
       };
       const now = options.now || Date.now;
       const busyTimeoutMs = sendOptions.busyTimeoutMs ?? sendOptions.timeoutMs ?? options.sendTimeoutMs ?? 30_000;
-      function throwSendBlocker() {
-        const status = getStatus();
-        if (["gemini_1095", "captcha", "login_required", "security_verification",
-          "login_browser_rejected", "rate_limited"].includes(status.code)) {
-          throw new common.ProviderError(status.code, status.message);
-        }
-      }
       async function waitForSafeSendButton(timeoutMs) {
         try {
           const button = await common.waitForElement(
