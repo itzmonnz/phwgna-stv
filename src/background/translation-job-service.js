@@ -866,7 +866,14 @@
       resetStable(job);
       await persistJob(job);
       if (replaceMalformedSession && job.batchAttempts >= 3) {
-        if (job.provider === "gemini" && (job.automaticRecoveryCycles || 0) < 1) {
+        // Prefetch runs in the background and can receive a late response from
+        // a tab that was just recycled. Give that lane one additional bounded
+        // recovery cycle so a transient handoff race does not stop the next
+        // chapter permanently. Foreground jobs keep the stricter single-cycle
+        // budget to avoid hiding a real provider failure from the reader.
+        const maxAutomaticRecoveryCycles = job.prefetch ? 2 : 1;
+        if (job.provider === "gemini"
+          && (job.automaticRecoveryCycles || 0) < maxAutomaticRecoveryCycles) {
           job.automaticRecoveryCycles = (job.automaticRecoveryCycles || 0) + 1;
           job.batchAttempts = 0;
           job.batchSwitched = false;
