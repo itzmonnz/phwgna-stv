@@ -84,11 +84,23 @@
       // A 1095/1155 banner can appear before Gemini removes the old
       // generation's Stop button. Do not reject account recovery while that
       // request is winding down; give the page a short bounded window to
-      // publish the settled account snapshot.
+      // publish the settled account snapshot. Read directly here instead of
+      // calling wait(), whose normal loading budget is intentionally much
+      // longer and would defeat this bound.
       for (let attempt = 0; current?.busy && attempt < 8; attempt += 1) {
         if (stopped?.()) throw fault("cancelled");
         await sleep(250);
-        current = await wait(tabId, "gemini", stopped);
+        if (stopped?.()) throw fault("cancelled");
+        try {
+          const snapshot = await read(tabId);
+          if (snapshot?.kind === "blocked") throw fault("login_required");
+          if (snapshot?.kind === "gemini") current = snapshot;
+        } catch (error) {
+          if (["cancelled", "login_required", "gemini_account_identity_changed"].includes(error?.code)) throw error;
+          // A navigation can briefly disconnect the account probe. Keep the
+          // bounded retry window and let the caller classify a still-busy
+          // page after it expires.
+        }
       }
       if (current?.busy) throw fault("provider_busy");
       return current;
