@@ -590,8 +590,17 @@ Chỉ trả kết quả dịch. Cấm giải thích, chú thích, giải nghĩa 
         && normalizedComparableText(source) === normalizedComparableText(output)) {
         return { ok: false, reason: "source_language_unchanged" };
       }
-      if (/[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]/u.test(output)) {
-        return { ok: false, reason: "source_language_unchanged" };
+      const outputChineseRuns = output.match(/[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]+/gu) || [];
+      if (outputChineseRuns.length > 0) {
+        // Chinese names and fixed terms may intentionally remain in a Vietnamese
+        // translation. Reject an unchanged Chinese response, while allowing a
+        // short source name that is embedded in otherwise translated text.
+        const sourceChinese = (source.match(/[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]+/gu) || []).join("");
+        const hasLatinText = /\p{Script=Latin}/u.test(output);
+        const chineseRunsBelongToSource = outputChineseRuns.every(run => sourceChinese.includes(run));
+        if (!hasLatinText || !chineseRunsBelongToSource) {
+          return { ok: false, reason: "source_language_unchanged" };
+        }
       }
       const sourceEndsSentence = /[。！？!?…][\s"'”’」』】）》）]*$/u.test(source);
       const outputEndsContinuation = /[,，:：;；、\-–—][\s"'”’]*$/u.test(output);
