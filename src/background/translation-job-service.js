@@ -1162,7 +1162,8 @@
           totalBatches: job.batches.length,
           blocks,
           settings: job.settings,
-          retryReason: "content_refused"
+          retryReason: "content_refused",
+          refusalSanitize: true
         }),
         sendTimeoutMs: 30_000,
         timeoutMs: 60_000,
@@ -1687,6 +1688,11 @@
         job.rescueLane.queue.push(task);
       }
       job.refusalRescueAttempted = true;
+      // A refusal is usually caused by one sentence in the batch. The first
+      // rescue must explicitly allow Gemini to replace only that sentence
+      // with the safety placeholder; otherwise System Prompt 2 repeats the
+      // identical risky input and predictably consumes both rescue attempts.
+      job.refusalSanitizeAttempted = true;
       job.refusalRescueActive = false;
       job.refusalRescueOutcome = "pending";
       job.pending = false;
