@@ -2316,7 +2316,11 @@
       }
       if (job.status !== "running" || job.providerTabId !== providerTabId || (providerMessage.requestId && providerMessage.requestId !== job.activeRequestId)) return { ok: false, reason: "stale-provider-response" };
       job.pending = false;
-      if (!response || typeof response !== "object") {
+      const responseIsReceipt = response && typeof response === "object"
+        && String(response.jobId || "") === job.id
+        && response.ok !== false
+        && (typeof response.response !== "string" || response.response.length === 0);
+      if (!response || typeof response !== "object" || responseIsReceipt) {
         // The provider handler may still be running even when tabs.sendMessage
         // returned no receipt. Recheck the exact request on the same physical
         // tab only; a missing channel acknowledgement must never rotate tabs.
