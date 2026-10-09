@@ -79,6 +79,20 @@
       }
       throw fault("gemini_account_probe_failed");
     }
+    async function waitUntilNotBusy(tabId, stopped, state) {
+      let current = state;
+      // A 1095/1155 banner can appear before Gemini removes the old
+      // generation's Stop button. Do not reject account recovery while that
+      // request is winding down; give the page a short bounded window to
+      // publish the settled account snapshot.
+      for (let attempt = 0; current?.busy && attempt < 8; attempt += 1) {
+        if (stopped?.()) throw fault("cancelled");
+        await sleep(250);
+        current = await wait(tabId, "gemini", stopped);
+      }
+      if (current?.busy) throw fault("provider_busy");
+      return current;
+    }
     async function navigate(tabId, url, kind, stopped) {
       if (stopped?.()) throw fault("cancelled");
       await tabs.update(tabId, { url });
@@ -184,7 +198,7 @@
       async recover1095(tabId, stopped) {
         return locked(async () => {
           const state = await load();
-          const actual = await wait(tabId, "gemini", stopped);
+          const actual = await waitUntilNotBusy(tabId, stopped, await wait(tabId, "gemini", stopped));
           if (actual.busy) throw fault("provider_busy");
           const current = state.accounts.find(row => row.key === actual.key);
           if (!current || !actual.paid) throw fault("gemini_paid_account_missing");
