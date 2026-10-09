@@ -811,8 +811,12 @@
         ...providerMetadata,
         outcome: "still_running"
       });
-      const replaceMalformedSession = malformedBatchResponse(reason) && canRotateBatch(job);
-      if (!replaceMalformedSession && (job.batchAttempts || 0) < 2) {
+      const replaceSessionForPrefetch = job.prefetch === true
+        && job.provider === "gemini"
+        && reason === "source_language_unchanged";
+      const replaceRecoverableSession = (malformedBatchResponse(reason) || replaceSessionForPrefetch)
+        && canRotateBatch(job);
+      if (!replaceRecoverableSession && (job.batchAttempts || 0) < 2) {
         job.recoveryStage = "retry_same_tab";
         job.workState = "queued";
         resetStable(job);
@@ -826,7 +830,7 @@
         job.recoveryStage = "exhausted";
         return pause(job, "api_returned_source_language");
       }
-      if ((!replaceMalformedSession && (job.batchAttempts >= 3 || job.batchSwitched)) || !canRotateBatch(job)) {
+      if ((!replaceRecoverableSession && (job.batchAttempts >= 3 || job.batchSwitched)) || !canRotateBatch(job)) {
         job.recoveryStage = "exhausted";
         return pause(job, "batch_recovery_exhausted");
       }
@@ -865,7 +869,7 @@
       job.workState = "queued";
       resetStable(job);
       await persistJob(job);
-      if (replaceMalformedSession && job.batchAttempts >= 3) {
+      if (replaceRecoverableSession && job.batchAttempts >= 3) {
         // Prefetch runs in the background and can receive a late response from
         // a tab that was just recycled. Give that lane one additional bounded
         // recovery cycle so a transient handoff race does not stop the next
