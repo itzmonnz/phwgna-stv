@@ -102,6 +102,7 @@
     }
 
     const jobs = new Map();
+    const autoResumeJobs = new Set();
     const terminalJobLimit = Math.max(1, Math.min(100, Math.trunc(Number(options.terminalJobLimit ?? 20) || 20)));
     let terminalJobSequence = 0;
     function retainTerminalJob(job) {
@@ -1161,6 +1162,43 @@
       };
       if (snapshot.uiDiagnostic) message.uiDiagnostic = snapshot.uiDiagnostic;
       if (snapshot.slotIndex) message.slotIndex = snapshot.slotIndex;
+
+      // A provider tab can fail one send while another READY tab remains
+      // usable.  Keep transient failures self-healing instead of requiring
+      // the reader to press “Tiếp tục”.  Permanent/content failures stay
+      // paused for an explicit user decision.
+      const transientPauseReasons = new Set([
+        "provider_unavailable", "provider_unreachable", "send_not_confirmed",
+        "response_timeout", "temporary_session_lost", "temporary_unavailable",
+        "provider_busy", "provider_busy_timeout"
+      ]);
+      if (snapshot.readyCount > 0) {
+        for (const job of jobs.values()) {
+        if (job.status !== "paused" || !transientPauseReasons.has(String(job.pauseReason || ""))
+          || job.rescueLane || job.rescueApiQueue?.length || job.rescueApiActive
+            || autoResumeJobs.has(job.id)) continue;
+          autoResumeJobs.add(job.id);
+          void (async () => {
+            try {
+              const sourceTab = await tabs.get(job.sourceTabId);
+              const sourceUrl = String(sourceTab?.url || "");
+              const sourceChapter = sites.parseChapter(sourceUrl);
+              if (!sourceUrl || !isStvUrl(sourceUrl)
+                || (job.cacheIdentity?.chapterKey
+                  && sourceChapter?.chapterKey !== job.cacheIdentity.chapterKey)) return;
+              await translationJobs.resumeJob(
+                { jobId: job.id },
+                { tab: { id: job.sourceTabId, url: sourceUrl } }
+              );
+            } catch (_error) {
+              // The ordinary paused state remains available if the tab went
+              // away or the transient recovery still cannot acquire a slot.
+            } finally {
+              autoResumeJobs.delete(job.id);
+            }
+          })();
+        }
+      }
       await Promise.all(Array.from(warmPool.stvTabs.keys(), (tabId) => sendToTab(tabId, message)));
     }
 
